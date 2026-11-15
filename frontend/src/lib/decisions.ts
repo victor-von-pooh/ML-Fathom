@@ -52,15 +52,21 @@ export function toFreq(seconds: number): string {
   if (seconds % 86400 === 0) return `${seconds / 86400}D`
   if (seconds % 3600 === 0) return `${seconds / 3600}h`
   if (seconds % 60 === 0) return `${seconds / 60}min`
-  return `${Math.round(seconds)}s`
+  if (Number.isInteger(seconds)) return `${seconds}s`
+  // 1 秒の端数はミリ秒 (それより細かければマイクロ秒) で
+  const ms = seconds * 1000
+  return Number.isInteger(ms) ? `${ms}ms` : `${Math.max(1, Math.round(ms * 1000))}us`
 }
+
+// 長さの変わる間隔 (月や年. 28 日以上) は日付でずらせない
+const MONTHLY = 28 * 86400
 
 /** 時刻の間隔 (秒) を画面の言葉にする */
 function freqLabel(seconds: number): string {
   if (seconds % 86400 === 0) return `${seconds / 86400} 日`
   if (seconds % 3600 === 0) return `${seconds / 3600} 時間`
   if (seconds % 60 === 0) return `${seconds / 60} 分`
-  return `${Math.round(seconds)} 秒`
+  return `${seconds} 秒`
 }
 
 /** 列を落とす手順に列を足す (無ければ先頭に手順を作る) */
@@ -278,7 +284,7 @@ export function findDecisions({
     const choices: DecisionChoice[] = [
       { label: 'このまま (行でずらす)', primary: true, action: { kind: 'dismiss' } },
     ]
-    if (timeColumn && step && step > 0) {
+    if (timeColumn && step && step > 0 && step < MONTHLY) {
       choices.push({
         label: `日付でずらす (1 つ = ${freqLabel(step)})`,
         action: {
@@ -298,7 +304,10 @@ export function findDecisions({
       label: '過去の値の列を外す',
       action: {
         kind: 'recipe',
-        recipe: { ...recipe, steps: recipe.steps.filter((item) => item.op !== 'lag') },
+        recipe: {
+          ...recipe,
+          steps: recipe.steps.filter((item) => item.op !== 'lag' || item.time),
+        },
       },
     })
     found.push({

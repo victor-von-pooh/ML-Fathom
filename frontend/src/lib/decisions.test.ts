@@ -138,6 +138,19 @@ describe('決めてほしいこと', () => {
     expect(ids({ ...timed, recipe: after })).not.toContain('gaps')
     expect(toFreq(3600)).toBe('1h')
     expect(toFreq(1800)).toBe('30min')
+    expect(toFreq(604800)).toBe('7D')
+    expect(toFreq(15)).toBe('15s')
+    expect(toFreq(0.5)).toBe('500ms')
+    expect(toFreq(0.0004)).toBe('400us')
+    // 月ごと (31 日) は日付でずらせない
+    const monthly = profileOf({ sales: column('numeric') }, findings, {
+      overview: { roles: { time: 'date' } },
+      timeseries: { interval_seconds: 31 * 86400 },
+    } as unknown as Partial<Profile>)
+    const month = findDecisions({ ...timed, profile: monthly, recipe: lagged }).find(
+      (item) => item.id === 'gaps',
+    )!
+    expect(month.choices.some((choice) => choice.label.startsWith('日付'))).toBe(false)
 
     const imbalance = profileOf({}, [
       { severity: 'warning', code: 'class_imbalance', message: '', columns: ['y'] },
