@@ -147,4 +147,17 @@ describe('決めてほしいこと', () => {
     const same = { ...recipe, item_steps: [tokenizers.recommended] }
     expect(ids({ ...text, recipe: same })).toEqual([])
   })
+
+  test('Excel に他のシートがあれば, シートを選ぶかを聞く', () => {
+    const profile = profileOf({ a: column('numeric') }, [], {
+      overview: { roles: {}, sheets: ['表紙', '売上'], sheet: '表紙' },
+    } as unknown as Partial<Profile>)
+    const [decision] = findDecisions({ ...base, loader: 'excel', profile, recipe, target: 'a' })
+    expect(decision!.choices.map((choice) => choice.label)).toEqual(['表紙 (このまま)', '売上'])
+    expect(decision!.choices[1]!.action).toEqual({ kind: 'source', options: { sheet: '売上' } })
+    // シートを選んだ後は聞かない
+    expect(
+      ids({ ...base, loader: 'excel', options: { sheet: '売上' }, profile, recipe, target: 'a' }),
+    ).toEqual([])
+  })
 })

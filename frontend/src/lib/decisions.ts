@@ -116,6 +116,28 @@ export function findDecisions({
   const codes = (code: string) => profile.findings.filter((item) => item.code === code)
   const keep: DecisionChoice = { label: 'このまま', action: { kind: 'dismiss' } }
 
+  // Excel の他のシート (読み込みの設定でシートを選んでいない場合. 他の
+  // 判断が全て変わるので先頭)
+  const sheets = profile.overview.sheets ?? []
+  if (sheets.length > 1 && options.sheet === undefined) {
+    const current = profile.overview.sheet ?? sheets[0]!
+    found.push({
+      id: `sheet:${sheets.join('|')}`,
+      title: `シートが ${sheets.length} 枚あります`,
+      message: `今は最初のシート ${current} を読んでいます. 分析したいデータが別のシートにあれば選びます (読み込みの設定の sheet と同じ).`,
+      choices: [
+        { label: `${current} (このまま)`, primary: true, action: { kind: 'dismiss' } },
+        ...sheets
+          .filter((name) => name !== current)
+          .slice(0, 6)
+          .map((name) => ({
+            label: name,
+            action: { kind: 'source' as const, options: { ...options, sheet: name } },
+          })),
+      ],
+    })
+  }
+
   // 目的の列
   if (!target) {
     const candidates = targetCandidates(profile)

@@ -117,6 +117,9 @@ export interface Overview {
   missing_cells: number
   sampled: boolean
   sample_rows: number
+  /** Excel の全てのシートの名前と, 読んだシート */
+  sheets?: string[]
+  sheet?: string | null
   roles: Record<string, string>
 }
 
