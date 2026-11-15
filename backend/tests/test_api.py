@@ -374,3 +374,38 @@ def test_samples(client: TestClient) -> None:
     again = client.post("/api/samples").json()
     assert [item["kind"] for item in again] == ["table"]
     assert path.read_text(encoding="utf-8") == "a,b\n1,2\n"
+
+
+def test_loader_options(client: TestClient, tmp_path: Path) -> None:
+    """
+    読み込みの設定の誤りは 422 になり, 読み直して目的の列が無くなれば
+    外すことを確かめる関数
+
+    Parameters
+    ----------
+    client: TestClient
+        クライアント
+    tmp_path: Path
+        pytest が用意する一時ディレクトリ
+
+    Returns
+    ----------
+    None
+    """
+    # 目的の列を決めた表
+    file = write_table(tmp_path)
+    sid = client.post("/api/sources", json={"path": str(file)}).json()["id"]
+    client.patch(f"/api/sources/{sid}", json={"target": "label"})
+
+    # 無い文字コードは 422 (設定は変えない)
+    bad = client.patch(
+        f"/api/sources/{sid}", json={"options": {"encoding": "nope"}}
+    )
+    assert bad.status_code == 422
+    assert client.get("/api/sources").json()[0]["options"] == {}
+
+    # ヘッダーの行を無くすと列の名前が変わり, 目的の列を外す
+    changed = client.patch(
+        f"/api/sources/{sid}", json={"options": {"header": None}}
+    ).json()
+    assert changed["target"] is None

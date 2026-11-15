@@ -267,7 +267,9 @@ def load_source(source: dict[str, Any]) -> ml_eda.Data:
         data = ml_eda.load_data(
             source["path"], loader=source["loader"], **source["options"]
         )
-    except (OSError, ValueError, ImportError, TypeError) as error:
+    except (
+        OSError, ValueError, ImportError, TypeError, LookupError
+    ) as error:
         raise HTTPException(422, f"読み込めませんでした: {error}") from error
     DATA_CACHE.put(key, data)
 
@@ -554,6 +556,12 @@ def update_source(
     if "loader" in changes or "options" in changes:
         data = load_source(merged)
         changes["kind"] = data.kind
+        # 読み直して目的の列が無くなった場合 (ヘッダーの行を変えたなど) は外す
+        if "target" not in changes and source.get("target") not in (
+            None, *map(str, data.frame.columns)
+        ):
+            changes["target"] = None
+            merged["target"] = None
     target = changes.get("target")
     if target:
         data = load_source(merged)

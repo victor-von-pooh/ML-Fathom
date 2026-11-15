@@ -1,7 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Settings2 } from 'lucide-react'
-import { useState } from 'react'
-import YAML from 'yaml'
+import { useId, useRef, useState } from 'react'
 
 import { api } from '../../api/client'
 import type { LoaderInfo, Source } from '../../api/types'
@@ -11,35 +10,57 @@ import { clearDraft } from '../../lib/drafts'
 // 「読み方」で選ぶ設定 (ここでは出さない)
 const READ_AS = new Set(['kind', 'time_column', 'text_column'])
 
-/** 入力の文字を値にする (数や null は YAML として読む. 空は省略) */
-function toValue(text: string): unknown {
-  if (text.trim() === '') return undefined
-  try {
-    const value: unknown = YAML.parse(text)
-    return typeof value === 'object' && value !== null ? text : value
-  } catch {
+// 整数と null を値として読む設定 (それ以外は書いたとおりの文字)
+const NUMERIC = new Set(['header', 'sheet'])
+
+/** 保存した値を欄の文字にする (並びや辞書は JSON) */
+function toText(value: unknown): string {
+  if (value === undefined) return ''
+  if (value === null) return 'null'
+  if (typeof value === 'object') return JSON.stringify(value)
+  return String(value)
+}
+
+/** 欄の文字を値にする (空は省略. 区切り文字の \t はタブ) */
+function toValue(key: string, text: string, previous: unknown): unknown {
+  if (text === '') return undefined
+  if (typeof previous === 'object' && previous !== null) {
+    try {
+      return JSON.parse(text) as unknown
+    } catch {
+      return text
+    }
+  }
+  if (NUMERIC.has(key)) {
+    if (text.trim() === 'null') return null
+    if (/^-?\d+$/.test(text.trim())) return Number(text.trim())
     return text
   }
+  if (key === 'sep') return text.replace(/\\t/g, '\t')
+  return text
 }
 
 /** 読み込みの設定 (Excel のシート, 区切り文字, 文字コードなど) を変える */
 export function LoaderOptions({ source, loader }: { source: Source; loader?: LoaderInfo }) {
   const queryClient = useQueryClient()
+  const id = useId()
+  const box = useRef<HTMLDivElement>(null)
   const keys = Object.keys(loader?.options ?? {}).filter((key) => !READ_AS.has(key))
-  const initial = Object.fromEntries(
-    keys.map((key) => {
-      const value = source.options[key]
-      return [key, value === undefined ? '' : String(value)]
-    }),
-  )
+  const initial = Object.fromEntries(keys.map((key) => [key, toText(source.options[key])]))
   const [open, setOpen] = useState(false)
   const [texts, setTexts] = useState<Record<string, string>>(initial)
+  const close = () => {
+    setOpen(false)
+    // 閉じたら設定を開くボタンに戻る
+    box.current?.querySelector('button')?.focus()
+  }
   const save = useMutation({
     mutationFn: () => {
-      // 空の欄は設定から外す (読み込みが推定する)
+      // 変えた欄だけを書き換え, 空にした欄は設定から外す (読み込みの既定)
       const options: Record<string, unknown> = { ...source.options }
       for (const key of keys) {
-        const value = toValue(texts[key] ?? '')
+        if (texts[key] === initial[key]) continue
+        const value = toValue(key, texts[key] ?? '', source.options[key])
         if (value === undefined) delete options[key]
         else options[key] = value
       }
@@ -50,18 +71,19 @@ export function LoaderOptions({ source, loader }: { source: Source; loader?: Loa
       void queryClient.invalidateQueries({
         predicate: (query) => query.queryKey[0] === 'sources' || query.queryKey[1] === source.id,
       })
-      setOpen(false)
+      close()
     },
   })
   if (keys.length === 0) return null
   return (
-    <div className="relative">
+    <div ref={box} className="relative">
       <Button
         icon={Settings2}
         aria-expanded={open}
-        aria-controls={`loader-options-${source.id}`}
+        aria-controls={`${id}-form`}
         onClick={() => {
           setTexts(initial)
+          save.reset()
           setOpen(!open)
         }}
       >
@@ -69,33 +91,47 @@ export function LoaderOptions({ source, loader }: { source: Source; loader?: Loa
       </Button>
       {open && (
         <form
-          id={`loader-options-${source.id}`}
+          id={`${id}-form`}
           aria-label="読み込みの設定"
           onSubmit={(event) => {
             event.preventDefault()
             save.mutate()
           }}
-          className="absolute right-0 z-20 mt-1 w-96 space-y-2 rounded-xl border border-line bg-surface p-3 shadow-lg"
+          onKeyDown={(event) => {
+            if (event.key === 'Escape') {
+              event.preventDefault()
+              close()
+            }
+          }}
+          className="absolute left-0 z-20 mt-1 w-[min(24rem,calc(100vw-2rem))] space-y-2 rounded-xl border border-line bg-surface p-3 shadow-lg sm:right-0 sm:left-auto"
         >
           <p className="text-xs text-ink-3">
-            {loader?.name} の読み込みの設定. 空の欄は読み込みが推定します.
+            {loader?.name} の読み込みの設定. 空の欄は読み込みの既定 (推定か最初のシートなど).
+            区切り文字のタブは \t, シートの番号は数 (0 が最初), 数の名前のシートは名前のまま.
           </p>
-          {keys.map((key) => (
-            <label key={key} className="grid grid-cols-[6rem_1fr] items-start gap-2 text-sm">
-              <span className="pt-1 font-mono text-xs">{key}</span>
+          {keys.map((key, index) => (
+            <div key={key} className="grid grid-cols-[6rem_1fr] items-start gap-2 text-sm">
+              <label htmlFor={`${id}-${key}`} className="pt-1 font-mono text-xs">
+                {key}
+              </label>
               <span>
                 <input
+                  id={`${id}-${key}`}
                   value={texts[key] ?? ''}
+                  autoFocus={index === 0}
+                  aria-describedby={`${id}-${key}-help`}
                   onChange={(event) => setTexts({ ...texts, [key]: event.target.value })}
                   className="h-8 w-full rounded border border-line bg-surface px-2 font-mono text-sm"
                 />
-                <span className="text-xs text-ink-3">{loader?.options[key]}</span>
+                <span id={`${id}-${key}-help`} className="text-xs text-ink-3">
+                  {loader?.options[key]}
+                </span>
               </span>
-            </label>
+            </div>
           ))}
           {save.error && <ErrorBox error={save.error} />}
           <div className="flex justify-end gap-2">
-            <Button type="button" onClick={() => setOpen(false)}>
+            <Button type="button" onClick={close}>
               やめる
             </Button>
             <Button type="submit" variant="primary" disabled={save.isPending}>
