@@ -370,6 +370,8 @@ export function RecipeTab({
           sourceId={sourceId}
           decisions={decisions}
           onRecipe={(next) => {
+            // 変わらない選択 (落とす手順の無い列を残すなど) は下書きにしない
+            if (JSON.stringify(next) === JSON.stringify(recipe)) return
             setSelected(null)
             update(next)
           }}

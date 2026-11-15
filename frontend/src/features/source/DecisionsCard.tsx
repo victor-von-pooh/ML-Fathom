@@ -39,12 +39,11 @@ export function DecisionsCard({
   const choose = (decision: Decision, choice: DecisionChoice) => {
     const { action } = choice
     if (action.kind === 'recipe') onRecipe(action.recipe)
+    // 目的の列や読み方は, 変わった後の分析で当てはまらなくなれば消える
     if (action.kind === 'source') {
       source.mutate({ target: action.target, options: action.options })
-      // 目的の列や読み方は, 変わった後の分析で当てはまらなくなれば消える
-      return
     }
-    onDecide(decision.id)
+    if (action.kind === 'dismiss' || choice.remember) onDecide(decision.id)
   }
   return (
     <Card

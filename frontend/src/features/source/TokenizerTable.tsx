@@ -77,6 +77,7 @@ export function TokenizerTable({
                     ) : (
                       <Button
                         className="h-6 px-2 text-xs"
+                        aria-label={`${UNITS[candidate.unit] ?? candidate.unit} (語彙 ${candidate.vocabulary}) を使う`}
                         onClick={() =>
                           onUse({
                             op: 'vocabulary',

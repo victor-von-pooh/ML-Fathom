@@ -12,6 +12,11 @@ export interface DecisionChoice {
   action: DecisionAction
   /** 勧める選択肢 (目立たせる) */
   primary?: boolean
+  /**
+   * 選んだことをブラウザに覚え, 次から出さない. 「このまま」 (dismiss) は
+   * いつも覚える. 他は, 選んだ結果で当てはまらなくなれば消える
+   */
+  remember?: boolean
 }
 
 /** 自動では決めきれず, 利用者に選んでもらうこと */
@@ -144,7 +149,7 @@ export function findDecisions({
         id: `text_column:${name}`,
         title: `列 ${name} は文です`,
         message:
-          '表のままでは, 学習できる形にする手順で落とします. 文として読むと, 区切り方 (文字, 語, 部分語) を比べて番号の並びにし, 文のモデルで学習できます (他の列は残ります).',
+          '表のままでは, 学習できる形にする手順で落とします. 文として読むと, 区切り方 (文字, 語, 部分語) を比べて番号の並びにし, 文のモデルで学習できます. 他の列は表に残りますが, 学習に使うのは文と目的の列だけになり, 時刻の順の並べ替えもしません.',
         choices: [
           {
             label: '文として読む',
@@ -157,21 +162,31 @@ export function findDecisions({
     }
   }
 
-  // 目的の列とほぼ同じ情報を持つ列
+  // 目的の列とほぼ同じ情報を持つ列 (今の目的の列についての気付きだけ.
+  // 時刻や系列のような役割の列は落とせないので出さない). どちらを選んでも
+  // 目的の列ごとに覚える (自動の手順は疑いの列を落とすので, 条件では消せない)
   if (target) {
+    const roles = new Set(Object.values(profile.overview.roles ?? {}))
     for (const item of codes('target_leak')) {
-      for (const name of item.columns.filter((column) => column !== target)) {
+      if (!item.columns.includes(target)) continue
+      for (const name of item.columns) {
+        if (name === target || roles.has(name)) continue
         found.push({
-          id: `leak:${name}`,
+          id: `leak:${target}:${name}`,
           title: `列 ${name} は目的の列とほぼ同じです`,
-          message: `${item.message} 予測のときに使えない (正解の後に決まる) 列なら落とし, 使える列なら残します.`,
+          message: `${item.message.replace(/[.。]?$/, '.')} 予測のときに使えない (正解の後に決まる) 列なら落とし, 使える列なら残します.`,
           choices: [
             {
               label: '落とす',
               primary: true,
+              remember: true,
               action: { kind: 'recipe', recipe: addDrop(recipe, name) },
             },
-            { label: '残す', action: { kind: 'recipe', recipe: removeDrop(recipe, name) } },
+            {
+              label: '残す',
+              remember: true,
+              action: { kind: 'recipe', recipe: removeDrop(recipe, name) },
+            },
           ],
         })
       }
@@ -272,7 +287,7 @@ export function findDecisions({
         max_tokens: recommended.max_tokens,
       }
       found.push({
-        id: `tokenizer:${current}`,
+        id: `tokenizer:${current}->${wanted}`,
         title: `文の区切り方は${UNITS[wanted] ?? wanted}を勧めます`,
         message: `今の手順は${UNITS[current] ?? current}で区切ります. ${comparison.reason}.`,
         choices: [

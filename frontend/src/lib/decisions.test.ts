@@ -82,10 +82,16 @@ describe('決めてほしいこと', () => {
       steps: [{ op: 'drop_columns', columns: ['a'] }, { op: 'standardize' }],
     }
     const [decision] = findDecisions({ ...base, profile, recipe: withDrop, target: 'y' })
-    expect(decision!.id).toBe('leak:a')
+    expect(decision!.id).toBe('leak:y:a')
     const [drop, keep] = decision!.choices
     expect(drop!.action).toMatchObject({ kind: 'recipe', recipe: withDrop })
     expect(keep!.action).toMatchObject({ recipe: { steps: [{ op: 'standardize' }] } })
+    // 前の目的の列の気付き (目的の列を含まない) と, 役割の列は出さない
+    expect(ids({ ...base, profile, recipe, target: 'z' })).toEqual([])
+    const timed = profileOf({ a: column('numeric'), y: column('numeric') }, findings, {
+      overview: { roles: { time: 'a' } },
+    } as unknown as Partial<Profile>)
+    expect(ids({ ...base, profile: timed, recipe, target: 'y' })).toEqual([])
     // 落とす手順が無ければ先頭に作る
     const [fresh] = findDecisions({ ...base, profile, recipe, target: 'y' })
     expect(fresh!.choices[0]!.action).toMatchObject({
@@ -134,7 +140,7 @@ describe('決めてほしいこと', () => {
 
     const byChar = { ...recipe, item_steps: [{ op: 'vocabulary', unit: 'char', length: 64 }] }
     const [unit] = findDecisions({ ...text, recipe: byChar })
-    expect(unit!.id).toBe('tokenizer:char')
+    expect(unit!.id).toBe('tokenizer:char->subword')
     expect(unit!.choices[0]!.action).toMatchObject({
       recipe: { item_steps: [{ op: 'vocabulary', unit: 'subword', length: 16, max_tokens: 500 }] },
     })
