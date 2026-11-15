@@ -442,6 +442,7 @@ export function RecipeTab({
                     target,
                     profile.findings,
                     profile.overview.roles,
+                    target ? (profile.timeseries?.columns[target]?.period ?? null) : null,
                   )
                   if (
                     recipe.steps.length === 0 ||
@@ -451,7 +452,7 @@ export function RecipeTab({
                     setSteps(made)
                   }
                 }}
-                title="文や ID の列を落とし, カテゴリを符号化し, 欠損を埋め, 標準化する手順を, 列の型から作る"
+                title="文や ID の列を落とし, カテゴリを符号化し, 欠損を埋め, 標準化する手順を, 列の型から作る (時系列は過去の値の列も足す)"
               >
                 学習できる形にする手順を作る
               </Button>
