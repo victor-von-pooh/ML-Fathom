@@ -43,17 +43,22 @@ export function Findings({
                   {item.severity === 'warning' ? '注意' : '参考'}
                 </span>
                 <code className="text-xs text-ink-3">{item.code}</code>
-                {item.columns.map((column) => (
-                  <button
-                    key={column}
-                    type="button"
-                    disabled={!onColumn}
-                    onClick={() => onColumn?.(column)}
-                    className="rounded bg-surface-2 px-1.5 font-mono text-xs hover:underline disabled:no-underline"
-                  >
-                    {column}
-                  </button>
-                ))}
+                {item.columns.map((column) =>
+                  onColumn ? (
+                    <button
+                      key={column}
+                      type="button"
+                      onClick={() => onColumn(column)}
+                      className="rounded bg-surface-2 px-1.5 font-mono text-xs hover:underline"
+                    >
+                      {column}
+                    </button>
+                  ) : (
+                    <span key={column} className="rounded bg-surface-2 px-1.5 font-mono text-xs">
+                      {column}
+                    </span>
+                  ),
+                )}
               </div>
               <p className="text-ink-2">{item.message}</p>
             </div>

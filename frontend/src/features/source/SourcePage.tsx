@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useParams, useSearchParams } from 'react-router'
 
 import { api } from '../../api/client'
@@ -26,6 +26,8 @@ export function SourcePage() {
     queryKey: ['profile', id, source?.target ?? null],
     queryFn: () => api.profile(id),
     enabled: source !== undefined,
+    // 目的の列を変えて分析し直す間も, 前の結果を出したままにする
+    placeholderData: keepPreviousData,
   })
   const setTarget = useMutation({
     mutationFn: (target: string | null) => api.updateSource(id, { target }),
@@ -79,7 +81,13 @@ export function SourcePage() {
       />
       {setTarget.error && <ErrorBox error={setTarget.error} />}
       <Tabs items={items} value={tab} onChange={(next) => go(next)} idBase="source" label="分析" />
-      <div id="source-panel" role="tabpanel" className="pt-4">
+      <div
+        id="source-panel"
+        role="tabpanel"
+        aria-labelledby={`source-tab-${tab}`}
+        tabIndex={0}
+        className="pt-4"
+      >
         {profile.isPending && <Spinner label="分析しています" />}
         {profile.error && <ErrorBox error={profile.error} />}
         {data && tab === 'overview' && (

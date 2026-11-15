@@ -52,10 +52,20 @@ class SourceStore:
         sources: list[dict[str, Any]]
             登録したデータ (無い, 壊れている場合は空)
         """
-        # 壊れたファイルは空として扱う
+        # 無いファイルは空. 壊れたファイルは, 次の書き込みで上書きして
+        # 登録を失わないように .bak に退避してから空として扱う
         try:
             loaded = json.loads(self.sources_path.read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            return []
         except (OSError, ValueError):
+            backup = self.sources_path.with_suffix(".bak")
+            try:
+                self.sources_path.replace(backup)
+            except OSError:
+                pass
+            return []
+        if not isinstance(loaded, list):
             return []
         sources = [item for item in loaded if isinstance(item, dict)]
 
@@ -264,13 +274,16 @@ class SourceStore:
         ----------
         None
         """
-        # データごとの YAML に保存
+        # データごとの YAML に, 一時ファイルから置き換えて保存
         path = self.recipe_path(source_id)
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(
-            yaml.safe_dump(recipe, allow_unicode=True, sort_keys=False),
-            encoding="utf-8"
-        )
+        temporary = path.with_suffix(".tmp")
+        with self.lock:
+            temporary.write_text(
+                yaml.safe_dump(recipe, allow_unicode=True, sort_keys=False),
+                encoding="utf-8"
+            )
+            temporary.replace(path)
 
     def dataset_dir(self, name: str) -> Path:
         """

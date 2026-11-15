@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 import ml_eda
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import Response
 from ml_eda.pipeline import frame_view
 from ml_eda.profile import to_json
@@ -174,14 +174,22 @@ def source_key(source: dict[str, Any]) -> str:
     key: str
         場所, 更新時刻, 読み込み, 設定から作った鍵
     """
-    # 更新時刻が変われば読み直す
+    # 更新時刻 (ナノ秒), 大きさ, inode が変われば読み直す. ディレクトリは
+    # 中のファイル (2 階層まで) の最新の更新時刻と数も見る
     path = Path(source["path"])
     try:
-        modified = path.stat().st_mtime
+        stat = path.stat()
+        stamp: list[Any] = [stat.st_mtime_ns, stat.st_size, stat.st_ino]
+        if path.is_dir():
+            children = [*path.glob("*"), *path.glob("*/*")]
+            stamp += [
+                len(children),
+                max((c.stat().st_mtime_ns for c in children), default=0),
+            ]
     except OSError:
-        modified = 0.0
+        stamp = [0]
     key = json.dumps(
-        [source["path"], modified, source["loader"], source["options"]],
+        [source["path"], stamp, source["loader"], source["options"]],
         sort_keys=True, default=str
     )
 
@@ -297,9 +305,8 @@ def browse(path: str = "~") -> dict[str, Any]:
         )
     except PermissionError as error:
         raise HTTPException(403, "読む権限がありません") from error
-    for child in children[:1000]:
-        if child.name.startswith("."):
-            continue
+    visible = [c for c in children if not c.name.startswith(".")]
+    for child in visible[:1000]:
         try:
             size = child.stat().st_size if child.is_file() else None
         except OSError:
@@ -313,6 +320,7 @@ def browse(path: str = "~") -> dict[str, Any]:
         "parent": str(target.parent) if target.parent != target else None,
         "home": str(Path.home()),
         "entries": entries,
+        "truncated": len(visible) > 1000,
     }
 
     return listing
@@ -433,9 +441,15 @@ def update_source(
     HTTPException
         無い場合は 404, 読めない設定や無い列の場合は 422
     """
-    # 読み込みの設定を変える場合は, 読めることを確かめて種類を更新
+    # 読み込みの設定を変える場合は, 読めることを確かめて種類を更新. 名前と
+    # 読み込みの null は無視し, 目的の列の空の文字は「なし」とする
     source = find_source(request, source_id)
     changes = body.model_dump(exclude_unset=True)
+    for key in ("name", "loader", "options"):
+        if changes.get(key) is None:
+            changes.pop(key, None)
+    if "target" in changes and not changes["target"]:
+        changes["target"] = None
     merged = {**source, **{k: v for k, v in changes.items()}}
     if "loader" in changes or "options" in changes:
         data = load_source(merged)
@@ -525,7 +539,8 @@ def get_profile(request: Request, source_id: str) -> dict[str, Any]:
 
 @router.get("/sources/{source_id}/rows")
 def get_rows(
-    request: Request, source_id: str, offset: int = 0, limit: int = 100,
+    request: Request, source_id: str,
+    offset: int = Query(0, ge=0), limit: int = Query(100, ge=1, le=MAX_ROWS),
     sort: Optional[str] = None, descending: bool = False,
     query: Optional[str] = None
 ) -> dict[str, Any]:
@@ -665,7 +680,7 @@ def put_recipe(
     find_source(request, source_id)
     try:
         recipe: dict[str, Any] = ml_eda.load_recipe(body.recipe)
-    except ValueError as error:
+    except (ValueError, TypeError, AttributeError) as error:
         raise HTTPException(422, str(error)) from error
     get_store(request).write_recipe(source_id, recipe)
 
@@ -706,7 +721,7 @@ def preview(
                 for name, frame in prepared.frames.items()
             }
             result["classes"] = prepared.classes
-    except (ValueError, KeyError, TypeError) as error:
+    except (ValueError, KeyError, TypeError, AttributeError) as error:
         raise HTTPException(422, str(error)) from error
 
     converted: dict[str, Any] = to_json(result)
@@ -751,7 +766,7 @@ def export(
         )
     except FileExistsError as error:
         raise HTTPException(409, f"{body.name} は既にあります") from error
-    except (ValueError, KeyError, TypeError) as error:
+    except (ValueError, KeyError, TypeError, AttributeError) as error:
         raise HTTPException(422, str(error)) from error
     store.write_recipe(source_id, ml_eda.load_recipe(body.recipe))
     result = {"path": str(target), "info": to_json(info)}
@@ -780,17 +795,18 @@ def list_datasets(request: Request) -> list[dict[str, Any]]:
     if root.is_dir():
         for child in sorted(root.iterdir()):
             try:
-                loaded = ml_eda.load_dataset(child)
-            except (OSError, ValueError, KeyError):
+                info = ml_eda.load_dataset(child).info
+                splits = {
+                    k: v.get("rows") for k, v in info["splits"].items()
+                }
+            except (OSError, ValueError, KeyError, TypeError,
+                    AttributeError):
                 continue
-            info = loaded.info
             datasets.append({
                 "name": child.name, "path": str(child),
                 "kind": info.get("kind"), "task": info.get("task"),
                 "target": info.get("target"),
-                "splits": {
-                    k: v.get("rows") for k, v in info["splits"].items()
-                },
+                "splits": splits,
                 "features": len(info.get("features", [])),
                 "created_at": info.get("created_at"),
             })

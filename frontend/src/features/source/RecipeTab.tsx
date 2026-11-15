@@ -2,6 +2,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import clsx from 'clsx'
 import { ArrowDown, ArrowUp, Plus, Save, Sparkles, Trash2, Upload, Wand2 } from 'lucide-react'
 import { useMemo, useState } from 'react'
+
+import { useRecipeDraft } from '../../lib/drafts'
+import { useDebounced } from '../../lib/useDebounced'
 import YAML from 'yaml'
 
 import { api } from '../../api/client'
@@ -33,24 +36,29 @@ function ColumnsField({
   columns,
   onChange,
   id,
+  allowAuto,
 }: {
   value: unknown
   columns: string[]
   onChange: (value: unknown) => void
   id: string
+  /** auto (型から選ぶ) を使える手順か (列を落とすなどは名前で選ぶだけ) */
+  allowAuto: boolean
 }) {
-  const auto = value === 'auto' || value === undefined
+  const auto = allowAuto && (value === 'auto' || value === undefined)
   const chosen = Array.isArray(value) ? (value as string[]) : []
   return (
     <div className="flex flex-wrap items-center gap-1.5">
-      <label className="flex items-center gap-1 text-xs">
-        <input
-          type="checkbox"
-          checked={auto}
-          onChange={(event) => onChange(event.target.checked ? 'auto' : [])}
-        />
-        auto (型から選ぶ)
-      </label>
+      {allowAuto && (
+        <label className="flex items-center gap-1 text-xs">
+          <input
+            type="checkbox"
+            checked={auto}
+            onChange={(event) => onChange(event.target.checked ? 'auto' : [])}
+          />
+          auto (型から選ぶ)
+        </label>
+      )}
       {!auto &&
         chosen.map((name) => (
           <button
@@ -130,18 +138,23 @@ function StepEditor({
             </span>
           )}
         </button>
-        <Button variant="ghost" aria-label="上へ" disabled={index === 0} onClick={() => onMove(-1)}>
+        <Button
+          variant="ghost"
+          aria-label={`手順 ${index + 1} を上へ`}
+          disabled={index === 0}
+          onClick={() => onMove(-1)}
+        >
           <ArrowUp size={14} />
         </Button>
         <Button
           variant="ghost"
-          aria-label="下へ"
+          aria-label={`手順 ${index + 1} を下へ`}
           disabled={index === count - 1}
           onClick={() => onMove(1)}
         >
           <ArrowDown size={14} />
         </Button>
-        <Button variant="ghost" aria-label="手順を消す" onClick={onRemove}>
+        <Button variant="ghost" aria-label={`手順 ${index + 1} を消す`} onClick={onRemove}>
           <Trash2 size={14} />
         </Button>
       </div>
@@ -157,6 +170,7 @@ function StepEditor({
                 {name === 'columns' ? (
                   <ColumnsField
                     id={id}
+                    allowAuto={description.includes('auto')}
                     value={step[name]}
                     columns={columns}
                     onChange={(value) => onChange({ ...step, [name]: value })}
@@ -237,8 +251,9 @@ export function RecipeTab({
 }) {
   const queryClient = useQueryClient()
   const saved = useQuery({ queryKey: ['recipe', sourceId], queryFn: () => api.recipe(sourceId) })
-  // 編集中のレシピ (編集するまでは保存したもの). 目的の列は上の指定に合わせる
-  const [draft, setDraft] = useState<Recipe | null>(null)
+  // 編集中のレシピ (編集するまでは保存したもの. タブを移っても残す).
+  // 目的の列は上の指定に合わせる
+  const [draft, setDraft] = useRecipeDraft(sourceId)
   const base = draft ?? saved.data ?? null
   // タスクを決めていない場合は, 分析で推定したタスク (分類か回帰) にする
   const guessed = profile.target?.task ?? 'none'
@@ -251,30 +266,45 @@ export function RecipeTab({
   )
   const [selected, setSelected] = useState<number | null>(null)
   const [adding, setAdding] = useState('')
-  const [name, setName] = useState(sourceName.replace(/[^A-Za-z0-9_.-]/g, '_'))
+  const [name, setName] = useState(
+    sourceName.replace(/\.[A-Za-z0-9]+$/, '').replace(/[^A-Za-z0-9_.-]/g, '_') || 'dataset',
+  )
   const [overwrite, setOverwrite] = useState(false)
 
   const columns = Object.keys(profile.columns)
   const upto = recipe ? (selected === null ? recipe.steps.length : selected + 1) : 0
-  const previewKey = JSON.stringify(recipe)
+  // 打つたびに前処理を試さないように, 少し待ってから試す
+  const pending = useDebounced({ recipe, upto })
   const preview = useQuery({
-    queryKey: ['preview', sourceId, previewKey, upto],
-    queryFn: () => api.preview(sourceId, recipe!, upto),
-    enabled: recipe !== null,
+    queryKey: ['preview', sourceId, JSON.stringify(pending.recipe), pending.upto],
+    queryFn: () => api.preview(sourceId, pending.recipe!, pending.upto),
+    enabled: pending.recipe !== null,
     retry: false,
   })
+  const dirty = draft !== null && JSON.stringify(draft) !== JSON.stringify(saved.data)
+  // 保存と書き出しはレシピも保存するので, 編集中の印を外す
   const save = useMutation({
     mutationFn: () => api.saveRecipe(sourceId, recipe!),
-    onSuccess: (data) => queryClient.setQueryData(['recipe', sourceId], data),
+    onSuccess: (data) => {
+      queryClient.setQueryData(['recipe', sourceId], data)
+      setDraft(null)
+    },
   })
   const exporter = useMutation({
     mutationFn: () => api.exportDataset(sourceId, recipe!, name, overwrite),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['datasets'] }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['datasets'] })
+      void queryClient.invalidateQueries({ queryKey: ['recipe', sourceId] })
+      setDraft(null)
+    },
   })
-  const suggestions = useMemo(
-    () => suggestSteps(profile.findings, target, profile.columns),
-    [profile, target],
-  )
+  // 既にある手順は候補から除く (押すたびに同じ手順が増えないように)
+  const suggestions = useMemo(() => {
+    const present = new Set((recipe?.steps ?? []).map((step) => JSON.stringify(step)))
+    return suggestSteps(profile.findings, target, profile.columns).filter(
+      (step) => !present.has(JSON.stringify(step)),
+    )
+  }, [profile, target, recipe])
   const infoOf = (op: string) => steps.find((item) => item.op === op)
 
   if (saved.error) return <ErrorBox error={saved.error} />
@@ -286,10 +316,13 @@ export function RecipeTab({
     exporter.reset()
   }
   const setSteps = (next: RecipeStep[]) => update({ ...recipe, steps: next })
+  // 選んでいる手順は, 動かした先でも選んだままにする
   const move = (index: number, delta: number) => {
     const next = [...recipe.steps]
     const [item] = next.splice(index, 1)
     next.splice(index + delta, 0, item!)
+    if (selected === index) setSelected(index + delta)
+    else if (selected === index + delta) setSelected(index)
     setSteps(next)
   }
   const result = preview.data
@@ -348,7 +381,10 @@ export function RecipeTab({
                   onChange={(event) =>
                     update({
                       ...recipe,
-                      split: { ...recipe.split, [key]: Number(event.target.value) },
+                      split: {
+                        ...recipe.split,
+                        [key]: event.target.value === '' ? 0 : Number(event.target.value),
+                      },
                     })
                   }
                   className="h-8 w-24 rounded border border-line bg-surface px-2"
@@ -417,7 +453,7 @@ export function RecipeTab({
           <ol className="space-y-2">
             {recipe.steps.map((step, index) => (
               <StepEditor
-                key={`${index}-${step.op}-${JSON.stringify(step)}`}
+                key={`${index}-${step.op}`}
                 step={step}
                 index={index}
                 count={recipe.steps.length}
@@ -476,6 +512,11 @@ export function RecipeTab({
               レシピを保存
             </Button>
             {save.isSuccess && <span className="text-xs text-good-text">保存しました</span>}
+            {dirty && (
+              <span className="text-xs text-warning-text">
+                保存していない変更があります (タブを移っても残ります)
+              </span>
+            )}
           </div>
           {save.error && <ErrorBox error={save.error} />}
           <div className="mt-4 grid grid-cols-[7rem_1fr] items-center gap-2 text-sm">
@@ -507,7 +548,15 @@ export function RecipeTab({
           >
             {exporter.isPending ? '書き出し中…' : '学習用に書き出す'}
           </Button>
-          {exporter.error && <ErrorBox error={exporter.error} />}
+          {exporter.error && (
+            <ErrorBox error={exporter.error}>
+              {String(exporter.error).includes('既にあります') && (
+                <p className="mt-1 text-xs">
+                  置き換える場合は「同じ名前があれば置き換える」に印を付けてください.
+                </p>
+              )}
+            </ErrorBox>
+          )}
           {exporter.data && (
             <div className="mt-3 space-y-2 text-sm">
               <p className="text-good-text">書き出しました: {exporter.data.path}</p>
@@ -557,7 +606,9 @@ valid_loader = DataLoader(TensorDataset(*dataset.tensors("valid")), batch_size=6
               {!isFinal || recipe.steps.length > 0 ? (
                 <>
                   <div>
-                    <h3 className="mb-1 text-xs font-semibold text-ink-3">前</h3>
+                    <h3 className="mb-1 text-xs font-semibold text-ink-3">
+                      {selected === null ? '最後の手順の前' : '前'}
+                    </h3>
                     <FramePreview view={result.before} highlight={result.removed} />
                   </div>
                   <div>

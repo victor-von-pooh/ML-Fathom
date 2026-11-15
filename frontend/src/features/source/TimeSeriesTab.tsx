@@ -4,6 +4,7 @@ import { useState } from 'react'
 import type { TimeSeriesInfo } from '../../api/types'
 import { Card, StatTile } from '../../components/ui'
 import { Chart } from '../../lib/chart'
+import { cssVar } from '../../lib/chartTheme'
 import { formatInterval } from '../../lib/format'
 
 /** 時系列の間隔, 抜け, 系列のグラフと自己相関 */
@@ -15,14 +16,15 @@ export function TimeSeriesTab({ series }: { series: TimeSeriesInfo }) {
     tooltip: { trigger: 'axis' },
     legend: { top: 0 },
     grid: { left: 48, right: 16, top: 32, bottom: 56, containLabel: true },
-    xAxis: { type: 'category', data: series.series.time.map((t) => t.replace('T', ' ')) },
+    // 時刻の軸 (抜けた時刻は空いて見える)
+    xAxis: { type: 'time' },
     yAxis: { type: 'value', scale: true },
     dataZoom: [{ type: 'inside' }, { type: 'slider', height: 18, bottom: 8 }],
     series: selected.map((name) => ({
       name,
       type: 'line',
       showSymbol: false,
-      data: series.series.values[name],
+      data: series.series.values[name]!.map((value, index) => [series.series.time[index], value]),
     })),
   }
   const acf = series.columns[acfColumn]
@@ -36,7 +38,7 @@ export function TimeSeriesTab({ series }: { series: TimeSeriesInfo }) {
             type: 'bar',
             data: acf.acf.map((value, index) => ({
               value: Number(value.toFixed(3)),
-              itemStyle: acf.period === index + 1 ? { color: 'var(--series-2)' } : undefined,
+              itemStyle: acf.period === index + 1 ? { color: cssVar('--series-2') } : undefined,
             })),
           },
         ],
@@ -51,7 +53,7 @@ export function TimeSeriesTab({ series }: { series: TimeSeriesInfo }) {
         <StatTile
           label="期間"
           value={series.start?.slice(0, 10) ?? '–'}
-          hint={`から ${series.end?.slice(0, 10) ?? '–'}`}
+          hint={`〜 ${series.end?.slice(0, 10) ?? '–'} まで`}
         />
       </div>
       <Card

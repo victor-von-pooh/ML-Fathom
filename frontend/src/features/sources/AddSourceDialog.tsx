@@ -1,4 +1,4 @@
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQuery } from '@tanstack/react-query'
 import clsx from 'clsx'
 import { ArrowUp, File, Folder, Home } from 'lucide-react'
 import { useState } from 'react'
@@ -21,7 +21,12 @@ export function AddSourceDialog({
   const [typed, setTyped] = useState('')
   const [picked, setPicked] = useState<string | null>(null)
   const [loader, setLoader] = useState<string>('')
-  const listing = useQuery({ queryKey: ['browse', dir], queryFn: () => api.browse(dir) })
+  // 開けないディレクトリ (権限が無いなど) の後も, 前の一覧と「上へ」を使えるように
+  const listing = useQuery({
+    queryKey: ['browse', dir],
+    queryFn: () => api.browse(dir),
+    placeholderData: keepPreviousData,
+  })
   const candidates = useQuery({
     queryKey: ['detect', picked],
     queryFn: () => api.detect(picked!),
@@ -49,7 +54,13 @@ export function AddSourceDialog({
         className="mb-3 flex gap-2"
         onSubmit={(event) => {
           event.preventDefault()
-          if (typed.trim()) setDir(typed.trim())
+          // ディレクトリなら開き, ファイルならそれを選ぶ
+          const value = typed.trim()
+          if (!value) return
+          api.browse(value).then(
+            () => setDir(value),
+            () => pick(value),
+          )
         }}
       >
         <label className="sr-only" htmlFor="browse-path">
@@ -90,10 +101,10 @@ export function AddSourceDialog({
         className="mb-4 max-h-64 overflow-auto rounded-lg border border-line"
       >
         {listing.data?.entries.map((entry) => (
-          <li key={entry.path}>
+          <li key={entry.path} className="flex items-center">
             <button
               type="button"
-              onClick={() => (entry.is_dir ? pick(entry.path) : pick(entry.path))}
+              onClick={() => pick(entry.path)}
               onDoubleClick={() => entry.is_dir && setDir(entry.path)}
               className={clsx(
                 'flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm hover:bg-surface-2',
@@ -106,12 +117,27 @@ export function AddSourceDialog({
                 <File size={14} className="text-ink-3" aria-hidden />
               )}
               <span className="flex-1 truncate font-mono">{entry.name}</span>
-              <span className="text-xs text-ink-3">
-                {entry.is_dir ? 'ダブルクリックで開く' : formatBytes(entry.size)}
-              </span>
+              {!entry.is_dir && (
+                <span className="text-xs text-ink-3">{formatBytes(entry.size)}</span>
+              )}
             </button>
+            {entry.is_dir && (
+              <Button
+                variant="ghost"
+                className="mr-1 shrink-0"
+                aria-label={`${entry.name} を開く`}
+                onClick={() => setDir(entry.path)}
+              >
+                開く
+              </Button>
+            )}
           </li>
         ))}
+        {listing.data?.truncated && (
+          <li className="px-3 py-2 text-xs text-ink-3">
+            多いので先頭の 1000 件だけを出しています.
+          </li>
+        )}
         {listing.data?.entries.length === 0 && (
           <li className="px-3 py-2 text-sm text-ink-3">空のディレクトリです.</li>
         )}

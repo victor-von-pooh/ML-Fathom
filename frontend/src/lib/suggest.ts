@@ -10,6 +10,8 @@ export function suggestSteps(
   const steps: RecipeStep[] = []
   for (const item of findings) {
     const [column] = item.columns
+    // 目的の列には, 欠損の行を落とす以外の手順を作らない
+    if (column === target && item.code !== 'target_missing') continue
     if (!column) {
       if (item.code === 'duplicate_rows') steps.push({ op: 'drop_duplicates' })
       continue

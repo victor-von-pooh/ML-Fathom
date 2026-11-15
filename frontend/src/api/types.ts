@@ -52,6 +52,7 @@ export interface Listing {
   parent: string | null
   home: string
   entries: BrowseEntry[]
+  truncated?: boolean
 }
 
 export interface Histogram {

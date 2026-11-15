@@ -3,6 +3,7 @@ import { ArrowDown, ArrowUp } from 'lucide-react'
 import { useState } from 'react'
 
 import { api } from '../../api/client'
+import { useDebounced } from '../../lib/useDebounced'
 import { Button, ErrorBox, Spinner } from '../../components/ui'
 import { formatNumber } from '../../lib/format'
 
@@ -14,15 +15,17 @@ export function DataTab({ sourceId }: { sourceId: string }) {
   const [offset, setOffset] = useState(0)
   const [sort, setSort] = useState<{ column: string; descending: boolean } | null>(null)
   const [query, setQuery] = useState('')
+  // 打つたびに絞り込まないように, 少し待ってから
+  const search = useDebounced(query)
   const rows = useQuery({
-    queryKey: ['rows', sourceId, offset, sort, query],
+    queryKey: ['rows', sourceId, offset, sort, search],
     queryFn: () =>
       api.rows(sourceId, {
         offset,
         limit: PAGE,
         sort: sort?.column,
         descending: sort?.descending,
-        query,
+        query: search,
       }),
     placeholderData: keepPreviousData,
   })
@@ -53,7 +56,8 @@ export function DataTab({ sourceId }: { sourceId: string }) {
           placeholder="どれかの列に含む文字で絞り込む"
           className="h-8 w-80 rounded-lg border border-line bg-surface px-2 text-sm"
         />
-        {data && (
+        {data && data.total === 0 && <span className="text-sm text-ink-3">合う行がありません</span>}
+        {data && data.total > 0 && (
           <span className="text-sm text-ink-3">
             {formatNumber(data.total)} 行のうち {formatNumber(data.total ? offset + 1 : 0)}–
             {formatNumber(Math.min(offset + PAGE, data.total))}
@@ -80,7 +84,17 @@ export function DataTab({ sourceId }: { sourceId: string }) {
               <tr>
                 <th className="px-2 py-1.5 text-right text-xs font-medium text-ink-3">#</th>
                 {data.columns.map((column) => (
-                  <th key={column.name} className="px-2 py-1.5 text-left whitespace-nowrap">
+                  <th
+                    key={column.name}
+                    className="px-2 py-1.5 text-left whitespace-nowrap"
+                    aria-sort={
+                      sort?.column === column.name
+                        ? sort.descending
+                          ? 'descending'
+                          : 'ascending'
+                        : undefined
+                    }
+                  >
                     <button
                       type="button"
                       onClick={() => toggleSort(column.name)}
