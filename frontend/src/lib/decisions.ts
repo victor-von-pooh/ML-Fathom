@@ -124,7 +124,7 @@ export function findDecisions({
     found.push({
       id: `sheet:${sheets.join('|')}`,
       title: `シートが ${sheets.length} 枚あります`,
-      message: `今は最初のシート ${current} を読んでいます. 分析したいデータが別のシートにあれば選びます (読み込みの設定の sheet と同じ).`,
+      message: `今は最初のシート ${current} を読んでいます. 分析したいデータが別のシートにあれば選びます (読み込みの設定の sheet と同じ).${sheets.length > 7 ? ` ここには 6 枚まで出すので, 他のシートは「読み込みの設定」の sheet に名前を書きます.` : ''}`,
       choices: [
         { label: `${current} (このまま)`, primary: true, action: { kind: 'dismiss' } },
         ...sheets
