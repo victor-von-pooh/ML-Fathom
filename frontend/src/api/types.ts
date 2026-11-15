@@ -27,9 +27,14 @@ export interface StepInfo {
   fits: boolean
 }
 
+export interface ItemStepInfo extends StepInfo {
+  kind: string
+}
+
 export interface Info {
   loaders: LoaderInfo[]
   steps: StepInfo[]
+  item_steps: ItemStepInfo[]
   kinds: string[]
   version: string
 }
@@ -147,7 +152,12 @@ export interface Profile {
 }
 
 export interface ItemsInfo {
-  [key: string]: unknown
+  kind: string
+  count: number
+  sizes?: { width: number; height: number; count: number }[]
+  modes?: Record<string, number>
+  brightness?: number
+  unreadable?: number
 }
 
 export interface Rows {
@@ -168,6 +178,7 @@ export interface Recipe {
   target: string | null
   task: string
   steps: RecipeStep[]
+  item_steps?: RecipeStep[]
   split: { method: string; valid?: number; test?: number; seed?: number; column?: string }
 }
 
@@ -202,4 +213,10 @@ export interface DatasetSummary {
   splits: Record<string, number>
   features: number
   created_at: string
+}
+
+export interface PointsItem {
+  count: number
+  points: number[]
+  colors: number[] | null
 }

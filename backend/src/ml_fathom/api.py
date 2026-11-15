@@ -7,7 +7,12 @@ from typing import Any, Optional
 import ml_eda
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import Response
-from ml_eda.pipeline import frame_view
+from ml_eda.pipeline import (
+    SPLIT_COLUMN,
+    apply_recipe,
+    frame_view,
+    sorted_classes,
+)
 from ml_eda.profile import to_json
 from pydantic import BaseModel, Field
 
@@ -267,6 +272,7 @@ def get_info() -> dict[str, Any]:
     info = {
         "loaders": ml_eda.describe_loaders(),
         "steps": ml_eda.describe_steps(),
+        "item_steps": ml_eda.describe_item_steps(),
         "kinds": list(ml_eda.KINDS),
         "version": ml_eda.__version__,
     }
@@ -408,9 +414,15 @@ def create_source(request: Request, body: SourceCreate) -> dict[str, Any]:
         loader = candidates[0]["loader"]
     draft = {"path": str(path), "loader": loader, "options": body.options}
     data = load_source(draft)
-    source = get_store(request).add(
+    # クラスのフォルダから読んだラベルは, 初めから目的の列にする
+    store = get_store(request)
+    source = store.add(
         path, body.name or path.name, loader, data.kind, body.options
     )
+    if data.roles.get("label"):
+        source = store.update(
+            source["id"], {"target": data.roles["label"]}
+        ) or source
 
     return source_view(source)
 
@@ -712,7 +724,12 @@ def preview(
     data = load_source(find_source(request, source_id))
     try:
         result = ml_eda.preview(data, body.recipe, body.upto)
-        if body.upto >= len(body.recipe.get("steps", [])):
+        if body.upto >= len(body.recipe.get("steps", [])) and (
+            data.item_loader is not None
+        ):
+            # 画像などは全ての中身を読まずに, 分割の件数とクラスだけを返す
+            result.update(item_summary(data, body.recipe))
+        elif body.upto >= len(body.recipe.get("steps", [])):
             prepared = ml_eda.prepare(data, body.recipe)
             result["features"] = prepared.features
             result["notes"] = prepared.notes
@@ -727,6 +744,47 @@ def preview(
     converted: dict[str, Any] = to_json(result)
 
     return converted
+
+
+def item_summary(data: ml_eda.Data, recipe: dict[str, Any]) -> dict[str, Any]:
+    """
+    画像, 文, 点群のレシピの分割の件数, クラス, 中身の手順の注意を返す関数
+
+    Parameters
+    ----------
+    data: ml_eda.Data
+        中身を持つデータ
+    recipe: dict[str, Any]
+        レシピ
+
+    Returns
+    ----------
+    summary: dict[str, Any]
+        splits, classes, features (空), notes
+    """
+    # 表の手順と分割だけをかける (中身は書き出しのときに読む)
+    loaded = ml_eda.load_recipe(recipe)
+    frame, roles = apply_recipe(data, loaded)
+    counts = frame[SPLIT_COLUMN].value_counts()
+    target = roles.get("target")
+    classes = (
+        sorted_classes(frame[target])
+        if target and loaded["task"] == "classification" else []
+    )
+    notes = []
+    if not loaded["item_steps"]:
+        notes.append(
+            "中身の手順 (item_steps) がありません. 画像は resize, 文は "
+            "vocabulary, 点群は sample_points で形をそろえてください"
+        )
+    summary = {
+        "splits": {k: int(v) for k, v in counts.items()},
+        "classes": classes,
+        "features": [],
+        "notes": notes,
+    }
+
+    return summary
 
 
 @router.post("/sources/{source_id}/export")

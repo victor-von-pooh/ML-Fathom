@@ -113,6 +113,8 @@ export function SourcePage() {
             profile={data}
             target={source.target}
             steps={info.data.steps}
+            kind={source.kind}
+            itemSteps={info.data.item_steps}
           />
         )}
       </div>
