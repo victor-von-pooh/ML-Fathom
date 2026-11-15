@@ -171,7 +171,7 @@ export function autoRecipe(
  * 分析から, 画像, 文, 点群を学習用の配列にする中身の手順を作る
  *
  * 画像は最も多い大きさにそろえ (色の形式が混ざれば RGB に), 正規化する.
- * 文は語の数の多めの値を長さにして語彙で番号にする. 点群は点の数の中央値
+ * 文は分析が比べて勧めた区切り方 (無ければ語の数の多めの値を長さ) の語彙で番号にする. 点群は点の数の中央値
  * (1024 まで) にそろえて正規化する
  */
 export function autoItemSteps(kind: string, profile: Profile): RecipeStep[] {
@@ -192,6 +192,9 @@ export function autoItemSteps(kind: string, profile: Profile): RecipeStep[] {
     return steps
   }
   if (kind === 'text') {
+    // 区切り方を比べた結果があれば, 勧めたものを使う
+    const recommended = profile.items?.tokenizers?.recommended
+    if (recommended) return [{ ...recommended }]
     // 空白で区切らない文 (日本語など) は, 1 語あたりの文字が多い (英語は 5 から 6 文字) ので文字ごとに
     const roles: Record<string, string> = profile.overview?.roles ?? {}
     const words = typical(profile.columns[roles.words ?? 'words'], 32)

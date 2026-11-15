@@ -131,6 +131,8 @@ export function SourcePage() {
             steps={info.data.steps}
             kind={source.kind}
             itemSteps={info.data.item_steps}
+            loader={source.loader}
+            options={source.options}
           />
         )}
       </div>
