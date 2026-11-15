@@ -18,8 +18,12 @@ import type {
 } from '../../api/types'
 import { Button, Card, ErrorBox, Spinner } from '../../components/ui'
 import { formatNumber, TASK_LABELS } from '../../lib/format'
+import { findDecisions, withAutoItems } from '../../lib/decisions'
+import { autoRecipe, suggestSteps } from '../../lib/suggest'
+import { useDecided } from '../../lib/useDecided'
+import { DecisionsCard } from './DecisionsCard'
 import { ItemPreviewCard } from './ItemPreviewCard'
-import { autoItemSteps, autoRecipe, suggestSteps, unreadableFilter } from '../../lib/suggest'
+import { TokenizerTable } from './TokenizerTable'
 
 /** 手順の引数の値を, 入力の文字にする */
 function toText(value: unknown): string {
@@ -252,6 +256,8 @@ export function RecipeTab({
   steps,
   kind,
   itemSteps,
+  loader,
+  options,
 }: {
   sourceId: string
   sourceName: string
@@ -261,6 +267,9 @@ export function RecipeTab({
   /** データの種類 (画像, 文, 点群は中身の手順も組み立てる) */
   kind: string
   itemSteps: ItemStepInfo[]
+  /** 読み込みと読み込みの設定 (決めてほしいことで読み方を変えるため) */
+  loader: string
+  options: Record<string, unknown>
 }) {
   const media = ['image', 'text', 'pointcloud'].includes(kind)
   const [addingItem, setAddingItem] = useState('')
@@ -324,6 +333,12 @@ export function RecipeTab({
     )
   }, [profile, target, recipe])
   const infoOf = (op: string) => steps.find((item) => item.op === op)
+  const [decided, decide] = useDecided(sourceId)
+  const decisions = useMemo(
+    () =>
+      recipe ? findDecisions({ profile, recipe, kind, target, loader, options, decided }) : [],
+    [profile, recipe, kind, target, loader, options, decided],
+  )
 
   if (saved.error) return <ErrorBox error={saved.error} />
   if (recipe === null) return <Spinner />
@@ -351,6 +366,17 @@ export function RecipeTab({
   return (
     <div className="grid gap-4 xl:grid-cols-[minmax(0,30rem)_1fr]">
       <div className="space-y-4">
+        <DecisionsCard
+          sourceId={sourceId}
+          decisions={decisions}
+          onRecipe={(next) => {
+            // 変わらない選択 (落とす手順の無い列を残すなど) は下書きにしない
+            if (JSON.stringify(next) === JSON.stringify(recipe)) return
+            setSelected(null)
+            update(next)
+          }}
+          onDecide={decide}
+        />
         <Card title="目的と分割">
           <div className="grid grid-cols-[7rem_1fr] items-center gap-2 text-sm">
             <span className="text-ink-3">目的の列</span>
@@ -543,15 +569,7 @@ export function RecipeTab({
                     window.confirm('今の中身の手順を, 分析から作った手順に置き換えますか?')
                   ) {
                     // 読めない件があれば, 書き出しで止まらないように表の手順で除く
-                    const filter = unreadableFilter(kind, profile)
-                    const has = recipe.steps.some(
-                      (step) => JSON.stringify(step) === JSON.stringify(filter),
-                    )
-                    update({
-                      ...recipe,
-                      steps: filter && !has ? [filter, ...recipe.steps] : recipe.steps,
-                      item_steps: autoItemSteps(kind, profile),
-                    })
+                    update(withAutoItems(recipe, kind, profile))
                   }
                 }}
                 title="分析 (最も多い大きさ, 語の数, 点の数, 読めない件) から, 学習用の配列にする手順を作る"
@@ -589,6 +607,25 @@ export function RecipeTab({
                 />
               ))}
             </ol>
+            {kind === 'text' && profile.items?.tokenizers && (
+              <TokenizerTable
+                comparison={profile.items.tokenizers}
+                current={items.find((step) => step.op === 'vocabulary')}
+                onUse={(step) => {
+                  const index = items.findIndex((item) => item.op === 'vocabulary')
+                  const next = {
+                    ...(index >= 0 ? items[index] : {}),
+                    ...step,
+                    op: 'vocabulary',
+                  }
+                  setItems(
+                    index >= 0
+                      ? items.map((item, at) => (at === index ? next : item))
+                      : [...items, next],
+                  )
+                }}
+              />
+            )}
             <div className="mt-3 flex gap-2">
               <label className="sr-only" htmlFor="add-item-step">
                 足す中身の手順
@@ -652,6 +689,12 @@ export function RecipeTab({
               同じ名前があれば置き換える
             </label>
           </div>
+          {decisions.length > 0 && (
+            <p className="mt-3 text-xs text-warning-text">
+              決めていないことが {decisions.length} 件あります (上の「決めてほしいこと」).
+              このままでも書き出せます.
+            </p>
+          )}
           <Button
             variant="primary"
             icon={Upload}

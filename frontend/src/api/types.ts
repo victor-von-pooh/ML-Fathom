@@ -160,6 +160,27 @@ export interface ItemsInfo {
   modes?: Record<string, number>
   brightness?: number
   unreadable?: number
+  /** 文を区切る単位の比較 (文だけ) */
+  tokenizers?: TokenizerComparison
+}
+
+/** 文を区切る単位 (文字, 語, 部分語) ごとの測った値 */
+export interface TokenizerCandidate {
+  unit: string
+  vocabulary: number
+  tokens_mean: number
+  tokens_p95: number
+  unknown_rate: number
+  length: number
+  truncated_rate: number
+  max_tokens: number
+}
+
+export interface TokenizerComparison {
+  candidates: TokenizerCandidate[]
+  recommended: RecipeStep | null
+  reason: string
+  notes: string[]
 }
 
 export interface Rows {
