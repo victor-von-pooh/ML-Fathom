@@ -1,5 +1,6 @@
 import io
-from typing import Any
+import math
+from typing import Any, Optional
 
 import ml_eda
 import numpy as np
@@ -10,7 +11,9 @@ from fastapi.responses import JSONResponse, Response
 MAX_POINTS = 50_000
 
 
-def item_response(data: ml_eda.Data, index: int) -> Response:
+def item_response(
+    data: ml_eda.Data, index: int, size: Optional[int] = None
+) -> Response:
     """
     1 件の中身を画面で見られる形にして返す関数
 
@@ -20,6 +23,8 @@ def item_response(data: ml_eda.Data, index: int) -> Response:
         読み込んだデータ
     index: int
         行の位置
+    size: Optional[int] = None
+        画像を縮める長い辺の画素数 (None なら元の大きさ)
 
     Returns
     ----------
@@ -36,18 +41,22 @@ def item_response(data: ml_eda.Data, index: int) -> Response:
         item = data.load_item(index)
     except ValueError as error:
         raise HTTPException(422, str(error)) from error
-    except OSError as error:
+    except Exception as error:
+        # 壊れたファイルや大きすぎる画像など, 読めない理由は様々
         raise HTTPException(422, f"読めませんでした: {error}") from error
     if data.kind == "image":
-        return png_response(item)
-    if data.kind == "pointcloud":
-        return points_response(item)
-    response = JSONResponse({"text": str(item)})
+        response = png_response(item, size)
+    elif data.kind == "pointcloud":
+        response = points_response(item)
+    else:
+        response = JSONResponse({"text": str(item)})
+    # 同じ画面で何度も開くので, 少しの間はブラウザに覚えさせる
+    response.headers["Cache-Control"] = "private, max-age=60"
 
     return response
 
 
-def png_response(image: np.ndarray) -> Response:
+def png_response(image: np.ndarray, size: Optional[int] = None) -> Response:
     """
     画像の配列を PNG で返す関数
 
@@ -55,6 +64,8 @@ def png_response(image: np.ndarray) -> Response:
     ----------
     image: np.ndarray
         (高さ, 幅) か (高さ, 幅, チャンネル) の配列
+    size: Optional[int] = None
+        長い辺がこれより大きければ縮める画素数
 
     Returns
     ----------
@@ -71,8 +82,11 @@ def png_response(image: np.ndarray) -> Response:
         array = ((array - low) * scale).clip(0, 255).astype(np.uint8)
     if array.ndim == 3 and array.shape[2] == 1:
         array = array[:, :, 0]
+    picture = Image.fromarray(array)
+    if size is not None:
+        picture.thumbnail((size, size))
     buffer = io.BytesIO()
-    Image.fromarray(array).save(buffer, format="PNG")
+    picture.save(buffer, format="PNG")
     response = Response(buffer.getvalue(), media_type="image/png")
 
     return response
@@ -90,19 +104,28 @@ def points_response(item: Any) -> Response:
     Returns
     ----------
     response: Response
-        points (平らな座標の並び), colors, 元の点の数
+        points (平らな座標の並び), colors, 元の点の数 (有限でない点も
+        数える)
     """
+    # 有限でない点 (距離のセンサーの欠け) は JSON にできないので除き,
     # 多い場合は等間隔に間引く
     points = np.asarray(item["points"], dtype=np.float32)[:, :3]
-    step = max(1, len(points) // MAX_POINTS)
+    finite = np.isfinite(points).all(axis=1)
+    count = int(len(points))
+    points = points[finite]
+    step = max(1, math.ceil(len(points) / MAX_POINTS))
     colors = item.get("colors")
+    shown = None
+    if colors is not None:
+        values = np.nan_to_num(np.asarray(colors, dtype=np.float64)[finite])
+        # 0 から 1 の色は 0 から 255 に
+        if len(values) and values.max() <= 1.0:
+            values = values * 255
+        shown = values[::step].clip(0, 255).astype(int).ravel().tolist()
     body: dict[str, Any] = {
-        "count": int(len(points)),
+        "count": count,
         "points": points[::step].round(5).ravel().tolist(),
-        "colors": (
-            np.asarray(colors)[::step].astype(int).ravel().tolist()
-            if colors is not None else None
-        ),
+        "colors": shown,
     }
     response = JSONResponse(body)
 

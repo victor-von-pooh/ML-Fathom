@@ -1,5 +1,6 @@
 import json
 import threading
+import time
 from collections import OrderedDict
 from pathlib import Path
 from typing import Any, Optional
@@ -15,6 +16,10 @@ from ml_fathom.items import item_response
 from ml_fathom.store import SourceStore
 
 router = APIRouter(prefix="/api")
+
+# ファイルの変化を調べた結果を使い回す秒数と, 場所ごとの (時刻, 結果)
+STAMP_SECONDS = 3.0
+STAMPS: dict[str, tuple[float, list[Any]]] = {}
 
 # 読み込んだデータと分析の結果を覚えておく数
 CACHE_SIZE = 8
@@ -175,8 +180,40 @@ def source_key(source: dict[str, Any]) -> str:
         場所, 更新時刻, 読み込み, 設定から作った鍵
     """
     # 更新時刻 (ナノ秒), 大きさ, inode が変われば読み直す. ディレクトリは
-    # 中のファイル (2 階層まで) の最新の更新時刻と数も見る
+    # 中のファイル (2 階層まで) の最新の更新時刻と数も見る. 中身を並べる
+    # 画面は 1 件ごとに呼ぶので, 数秒の間は前に調べた結果を使う
     path = Path(source["path"])
+    now = time.monotonic()
+    remembered = STAMPS.get(source["path"])
+    if remembered and now - remembered[0] < STAMP_SECONDS:
+        stamp = remembered[1]
+    else:
+        stamp = file_stamp(path)
+        STAMPS[source["path"]] = (now, stamp)
+    key = json.dumps(
+        [source["path"], stamp, source["loader"], source["options"]],
+        sort_keys=True, default=str
+    )
+
+    return key
+
+
+def file_stamp(path: Path) -> list[Any]:
+    """
+    ファイルかディレクトリが変わったかを見分ける値を返す関数
+
+    Parameters
+    ----------
+    path: Path
+        ファイルかディレクトリ
+
+    Returns
+    ----------
+    stamp: list[Any]
+        更新時刻, 大きさ, inode (ディレクトリは中のファイルの数と最新の
+        更新時刻も). 読めなければ [0]
+    """
+    # 中のファイルは 2 階層まで
     try:
         stat = path.stat()
         stamp: list[Any] = [stat.st_mtime_ns, stat.st_size, stat.st_ino]
@@ -188,12 +225,8 @@ def source_key(source: dict[str, Any]) -> str:
             ]
     except OSError:
         stamp = [0]
-    key = json.dumps(
-        [source["path"], stamp, source["loader"], source["options"]],
-        sort_keys=True, default=str
-    )
 
-    return key
+    return stamp
 
 
 def load_source(source: dict[str, Any]) -> ml_eda.Data:
@@ -267,6 +300,7 @@ def get_info() -> dict[str, Any]:
     info = {
         "loaders": ml_eda.describe_loaders(),
         "steps": ml_eda.describe_steps(),
+        "item_steps": ml_eda.describe_item_steps(),
         "kinds": list(ml_eda.KINDS),
         "version": ml_eda.__version__,
     }
@@ -408,9 +442,15 @@ def create_source(request: Request, body: SourceCreate) -> dict[str, Any]:
         loader = candidates[0]["loader"]
     draft = {"path": str(path), "loader": loader, "options": body.options}
     data = load_source(draft)
-    source = get_store(request).add(
+    # クラスのフォルダから読んだラベルは, 初めから目的の列にする
+    store = get_store(request)
+    source = store.add(
         path, body.name or path.name, loader, data.kind, body.options
     )
+    if data.roles.get("label"):
+        source = store.update(
+            source["id"], {"target": data.roles["label"]}
+        ) or source
 
     return source_view(source)
 
@@ -597,7 +637,10 @@ def get_rows(
 
 
 @router.get("/sources/{source_id}/items/{index}")
-def get_item(request: Request, source_id: str, index: int) -> Response:
+def get_item(
+    request: Request, source_id: str, index: int,
+    size: Optional[int] = Query(None, ge=16, le=2048)
+) -> Response:
     """
     画像や点群など, 1 件の中身を返す関数
 
@@ -609,6 +652,8 @@ def get_item(request: Request, source_id: str, index: int) -> Response:
         データの ID
     index: int
         行の位置
+    size: Optional[int] = Query(None, ge=16, le=2048)
+        画像を縮める長い辺の画素数 (一覧の小さな表示用)
 
     Returns
     ----------
@@ -618,7 +663,7 @@ def get_item(request: Request, source_id: str, index: int) -> Response:
     data = load_source(find_source(request, source_id))
     if not 0 <= index < len(data.frame):
         raise HTTPException(404, f"{index} 番目はありません")
-    response = item_response(data, index)
+    response = item_response(data, index, size)
 
     return response
 
@@ -713,7 +758,8 @@ def preview(
     try:
         result = ml_eda.preview(data, body.recipe, body.upto)
         if body.upto >= len(body.recipe.get("steps", [])):
-            prepared = ml_eda.prepare(data, body.recipe)
+            # 画像などは中身を読まずに, 手順の確認と注意だけをする
+            prepared = ml_eda.prepare(data, body.recipe, read_items=False)
             result["features"] = prepared.features
             result["notes"] = prepared.notes
             result["splits"] = {

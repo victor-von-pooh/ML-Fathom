@@ -24,10 +24,10 @@ make serve   # 画面をビルドして http://127.0.0.1:8767 で起動 (使う�
 
 ## 使い方
 
-1. 「データを追加」でファイル (csv, tsv, json, jsonl, parquet, xlsx, npy など) かディレクトリを選ぶ. 形式を判定した読み込みの候補から選んで「追加」
+1. 「データを追加」でファイル (csv, tsv, json, jsonl, parquet, xlsx, npy, txt, ply, pcd, xyz など) かディレクトリ (クラスごとのフォルダに分けた画像, 文, 点群) を選ぶ. 形式を判定した読み込みの候補から選んで「追加」
 2. データの画面の上の「目的の列」で, 予測したい列を選ぶ (分析に目的の列との関係が加わり, 前処理の分割とタスクに使う)
-3. 「概要と気付き」「列」「関係」「時系列」「表の中身」でデータの特徴を見る
-4. 「前処理と書き出し」で手順を組み立てる. 「学習できる形にする手順を作る」で列の型から手順を作り, 「気付きから手順を足す」で気付きに合う手順を足せる. 手順の番号を押すと, その手順の前と後を見られる
+3. 「概要と気付き」「列」「関係」「時系列」「中身を見る」「表の中身」でデータの特徴を見る. 画像は並べて, 点群は 3D で回して見られる
+4. 「前処理と書き出し」で手順を組み立てる. 「学習できる形にする手順を作る」で列の型から手順を作り, 「気付きから手順を足す」で気付きに合う手順を足せる. 手順の番号を押すと, その手順の前と後を見られる. 画像, 文, 点群は「学習用の配列にする手順を作る」で, 大きさや長さや点の数をそろえる手順を作る
 5. 名前を付けて「学習用に書き出す」. 置き場の `datasets/<名前>/` に書き出す
 
 置き場は `~/.ml-fathom/` (環境変数 `ML_FATHOM_HOME` で変えられる). 元のデータのファイルは書き換えない.
@@ -41,7 +41,7 @@ from torch.utils.data import DataLoader, TensorDataset
 dataset = load_dataset("~/.ml-fathom/datasets/<名前>")
 train_loader = DataLoader(TensorDataset(*dataset.tensors("train")), batch_size=64, shuffle=True)
 valid_loader = DataLoader(TensorDataset(*dataset.tensors("valid")), batch_size=64)
-# 入力の次元: len(dataset.features), 分類のクラスの数: len(dataset.info["classes"])
+# 入力の形: dataset.info["splits"]["train"]["shape"][1:], 分類のクラスの数: len(dataset.info["classes"])
 ```
 
 学習の環境に ML-EDA を入れる方法は ML-EDA の README を参照.

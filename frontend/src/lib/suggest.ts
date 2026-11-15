@@ -1,4 +1,4 @@
-import type { ColumnInfo, Finding, RecipeStep } from '../api/types'
+import type { ColumnInfo, Finding, Profile, RecipeStep } from '../api/types'
 
 /** 気付きから作る手順の候補 */
 export function suggestSteps(
@@ -103,4 +103,66 @@ export function autoRecipe(
   if (oneHot.length) steps.push({ op: 'one_hot', columns: oneHot })
   steps.push({ op: 'standardize', columns: 'auto' })
   return steps
+}
+
+/**
+ * 分析から, 画像, 文, 点群を学習用の配列にする中身の手順を作る
+ *
+ * 画像は最も多い大きさにそろえ (色の形式が混ざれば RGB に), 正規化する.
+ * 文は語の数の多めの値を長さにして語彙で番号にする. 点群は点の数の中央値
+ * (1024 まで) にそろえて正規化する
+ */
+export function autoItemSteps(kind: string, profile: Profile): RecipeStep[] {
+  if (kind === 'image') {
+    const size = profile.items?.sizes?.[0]
+    const steps: RecipeStep[] = []
+    if (size) {
+      // 写真のような大きな画像は, 長い辺を 224 までに縮める (配列が大きくなりすぎない)
+      const scale = Math.min(1, MAX_IMAGE_SIDE / Math.max(size.width, size.height))
+      steps.push({
+        op: 'resize',
+        width: Math.max(1, Math.round(size.width * scale)),
+        height: Math.max(1, Math.round(size.height * scale)),
+      })
+    }
+    if (Object.keys(profile.items?.modes ?? {}).length > 1) steps.push({ op: 'rgb' })
+    steps.push({ op: 'normalize' })
+    return steps
+  }
+  if (kind === 'text') {
+    // 空白で区切らない文 (日本語など) は, 語の数が文字の数よりずっと少ないので文字ごとに
+    const words = typical(profile.columns.words, 32)
+    const letters = typical(profile.columns.length, 128)
+    const byChar = words * 4 < letters
+    const length = Math.min(512, Math.max(8, Math.ceil((byChar ? letters : words) * 1.5)))
+    return [
+      byChar
+        ? { op: 'vocabulary', length, max_tokens: 20000, unit: 'char' }
+        : { op: 'vocabulary', length, max_tokens: 20000 },
+    ]
+  }
+  if (kind === 'pointcloud') {
+    const points = Math.min(
+      1024,
+      Math.max(64, Math.round(typical(profile.columns.points, 1024, 'median'))),
+    )
+    return [{ op: 'sample_points', points }, { op: 'normalize_cloud' }]
+  }
+  return []
+}
+
+// 画像を縮める長い辺の上限
+const MAX_IMAGE_SIDE = 224
+
+/** 列のよくある大きさ (数値なら第 3 四分位か中央値, 種類が少なければ最も多い値) */
+function typical(
+  column: ColumnInfo | undefined,
+  fallback: number,
+  key: 'q3' | 'median' = 'q3',
+): number {
+  if (!column) return fallback
+  const stat = column[key]
+  if (typeof stat === 'number') return stat
+  const top = Number(column.top?.[0]?.value)
+  return Number.isFinite(top) ? top : fallback
 }

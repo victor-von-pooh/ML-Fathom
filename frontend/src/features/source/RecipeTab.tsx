@@ -8,10 +8,17 @@ import { useDebounced } from '../../lib/useDebounced'
 import YAML from 'yaml'
 
 import { api } from '../../api/client'
-import type { FrameView, Profile, Recipe, RecipeStep, StepInfo } from '../../api/types'
+import type {
+  FrameView,
+  ItemStepInfo,
+  Profile,
+  Recipe,
+  RecipeStep,
+  StepInfo,
+} from '../../api/types'
 import { Button, Card, ErrorBox, Spinner } from '../../components/ui'
 import { formatNumber, TASK_LABELS } from '../../lib/format'
-import { autoRecipe, suggestSteps } from '../../lib/suggest'
+import { autoItemSteps, autoRecipe, suggestSteps } from '../../lib/suggest'
 
 /** 手順の引数の値を, 入力の文字にする */
 function toText(value: unknown): string {
@@ -242,13 +249,20 @@ export function RecipeTab({
   profile,
   target,
   steps,
+  kind,
+  itemSteps,
 }: {
   sourceId: string
   sourceName: string
   profile: Profile
   target: string | null
   steps: StepInfo[]
+  /** データの種類 (画像, 文, 点群は中身の手順も組み立てる) */
+  kind: string
+  itemSteps: ItemStepInfo[]
 }) {
+  const media = ['image', 'text', 'pointcloud'].includes(kind)
+  const [addingItem, setAddingItem] = useState('')
   const queryClient = useQueryClient()
   const saved = useQuery({ queryKey: ['recipe', sourceId], queryFn: () => api.recipe(sourceId) })
   // 編集中のレシピ (編集するまでは保存したもの. タブを移っても残す).
@@ -316,6 +330,9 @@ export function RecipeTab({
     exporter.reset()
   }
   const setSteps = (next: RecipeStep[]) => update({ ...recipe, steps: next })
+  const items = recipe.item_steps ?? []
+  const setItems = (next: RecipeStep[]) => update({ ...recipe, item_steps: next })
+  const kindSteps = itemSteps.filter((item) => item.kind === kind)
   // 選んでいる手順は, 動かした先でも選んだままにする
   const move = (index: number, delta: number) => {
     const next = [...recipe.steps]
@@ -416,7 +433,7 @@ export function RecipeTab({
         <Card
           title={`手順 (${recipe.steps.length})`}
           actions={
-            <div className="flex flex-wrap gap-2">
+            <div className={clsx('flex flex-wrap gap-2', media && 'hidden')}>
               <Button
                 icon={Wand2}
                 onClick={() => {
@@ -485,7 +502,7 @@ export function RecipeTab({
               id="add-step"
               value={adding}
               onChange={(event) => setAdding(event.target.value)}
-              className="h-8 flex-1 rounded border border-line bg-surface px-2 text-sm"
+              className="h-8 w-0 min-w-0 flex-1 rounded border border-line bg-surface px-2 text-sm"
             >
               <option value="">足す手順を選ぶ…</option>
               {steps.map((item) => (
@@ -506,6 +523,85 @@ export function RecipeTab({
             </Button>
           </div>
         </Card>
+        {media && (
+          <Card
+            title={`中身の手順 (${items.length})`}
+            actions={
+              <Button
+                icon={Wand2}
+                onClick={() => {
+                  if (
+                    items.length === 0 ||
+                    window.confirm('今の中身の手順を, 分析から作った手順に置き換えますか?')
+                  ) {
+                    setItems(autoItemSteps(kind, profile))
+                  }
+                }}
+                title="分析 (最も多い大きさ, 語の数, 点の数) から, 学習用の配列にする手順を作る"
+              >
+                学習用の配列にする手順を作る
+              </Button>
+            }
+          >
+            <p className="mb-2 text-xs text-ink-3">
+              1 件ずつの中身 (画像, 文, 点群) を学習用の配列にする手順.
+              上の表の手順で件を絞った後に, 書き出すときにかける
+              (値を学ぶ手順は学習用の件で当てはめる).
+            </p>
+            <ol className="space-y-2">
+              {items.map((step, index) => (
+                <StepEditor
+                  key={`item-${index}-${step.op}`}
+                  step={step}
+                  index={index}
+                  count={items.length}
+                  info={kindSteps.find((item) => item.op === step.op)}
+                  columns={[]}
+                  active={false}
+                  onSelect={() => undefined}
+                  onChange={(next) =>
+                    setItems(items.map((item, at) => (at === index ? next : item)))
+                  }
+                  onMove={(delta) => {
+                    const next = [...items]
+                    const [moved] = next.splice(index, 1)
+                    next.splice(index + delta, 0, moved!)
+                    setItems(next)
+                  }}
+                  onRemove={() => setItems(items.filter((_, at) => at !== index))}
+                />
+              ))}
+            </ol>
+            <div className="mt-3 flex gap-2">
+              <label className="sr-only" htmlFor="add-item-step">
+                足す中身の手順
+              </label>
+              <select
+                id="add-item-step"
+                value={addingItem}
+                onChange={(event) => setAddingItem(event.target.value)}
+                className="h-8 w-0 min-w-0 flex-1 rounded border border-line bg-surface px-2 text-sm"
+              >
+                <option value="">足す中身の手順を選ぶ…</option>
+                {kindSteps.map((item) => (
+                  <option key={item.op} value={item.op}>
+                    {item.op} — {item.description}
+                  </option>
+                ))}
+              </select>
+              <Button
+                icon={Plus}
+                disabled={!addingItem}
+                onClick={() => {
+                  setItems([...items, { op: addingItem }])
+                  setAddingItem('')
+                }}
+              >
+                足す
+              </Button>
+            </div>
+          </Card>
+        )}
         <Card title="保存と書き出し">
           <div className="flex flex-wrap items-center gap-2">
             <Button icon={Save} disabled={save.isPending} onClick={() => save.mutate()}>
@@ -568,7 +664,11 @@ from torch.utils.data import DataLoader, TensorDataset
 dataset = load_dataset("${exporter.data.path}")
 train_loader = DataLoader(TensorDataset(*dataset.tensors("train")), batch_size=64, shuffle=True)
 valid_loader = DataLoader(TensorDataset(*dataset.tensors("valid")), batch_size=64)
-# 入力の次元: len(dataset.features), クラスの数: len(dataset.info["classes"])`}
+${
+  media
+    ? '# 入力の形: dataset.info["splits"]["train"]["shape"][1:], クラスの数: len(dataset.info["classes"])'
+    : '# 入力の次元: len(dataset.features), クラスの数: len(dataset.info["classes"])'
+}`}
               </pre>
             </div>
           )}
