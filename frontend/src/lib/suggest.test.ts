@@ -101,3 +101,10 @@ test('読めない件があれば, 画像は大きさ, 点群は error で除く
     unreadableFilter('image', { columns: {}, items: { kind: 'image', count: 3 } } as Profile),
   ).toBe(null)
 })
+
+test('時系列は過去の値と移動平均の列を足し, 始めの行を落としてから標準化する', () => {
+  const series = { time: column('datetime'), y: column('numeric') }
+  const steps = autoRecipe(series, 'y', [], { time: 'time' }, 24)
+  expect(steps.map((step) => step.op)).toEqual(['lag', 'drop_missing', 'standardize'])
+  expect(steps[0]).toEqual({ op: 'lag', columns: 'auto', lags: [1, 24], windows: [24] })
+})

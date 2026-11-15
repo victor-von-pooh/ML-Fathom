@@ -52,6 +52,7 @@ export function autoRecipe(
   target: string | null,
   findings: Finding[],
   roles: Record<string, string>,
+  period: number | null = null,
 ): RecipeStep[] {
   const drop: string[] = []
   const oneHot: string[] = []
@@ -101,6 +102,17 @@ export function autoRecipe(
   if (logs.length) steps.push({ op: 'log', columns: logs })
   if (encode.length) steps.push({ op: 'label_encode', columns: encode })
   if (oneHot.length) steps.push({ op: 'one_hot', columns: oneHot })
+  // 時系列は, 数値の列 (目的の列も) の 1 つ前と 1 周期前の値, 1 周期の移動平均を足し,
+  // 過去が足りない始めの行を落とす
+  if (roles.time) {
+    const lags = period && period > 1 ? [1, period] : [1]
+    steps.push(
+      period && period > 1
+        ? { op: 'lag', columns: 'auto', lags, windows: [period] }
+        : { op: 'lag', columns: 'auto', lags },
+    )
+    steps.push({ op: 'drop_missing' })
+  }
   steps.push({ op: 'standardize', columns: 'auto' })
   return steps
 }
