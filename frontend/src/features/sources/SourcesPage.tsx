@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, FolderSearch, Plus, Trash2 } from 'lucide-react'
+import { AlertTriangle, FolderSearch, Plus, Sparkles, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router'
 
@@ -18,22 +18,42 @@ export function SourcesPage() {
     mutationFn: api.deleteSource,
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['sources'] }),
   })
+  // 操作を試すための見本 (表, 時系列, 画像, 文, 点群) を置き場に作って登録
+  const samples = useMutation({
+    mutationFn: api.addSamples,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['sources'] }),
+  })
   return (
     <>
       <PageHeader
         title="データ"
         subtitle="分析して前処理するデータ. 元のファイルは変えません"
         actions={
-          <Button variant="primary" icon={Plus} onClick={() => setAdding(true)}>
-            データを追加
-          </Button>
+          <>
+            <Button icon={Sparkles} disabled={samples.isPending} onClick={() => samples.mutate()}>
+              {samples.isPending ? '見本を作っています…' : '見本のデータを入れる'}
+            </Button>
+            <Button variant="primary" icon={Plus} onClick={() => setAdding(true)}>
+              データを追加
+            </Button>
+          </>
         }
       />
       {sources.isPending && <Spinner />}
       {sources.error && <ErrorBox error={sources.error} />}
+      {samples.error && <ErrorBox error={samples.error} />}
+      {samples.data && (
+        <p role="status" className="mb-3 text-sm text-ink-2">
+          {samples.data.length === 0
+            ? '見本は登録済みです'
+            : `見本を ${samples.data.length} 件登録しました (置き場の samples に作りました)`}
+        </p>
+      )}
       {sources.data?.length === 0 && (
         <EmptyState icon={FolderSearch} title="まだデータがありません">
-          「データを追加」で, 分析したいファイルかディレクトリを選んでください
+          「データを追加」で, 分析したいファイルかディレクトリを選んでください.
+          まず操作を試すなら「見本のデータを入れる」で, 表, 時系列, 画像, 文,
+          点群の見本を登録できます
         </EmptyState>
       )}
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">

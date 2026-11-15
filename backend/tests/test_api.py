@@ -305,3 +305,38 @@ def test_points_response() -> None:
     )
     assert body["count"] == 4 and len(body["points"]) == 6
     assert body["colors"] == [255, 127, 0, 0, 255, 0]
+
+
+def test_samples(client: TestClient) -> None:
+    """
+    見本のデータを作って登録し, 2 回目は登録し直さないことを確かめる関数
+
+    Parameters
+    ----------
+    client: TestClient
+        クライアント
+
+    Returns
+    ----------
+    None
+    """
+    pytest.importorskip("PIL.Image")
+
+    # 5 種類が目的の列付きで登録される
+    sources = client.post("/api/samples").json()
+    kinds = {item["kind"]: item["target"] for item in sources}
+    assert kinds == {
+        "table": "churn", "timeseries": "usage_kwh", "image": "label",
+        "text": "label", "pointcloud": "label",
+    }
+    assert client.post("/api/samples").json() == []
+
+    # 見本は学習の前に直すことを含む
+    table = next(item for item in sources if item["kind"] == "table")
+    codes = {
+        item["code"]
+        for item in client.get(
+            f"/api/sources/{table['id']}/profile"
+        ).json()["findings"]
+    }
+    assert {"id_like", "target_leak"} <= codes

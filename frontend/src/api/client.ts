@@ -60,6 +60,7 @@ export const api = {
   browse: (path: string) => request<Listing>(`/api/browse?path=${encodeURIComponent(path)}`),
   detect: (path: string) => request<Candidate[]>('/api/detect', json('POST', { path })),
   listSources: () => request<Source[]>('/api/sources'),
+  addSamples: () => request<Source[]>('/api/samples', json('POST', {})),
   createSource: (body: { path: string; name?: string; loader?: string }) =>
     request<Source>('/api/sources', json('POST', body)),
   updateSource: (
