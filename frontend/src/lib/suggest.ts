@@ -88,8 +88,16 @@ export function autoRecipe(
   const leaks = new Set(
     findings.filter((item) => item.code === 'target_leak').flatMap((item) => item.columns),
   )
+  // ずらす数値の列 (目的の列も. 欠損の印や日時の部分の列は含めない)
+  const numeric: string[] = []
+  if (target && columns[target]?.type === 'numeric') numeric.push(target)
   for (const [name, info] of Object.entries(columns)) {
     if (name === target || name === roles.time) continue
+    // 系列を分ける列は, 落とさず埋めず, ずらした後に符号化する (文字の場合)
+    if (name === seriesBy) {
+      if (!/int|float|bool/.test(info.dtype)) oneHot.push(name)
+      continue
+    }
     if (['text', 'id', 'constant', 'empty', 'other'].includes(info.type) || leaks.has(name)) {
       drop.push(name)
       continue
@@ -106,10 +114,10 @@ export function autoRecipe(
       continue
     }
     if (info.missing) numericMissing.push(name)
+    if (info.type === 'numeric') numeric.push(name)
   }
   const steps: RecipeStep[] = []
-  // 重複した行と表記のゆれは, 系列や符号化の前にそろえる
-  if (findings.some((item) => item.code === 'duplicate_rows')) steps.push({ op: 'drop_duplicates' })
+  // 表記のゆれをそろえてから重複した行を落とす (系列や符号化の前に)
   for (const item of findings.filter((entry) => entry.code === 'mixed_forms')) {
     steps.push(
       item.message.includes('lowercase: true')
@@ -117,6 +125,7 @@ export function autoRecipe(
         : { op: 'normalize_text', columns: item.columns },
     )
   }
+  if (findings.some((item) => item.code === 'duplicate_rows')) steps.push({ op: 'drop_duplicates' })
   if (drop.length) steps.push({ op: 'drop_columns', columns: drop })
   if (target && columns[target]?.missing) steps.push({ op: 'drop_missing', columns: [target] })
   if (dates.length) steps.push({ op: 'datetime_parts', columns: dates })
@@ -137,7 +146,7 @@ export function autoRecipe(
   if (roles.time) {
     const lag: RecipeStep = {
       op: 'lag',
-      columns: 'auto',
+      columns: numeric.length ? numeric : 'auto',
       lags: period && period > 1 ? [1, period] : [1],
     }
     if (period && period > 1) lag.windows = [period]

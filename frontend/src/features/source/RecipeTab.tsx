@@ -315,9 +315,12 @@ export function RecipeTab({
   })
   // 既にある手順は候補から除く (押すたびに同じ手順が増えないように)
   const suggestions = useMemo(() => {
-    const present = new Set((recipe?.steps ?? []).map((step) => JSON.stringify(step)))
+    // 手順の名前と対象の列が同じものは, 引数が違っても既にあるとみなす
+    const keyOf = (step: RecipeStep) =>
+      JSON.stringify([step.op, step.columns ?? step.column ?? null])
+    const present = new Set((recipe?.steps ?? []).map(keyOf))
     return suggestSteps(profile.findings, target, profile.columns, profile.overview.roles).filter(
-      (step) => !present.has(JSON.stringify(step)),
+      (step) => !present.has(keyOf(step)),
     )
   }, [profile, target, recipe])
   const infoOf = (op: string) => steps.find((item) => item.op === op)

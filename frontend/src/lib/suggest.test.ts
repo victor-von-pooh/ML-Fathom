@@ -119,7 +119,7 @@ test('時系列は過去の値と移動平均の列を足し, 始めの行を落
     'datetime_parts',
     'standardize',
   ])
-  expect(steps[0]).toEqual({ op: 'lag', columns: 'auto', lags: [1, 24], windows: [24] })
+  expect(steps[0]).toEqual({ op: 'lag', columns: ['y'], lags: [1, 24], windows: [24] })
 })
 
 test('文の重複, 空の文, 目的の列の表記のゆれから手順を作る', () => {
@@ -152,8 +152,8 @@ test('店ごとの系列は, 重複と表記をそろえてから系列ごとに
   ]
   const steps = autoRecipe(panel, 'sales', found, { time: 'date' }, 7, 'store')
   expect(steps.map((step) => step.op)).toEqual([
-    'drop_duplicates',
     'normalize_text',
+    'drop_duplicates',
     'lag',
     'drop_missing',
     'datetime_parts',
@@ -162,9 +162,12 @@ test('店ごとの系列は, 重複と表記をそろえてから系列ごとに
   ])
   expect(steps[2]).toEqual({
     op: 'lag',
-    columns: 'auto',
+    columns: ['sales'],
     lags: [1, 7],
     windows: [7],
     by: ['store'],
   })
+  // 系列を分ける列は ID らしくても落とさない
+  const idLike = { ...panel, store: column('id') }
+  expect(autoRecipe(idLike, 'sales', [], { time: 'date' }, 7, 'store')[0]?.op).toBe('lag')
 })
