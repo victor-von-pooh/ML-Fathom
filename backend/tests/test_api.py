@@ -6,6 +6,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from ml_fathom.app import create_app
+from ml_fathom.items import item_view
 
 # テストで使うトークン
 TOKEN = "test-token"
@@ -275,6 +276,19 @@ def test_images(client: TestClient, tmp_path: Path) -> None:
     ).status_code == 422
 
     # 書き出すと (件数, 3, 8, 8) の配列
+    # 数件の前と後 (画像は PNG の data URL, 後の形は (3, 8, 8))
+    shown = client.post(
+        f"/api/sources/{sid}/item_preview",
+        json={"recipe": recipe, "count": 3},
+    ).json()
+    assert len(shown["items"]) == 3
+    assert shown["items"][0]["shape"] == [3, 8, 8]
+    assert shown["items"][0]["after"].startswith("data:image/png;base64,")
+
+    # 4 チャンネル (RGBA) の後も PNG にできる. 0 から 1 の値は伸ばさない
+    rgba = np.full((4, 5, 6), 0.2, dtype=np.float32)
+    assert item_view(rgba, "image", True).startswith("data:image/png")
+
     exported = client.post(
         f"/api/sources/{sid}/export", json={"recipe": recipe, "name": "pets"}
     ).json()
@@ -330,6 +344,18 @@ def test_samples(client: TestClient) -> None:
         "text": "label", "pointcloud": "label",
     }
     assert client.post("/api/samples").json() == []
+
+    # 文の中身の手順の後は [番号, 語] の並び
+    text = next(item for item in sources if item["kind"] == "text")
+    shown = client.post(
+        f"/api/sources/{text['id']}/item_preview",
+        json={"recipe": {
+            "target": "label", "task": "classification",
+            "item_steps": [{"op": "vocabulary", "length": 5}],
+        }, "count": 2},
+    ).json()
+    pair = shown["items"][0]["after"][0]
+    assert isinstance(pair[0], int) and isinstance(pair[1], str)
 
     # 見本は学習の前に直すことを含む
     table = next(item for item in sources if item["kind"] == "table")

@@ -6,13 +6,14 @@ from pathlib import Path
 from typing import Any, Optional
 
 import ml_eda
+import numpy as np
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import Response
 from ml_eda.pipeline import frame_view
 from ml_eda.profile import to_json
 from pydantic import BaseModel, Field
 
-from ml_fathom.items import item_response
+from ml_fathom.items import item_response, item_view
 from ml_fathom.samples import sample_target, write_samples
 from ml_fathom.store import SourceStore
 
@@ -114,6 +115,11 @@ class RecipeBody(BaseModel):
 class PreviewRequest(BaseModel):
     recipe: dict[str, Any]
     upto: int = Field(ge=0)
+
+
+class ItemPreviewRequest(BaseModel):
+    recipe: dict[str, Any]
+    count: int = Field(8, ge=1, le=24)
 
 
 class ExportRequest(BaseModel):
@@ -825,6 +831,63 @@ def preview(
         raise HTTPException(422, str(error)) from error
 
     converted: dict[str, Any] = to_json(result)
+
+    return converted
+
+
+@router.post("/sources/{source_id}/item_preview")
+def item_preview(
+    request: Request, source_id: str, body: ItemPreviewRequest
+) -> dict[str, Any]:
+    """
+    画像, 文, 点群の中身の手順を, 数件にかけた前と後を返す関数
+
+    Parameters
+    ----------
+    request: Request
+        リクエスト
+    source_id: str
+        データの ID
+    body: ItemPreviewRequest
+        レシピと件数
+
+    Returns
+    ----------
+    result: dict[str, Any]
+        items (index, label, before, after, shape) と, 当てはめに使った
+        件数
+
+    Raises
+    ----------
+    HTTPException
+        中身を持たない種類か, 手順が誤っている場合は 422
+    """
+    # 少ない見本で当てはめて, 画面で見せる形にする (画像の形の誤りも 422)
+    data = load_source(find_source(request, source_id))
+    try:
+        result = ml_eda.preview_items(data, body.recipe, body.count)
+        vocabulary = next(
+            (
+                spec.get("state") for spec in result["steps"]
+                if spec.get("op") == "vocabulary"
+            ),
+            None,
+        )
+        items = [
+            {
+                "index": item["index"],
+                "label": item["label"],
+                "shape": list(np.shape(item["after"])),
+                "before": item_view(item["before"], data.kind),
+                "after": item_view(
+                    item["after"], data.kind, True, vocabulary
+                ),
+            }
+            for item in result["items"]
+        ]
+    except (ValueError, KeyError, TypeError, AttributeError) as error:
+        raise HTTPException(422, str(error)) from error
+    converted = {"items": items, "fit_rows": result["fit_rows"]}
 
     return converted
 
