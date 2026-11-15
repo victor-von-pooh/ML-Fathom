@@ -193,6 +193,13 @@ def test_recipe_preview_and_export(
     exported = client.post(f"/api/sources/{sid}/export", json=body)
     assert exported.status_code == 200
     assert Path(exported.json()["path"], "dataset.yaml").is_file()
+    hints = exported.json()["hints"]
+    assert hints["input_dtype"] == "float32"
+    assert hints["outputs"] == (
+        len(exported.json()["info"]["classes"])
+        if body["recipe"]["task"] == "classification" else 1
+    )
+    assert hints["input_shape"] == [len(exported.json()["info"]["features"])]
     assert client.post(
         f"/api/sources/{sid}/export", json=body
     ).status_code == 409
@@ -356,6 +363,22 @@ def test_samples(client: TestClient) -> None:
     ).json()
     pair = shown["items"][0]["after"][0]
     assert isinstance(pair[0], int) and isinstance(pair[1], str)
+
+    # 書き出すと, モデルを組むときの数 (入力の形, 語彙の大きさ, クラス)
+    exported = client.post(f"/api/sources/{text['id']}/export", json={
+        "recipe": {
+            "target": "label", "task": "classification",
+            "item_steps": [{"op": "vocabulary", "unit": "char", "length": 8}],
+            "split": {"method": "none"},
+        },
+        "name": "reviews",
+    }).json()
+    assert exported["hints"]["input_shape"] == [8]
+    assert exported["hints"]["input_dtype"] == "int64"
+    assert exported["hints"]["vocabulary"] > 2
+    assert exported["hints"]["outputs"] == len(
+        exported["info"]["classes"]
+    )
 
     # 見本は学習の前に直すことを含む
     table = next(item for item in sources if item["kind"] == "table")

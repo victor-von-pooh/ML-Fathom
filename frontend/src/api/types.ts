@@ -225,9 +225,20 @@ export interface PreviewResult {
   classes?: string[]
 }
 
+/** 書き出したデータセットに合わせてモデルを組むときの数 */
+export interface ModelHints {
+  input_shape: number[]
+  input_dtype: string
+  /** 出力の幅 (目的の無いデータセットは null) */
+  outputs: number | null
+  /** 文の語彙の大きさ (埋め草と語彙に無い語を含む. 文だけ) */
+  vocabulary?: number
+}
+
 export interface ExportResult {
   path: string
   info: Record<string, unknown>
+  hints?: ModelHints
 }
 
 export interface DatasetSummary {

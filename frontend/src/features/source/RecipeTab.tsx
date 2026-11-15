@@ -23,6 +23,7 @@ import { autoRecipe, suggestSteps } from '../../lib/suggest'
 import { useDecided } from '../../lib/useDecided'
 import { DecisionsCard } from './DecisionsCard'
 import { ItemPreviewCard } from './ItemPreviewCard'
+import { ModelHintsView } from './ModelHintsView'
 import { TokenizerTable } from './TokenizerTable'
 
 /** 手順の引数の値を, 入力の文字にする */
@@ -716,6 +717,7 @@ export function RecipeTab({
           {exporter.data && (
             <div className="mt-3 space-y-2 text-sm">
               <p className="text-good-text">書き出しました: {exporter.data.path}</p>
+              {exporter.data.hints && <ModelHintsView hints={exporter.data.hints} />}
               <p className="text-xs text-ink-3">ML-Found の学習スクリプトでの使い方:</p>
               <pre className="overflow-auto rounded bg-surface-2 p-2 text-xs">
                 {`from ml_eda import load_dataset
