@@ -229,8 +229,9 @@ export interface PreviewResult {
 export interface ModelHints {
   input_shape: number[]
   input_dtype: string
-  outputs: number
-  /** 文の語彙の大きさ (詰め物と語彙に無い語を含む. 文だけ) */
+  /** 出力の幅 (目的の無いデータセットは null) */
+  outputs: number | null
+  /** 文の語彙の大きさ (埋め草と語彙に無い語を含む. 文だけ) */
   vocabulary?: number
 }
 

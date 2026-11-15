@@ -195,6 +195,10 @@ def test_recipe_preview_and_export(
     assert Path(exported.json()["path"], "dataset.yaml").is_file()
     hints = exported.json()["hints"]
     assert hints["input_dtype"] == "float32"
+    assert hints["outputs"] == (
+        len(exported.json()["info"]["classes"])
+        if body["recipe"]["task"] == "classification" else 1
+    )
     assert hints["input_shape"] == [len(exported.json()["info"]["features"])]
     assert client.post(
         f"/api/sources/{sid}/export", json=body

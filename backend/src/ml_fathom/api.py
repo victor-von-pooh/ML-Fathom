@@ -7,6 +7,7 @@ from typing import Any, Optional
 
 import ml_eda
 import numpy as np
+import yaml
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import Response
 from ml_eda.pipeline import frame_view
@@ -963,7 +964,8 @@ def model_hints(path: Path, info: dict[str, Any]) -> dict[str, Any]:
     ----------
     hints: dict[str, Any]
         input_shape (1 件の入力の形), input_dtype, vocabulary (文の語彙の
-        大きさ. 文だけ), outputs (出力の幅. 分類はクラスの数, それ以外は 1)
+        大きさ. 文だけ), outputs (出力の幅. 分類はクラスの数, 目的が無ければ
+        None, それ以外は 1)
     """
     # 画像などは中身の配列の形, 表は学習に使う列の数
     train = info["splits"]["train"]
@@ -971,20 +973,31 @@ def model_hints(path: Path, info: dict[str, Any]) -> dict[str, Any]:
         shape = [int(size) for size in train["shape"][1:]]
     else:
         shape = [len(info["features"])]
+    # 目的の無いデータセット (task: none) は出力の幅を決めない
+    task = info["task"]
     hints: dict[str, Any] = {
         "input_shape": shape,
         "input_dtype": "int64" if info["kind"] == "text" else "float32",
         "outputs": (
-            len(info["classes"]) if info["task"] == "classification" else 1
+            len(info["classes"]) if task == "classification"
+            else None if task == "none" else 1
         ),
     }
+    # 文の語彙の大きさは, 書き出したレシピの当てはめた語彙から (読めなけれ
+    # ば省く. 書き出しは済んでいるので誤りにしない)
     if info["kind"] == "text":
-        recipe = ml_eda.load_dataset(path).recipe
-        hints["vocabulary"] = next(
-            len(step["state"]["vocabulary"])
-            for step in recipe.get("item_steps") or []
-            if step["op"] == "vocabulary"
-        )
+        try:
+            recipe = yaml.safe_load(
+                (path / "recipe.yaml").read_text(encoding="utf-8")
+            )
+            hints["vocabulary"] = next(
+                len(step["state"]["vocabulary"])
+                for step in recipe.get("item_steps") or []
+                if step["op"] == "vocabulary"
+            )
+        except (OSError, yaml.YAMLError, KeyError, StopIteration,
+                AttributeError, TypeError):
+            pass
 
     return hints
 
