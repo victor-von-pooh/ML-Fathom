@@ -113,8 +113,13 @@ test('読めない件があれば, 画像は大きさ, 点群は error で除く
 test('時系列は過去の値と移動平均の列を足し, 始めの行を落としてから標準化する', () => {
   const series = { time: column('datetime'), y: column('numeric') }
   const steps = autoRecipe(series, 'y', [], { time: 'time' }, 24)
-  expect(steps.map((step) => step.op)).toEqual(['lag', 'drop_missing', 'standardize'])
-  expect(steps[0]).toEqual({ op: 'lag', columns: 'auto', lags: [1, 24], windows: [24] })
+  expect(steps.map((step) => step.op)).toEqual([
+    'lag',
+    'drop_missing',
+    'datetime_parts',
+    'standardize',
+  ])
+  expect(steps[0]).toEqual({ op: 'lag', columns: ['y'], lags: [1, 24], windows: [24] })
 })
 
 test('文の重複, 空の文, 目的の列の表記のゆれから手順を作る', () => {
@@ -133,4 +138,36 @@ test('文の重複, 空の文, 目的の列の表記のゆれから手順を作�
     { op: 'filter_rows', column: 'length.1', compare: '>', value: 0 },
     { op: 'normalize_text', columns: ['label'], lowercase: true },
   ])
+})
+
+test('店ごとの系列は, 重複と表記をそろえてから系列ごとにずらし, その後に符号化する', () => {
+  const panel = {
+    date: column('datetime'),
+    store: column('categorical'),
+    sales: column('numeric'),
+  }
+  const found: Finding[] = [
+    { severity: 'warning', code: 'duplicate_rows', message: '', columns: [] },
+    { severity: 'warning', code: 'mixed_forms', message: '', columns: ['store'] },
+  ]
+  const steps = autoRecipe(panel, 'sales', found, { time: 'date' }, 7, 'store')
+  expect(steps.map((step) => step.op)).toEqual([
+    'normalize_text',
+    'drop_duplicates',
+    'lag',
+    'drop_missing',
+    'datetime_parts',
+    'one_hot',
+    'standardize',
+  ])
+  expect(steps[2]).toEqual({
+    op: 'lag',
+    columns: ['sales'],
+    lags: [1, 7],
+    windows: [7],
+    by: ['store'],
+  })
+  // 系列を分ける列は ID らしくても落とさない
+  const idLike = { ...panel, store: column('id') }
+  expect(autoRecipe(idLike, 'sales', [], { time: 'date' }, 7, 'store')[0]?.op).toBe('lag')
 })

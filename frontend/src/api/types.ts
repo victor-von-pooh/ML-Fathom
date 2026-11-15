@@ -130,6 +130,8 @@ export interface TargetInfo {
 
 export interface TimeSeriesInfo {
   time_column: string
+  series_by?: string | null
+  series_count?: number
   interval_seconds: number | null
   gaps: number
   duplicates: number
