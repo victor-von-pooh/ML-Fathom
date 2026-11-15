@@ -24,3 +24,9 @@ export function useRecipeDraft(id: string): [Recipe | null, (recipe: Recipe | nu
   )
   return [draft, setDraft]
 }
+
+/** データの編集中のレシピを捨てる (読み方を変えて手順が合わなくなった場合) */
+export function clearDraft(id: string): void {
+  drafts.delete(id)
+  listeners.forEach((listener) => listener())
+}

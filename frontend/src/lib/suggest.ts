@@ -9,12 +9,20 @@ export function suggestSteps(
 ): RecipeStep[] {
   const drop = new Set<string>()
   const steps: RecipeStep[] = []
+  // 役割のある列 (文, 長さ, 時刻など) は落とさず符号化もしない
+  const reserved = new Set(Object.values(roles))
   for (const item of findings) {
     const [column] = item.columns
     // 目的の列には, 欠損の行を落とすことと表記をそろえること以外の手順を作らない
     if (column === target && !['target_missing', 'mixed_forms'].includes(item.code)) continue
     if (!column) {
       if (item.code === 'duplicate_rows') steps.push({ op: 'drop_duplicates' })
+      continue
+    }
+    if (
+      reserved.has(column) &&
+      ['id_like', 'constant', 'target_leak', 'high_cardinality'].includes(item.code)
+    ) {
       continue
     }
     if (['id_like', 'constant', 'target_leak'].includes(item.code) && column !== target) {

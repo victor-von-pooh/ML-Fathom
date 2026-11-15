@@ -35,7 +35,7 @@ export function SourcePage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['sources'] }),
   })
 
-  const tab = (search.get('tab') as TabId | null) ?? 'overview'
+  const requested = (search.get('tab') as TabId | null) ?? 'overview'
   const column = search.get('column')
   const go = (next: TabId, extra: Record<string, string> = {}) =>
     setSearch({ tab: next, ...extra }, { replace: true })
@@ -52,6 +52,8 @@ export function SourcePage() {
     { id: 'data', label: '表の中身' },
     { id: 'recipe', label: '前処理と書き出し' },
   ]
+  // 読み方を変えて無くなったタブは概要に戻す
+  const tab = data && !items.some((item) => item.id === requested) ? 'overview' : requested
   return (
     <>
       <PageHeader
@@ -112,7 +114,7 @@ export function SourcePage() {
         {tab === 'data' && <DataTab sourceId={id} />}
         {data && tab === 'recipe' && info.data && (
           <RecipeTab
-            key={source.id}
+            key={`${source.id}:${source.kind}:${JSON.stringify(source.options)}`}
             sourceId={id}
             sourceName={source.name}
             profile={data}
