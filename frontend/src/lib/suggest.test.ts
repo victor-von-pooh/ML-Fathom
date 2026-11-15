@@ -77,6 +77,14 @@ describe('autoItemSteps', () => {
       }),
     )
     expect(text[0]).toMatchObject({ unit: 'char', length: 60 })
+    // 英語 (1 語 5 文字ほど) は語ごと
+    const english = autoItemSteps(
+      'text',
+      profile({
+        columns: { words: column('numeric', { q3: 25 }), length: column('numeric', { q3: 140 }) },
+      }),
+    )
+    expect(english[0]).toEqual({ op: 'vocabulary', length: 38, max_tokens: 20000 })
     const cloud = autoItemSteps(
       'pointcloud',
       profile({

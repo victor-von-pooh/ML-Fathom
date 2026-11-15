@@ -1,4 +1,6 @@
+import base64
 import io
+import json
 import math
 from typing import Any, Optional
 
@@ -56,6 +58,44 @@ def item_response(
     return response
 
 
+def png_bytes(image: np.ndarray, size: Optional[int] = None) -> bytes:
+    """
+    画像の配列を PNG のバイト列にする関数 (8 ビットでなければ最小と
+    最大で 0 から 255 に)
+
+    Parameters
+    ----------
+    image: np.ndarray
+        (高さ, 幅) か (高さ, 幅, チャンネル) の配列
+    size: Optional[int] = None
+        長い辺がこれより大きければ縮める画素数
+
+    Returns
+    ----------
+    data: bytes
+        PNG
+    """
+    # Pillow で PNG にする (8 ビットにそろえる)
+    from PIL import Image
+
+    array = np.asarray(image)
+    if array.dtype != np.uint8:
+        array = np.nan_to_num(array.astype(np.float64))
+        low, high = float(array.min()), float(array.max())
+        scale = 255.0 / (high - low) if high > low else 1.0
+        array = ((array - low) * scale).clip(0, 255).astype(np.uint8)
+    if array.ndim == 3 and array.shape[2] == 1:
+        array = array[:, :, 0]
+    picture = Image.fromarray(array)
+    if size is not None:
+        picture.thumbnail((size, size))
+    buffer = io.BytesIO()
+    picture.save(buffer, format="PNG")
+    data = buffer.getvalue()
+
+    return data
+
+
 def png_response(image: np.ndarray, size: Optional[int] = None) -> Response:
     """
     画像の配列を PNG で返す関数
@@ -72,24 +112,35 @@ def png_response(image: np.ndarray, size: Optional[int] = None) -> Response:
     response: Response
         PNG の画像
     """
-    # Pillow で PNG にする (8 ビットにそろえる)
-    from PIL import Image
-
-    array = np.asarray(image)
-    if array.dtype != np.uint8:
-        low, high = float(array.min()), float(array.max())
-        scale = 255.0 / (high - low) if high > low else 1.0
-        array = ((array - low) * scale).clip(0, 255).astype(np.uint8)
-    if array.ndim == 3 and array.shape[2] == 1:
-        array = array[:, :, 0]
-    picture = Image.fromarray(array)
-    if size is not None:
-        picture.thumbnail((size, size))
-    buffer = io.BytesIO()
-    picture.save(buffer, format="PNG")
-    response = Response(buffer.getvalue(), media_type="image/png")
+    # 8 ビットの PNG
+    response = Response(png_bytes(image, size), media_type="image/png")
 
     return response
+
+
+def points_body(item: Any) -> dict[str, Any]:
+    """
+    点群を, 画面で描く点と色の辞書にする関数
+
+    Parameters
+    ----------
+    item: Any
+        points ((N, 3) の配列) と colors ((N, 3) の 0 から 255, 任意) の
+        辞書, または (N, 3) の配列
+
+    Returns
+    ----------
+    body: dict[str, Any]
+        points (平らな座標の並び), colors, 元の点の数 (有限でない点も
+        数える)
+    """
+    # 配列だけの場合は色なし
+    if not isinstance(item, dict):
+        item = {"points": item, "colors": None}
+    response = points_response(item)
+    body: dict[str, Any] = json.loads(bytes(response.body))
+
+    return body
 
 
 def points_response(item: Any) -> Response:
@@ -130,3 +181,48 @@ def points_response(item: Any) -> Response:
     response = JSONResponse(body)
 
     return response
+
+
+def item_view(
+    item: Any, kind: str, state: Optional[dict[str, Any]] = None
+) -> Any:
+    """
+    手順の前か後の 1 件を, 画面で見せる形にする関数
+
+    Parameters
+    ----------
+    item: Any
+        画像の配列 ((高さ, 幅, チャンネル) か, 手順の後の (チャンネル,
+        高さ, 幅)), 文, 番号の並び, 点群
+    kind: str
+        種類
+    state: Optional[dict[str, Any]] = None
+        語彙の手順の当てはめた値 (番号を語に戻す)
+
+    Returns
+    ----------
+    view: Any
+        画像は PNG の data URL, 文は文字, 番号の並びは [番号, 語] の並び,
+        点群は点と色の辞書
+    """
+    # 種類ごとに形を変える
+    if kind == "image":
+        array = np.asarray(item)
+        if array.ndim == 3 and array.shape[0] in (1, 3) and (
+            array.shape[2] not in (1, 3)
+            or array.dtype != np.uint8
+        ):
+            array = np.moveaxis(array, 0, -1)
+        encoded = base64.b64encode(png_bytes(array, 256)).decode("ascii")
+        return f"data:image/png;base64,{encoded}"
+    if kind == "pointcloud":
+        return points_body(item)
+    if isinstance(item, np.ndarray):
+        words = (state or {}).get("vocabulary", [])
+        return [
+            [int(k), words[int(k)] if 0 <= int(k) < len(words) else "?"]
+            for k in item.ravel().tolist()
+        ]
+    view = str(item)[:2000]
+
+    return view

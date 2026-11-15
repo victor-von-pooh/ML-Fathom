@@ -220,3 +220,17 @@ export interface PointsItem {
   points: number[]
   colors: number[] | null
 }
+
+/** 中身の手順の前と後の 1 件 (画像は PNG の data URL, 文は文字と [番号, 語], 点群は点) */
+export interface ItemPreviewItem {
+  index: number
+  label: string | null
+  shape: number[]
+  before: string | PointsItem
+  after: string | [number, string][] | PointsItem
+}
+
+export interface ItemPreview {
+  items: ItemPreviewItem[]
+  fit_rows: number
+}

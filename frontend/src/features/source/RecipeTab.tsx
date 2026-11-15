@@ -18,6 +18,7 @@ import type {
 } from '../../api/types'
 import { Button, Card, ErrorBox, Spinner } from '../../components/ui'
 import { formatNumber, TASK_LABELS } from '../../lib/format'
+import { ItemPreviewCard } from './ItemPreviewCard'
 import { autoItemSteps, autoRecipe, suggestSteps, unreadableFilter } from '../../lib/suggest'
 
 /** 手順の引数の値を, 入力の文字にする */
@@ -758,6 +759,7 @@ ${
             値を学ぶ手順 (標準化, 補完など) は, 学習用のデータだけで当てはめます.
           </p>
         </Card>
+        {media && <ItemPreviewCard sourceId={sourceId} kind={kind} recipe={recipe} />}
       </div>
     </div>
   )

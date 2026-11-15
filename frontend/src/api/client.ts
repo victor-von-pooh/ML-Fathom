@@ -9,6 +9,7 @@ import type {
   Recipe,
   Rows,
   Source,
+  ItemPreview,
 } from './types'
 
 /** API がエラーを返したときの例外 */
@@ -86,6 +87,8 @@ export const api = {
     request<Recipe>(`/api/sources/${id}/recipe`, json('PUT', { recipe })),
   preview: (id: string, recipe: Recipe, upto: number) =>
     request<PreviewResult>(`/api/sources/${id}/preview`, json('POST', { recipe, upto })),
+  itemPreview: (id: string, recipe: Recipe, count = 8) =>
+    request<ItemPreview>(`/api/sources/${id}/item_preview`, json('POST', { recipe, count })),
   exportDataset: (id: string, recipe: Recipe, name: string, overwrite: boolean) =>
     request<ExportResult>(`/api/sources/${id}/export`, json('POST', { recipe, name, overwrite })),
   datasets: () => request<DatasetSummary[]>('/api/datasets'),
