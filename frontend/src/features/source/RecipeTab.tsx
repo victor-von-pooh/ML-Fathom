@@ -17,7 +17,7 @@ import type {
   StepInfo,
 } from '../../api/types'
 import { Button, Card, ErrorBox, Spinner } from '../../components/ui'
-import { formatNumber, TASK_LABELS } from '../../lib/format'
+import { defaultDatasetName, formatNumber, TASK_LABELS } from '../../lib/format'
 import { findDecisions, withAutoItems } from '../../lib/decisions'
 import { autoRecipe, suggestSteps } from '../../lib/suggest'
 import { useDecided } from '../../lib/useDecided'
@@ -252,6 +252,7 @@ function FramePreview({ view, highlight }: { view: FrameView; highlight: string[
 export function RecipeTab({
   sourceId,
   sourceName,
+  sourcePath,
   profile,
   target,
   steps,
@@ -262,6 +263,8 @@ export function RecipeTab({
 }: {
   sourceId: string
   sourceName: string
+  /** 元のデータの場所 (名前が日本語ならファイルの名前を書き出しの名前に) */
+  sourcePath: string
   profile: Profile
   target: string | null
   steps: StepInfo[]
@@ -291,9 +294,7 @@ export function RecipeTab({
   )
   const [selected, setSelected] = useState<number | null>(null)
   const [adding, setAdding] = useState('')
-  const [name, setName] = useState(
-    sourceName.replace(/\.[A-Za-z0-9]+$/, '').replace(/[^A-Za-z0-9_.-]/g, '_') || 'dataset',
-  )
+  const [name, setName] = useState(defaultDatasetName(sourceName, sourcePath))
   const [overwrite, setOverwrite] = useState(false)
 
   const columns = Object.keys(profile.columns)

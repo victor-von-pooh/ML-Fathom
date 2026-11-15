@@ -49,10 +49,13 @@ export function ModelHintsView({ hints }: { hints: ModelHints }) {
         <tbody>
           {rows.map(([name, value, note]) => (
             <tr key={name} className="border-t border-line first:border-t-0">
-              <th scope="row" className="py-1 pr-2 text-left font-normal text-ink-3">
+              <th
+                scope="row"
+                className="py-1 pr-2 text-left font-normal whitespace-nowrap text-ink-3"
+              >
                 {name}
               </th>
-              <td className="pr-2 font-mono">{value}</td>
+              <td className="pr-2 font-mono whitespace-nowrap">{value}</td>
               <td className="text-ink-3">{note}</td>
             </tr>
           ))}

@@ -82,3 +82,20 @@ export const TASK_LABELS: Record<string, string> = {
   forecasting: '予測 (時系列)',
   none: '決めない',
 }
+
+/**
+ * 書き出すデータセットの名前の既定 (英数字, _, -, . の 64 文字まで)
+ *
+ * 名前に英数字以外 (日本語など) が入っていれば, ファイルの名前から作る
+ */
+export function defaultDatasetName(name: string, path: string): string {
+  const stem = (value: string) => value.replace(/\.[A-Za-z0-9]+$/, '')
+  const file = path.split(/[\\/]/).filter(Boolean).pop() ?? ''
+  const base = /^[A-Za-z0-9_.\- ]+$/.test(name) ? stem(name) : stem(file)
+  const cleaned = base
+    .replace(/[^A-Za-z0-9_.-]/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^[_.]+|_+$/g, '')
+    .slice(0, 64)
+  return cleaned || 'dataset'
+}
