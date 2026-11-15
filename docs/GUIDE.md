@@ -275,6 +275,8 @@ valid_loader = DataLoader(TensorDataset(*dataset.tensors("valid")), batch_size=6
 
 文字コード (UTF-8, Shift_JIS, EUC-JP) と, カンマ付きの数 (`1,210`) は読み込みで判定する.
 
+Excel の 2 枚目以降のシート, 区切り文字, 文字コード, ヘッダーの無い表は, データの画面の右上の「読み込みの設定」で指定して「読み直す」を押す (例: `sheet` に `s2`). 空の欄は読み込みが推定する.
+
 表 (csv など) は, データの画面の右上の「読み方」で読み方を変えられる.
 
 | 読み方 | 使う場面 |
