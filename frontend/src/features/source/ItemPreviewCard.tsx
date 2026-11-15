@@ -26,7 +26,7 @@ function ImagePair({ item }: { item: ItemPreviewItem }) {
           <div key={side}>
             <img
               src={item[side] as string}
-              alt={`${item.index} 番目の${side === 'before' ? '手順の前' : '手順の後'}`}
+              alt={`#${item.index} の${side === 'before' ? '手順の前' : '手順の後'}`}
               className="aspect-square w-full rounded bg-surface-2 object-contain [image-rendering:pixelated]"
             />
             <div className="mt-0.5 text-center text-[10px] text-ink-3">
@@ -116,13 +116,13 @@ function CloudPair({ items }: { items: ItemPreviewItem[] }) {
       <div className="grid gap-3 md:grid-cols-2">
         <div>
           <p className="mb-1 text-xs text-ink-3">前 (点 {formatCount(before.count)})</p>
-          <PointCloudView item={before} label={`${item.index} 番目の手順の前`} />
+          <PointCloudView item={before} label={`#${item.index} の手順の前`} />
         </div>
         <div>
           <p className="mb-1 text-xs text-ink-3">
             後 (点 {formatCount(after.count)}, 形 {shapeText(item.shape)})
           </p>
-          <PointCloudView item={after} label={`${item.index} 番目の手順の後`} />
+          <PointCloudView item={after} label={`#${item.index} の手順の後`} />
         </div>
       </div>
     </div>
@@ -139,13 +139,18 @@ export function ItemPreviewCard({
   kind: string
   recipe: Recipe
 }) {
-  const run = useMutation({ mutationFn: () => api.itemPreview(sourceId, recipe) })
+  const run = useMutation({
+    mutationFn: (current: Recipe) => api.itemPreview(sourceId, current),
+  })
   const data = run.data
+  // 試した後に手順を変えた場合は, 古い結果だと分かるようにする
+  const stale =
+    run.variables !== undefined && JSON.stringify(run.variables) !== JSON.stringify(recipe)
   return (
     <Card
       title="中身の手順の前と後"
       actions={
-        <Button icon={Eye} disabled={run.isPending} onClick={() => run.mutate()}>
+        <Button icon={Eye} disabled={run.isPending} onClick={() => run.mutate(recipe)}>
           {data ? 'もう一度試す' : '数件で試す'}
         </Button>
       }
@@ -159,12 +164,18 @@ export function ItemPreviewCard({
       {run.isPending && <Spinner label="中身を読んで試しています" />}
       {run.error && <ErrorBox error={run.error} />}
       {data && (
-        <div className="space-y-2">
-          <p className="text-xs text-ink-3">
-            学習用の {formatCount(data.fit_rows)} 件で当てはめた
-            (書き出しではもっと多くの件で当てはめます).
-            手順を変えたら「もう一度試す」を押してください.
-          </p>
+        <div className={clsx('space-y-2', stale && '[&>:not(:first-child)]:opacity-50')}>
+          {stale ? (
+            <p role="status" className="text-sm font-semibold text-warning-text">
+              手順が変わりました. 「もう一度試す」で今の手順の前と後を見られます
+              (下は前の手順の結果).
+            </p>
+          ) : (
+            <p className="text-xs text-ink-3">
+              学習用の {formatCount(data.fit_rows)} 件で当てはめた
+              (書き出しではもっと多くの件で当てはめます).
+            </p>
+          )}
           {kind === 'image' && (
             <ul className="grid grid-cols-2 gap-3 md:grid-cols-4">
               {data.items.map((item) => (

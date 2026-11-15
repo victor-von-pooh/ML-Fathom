@@ -108,6 +108,7 @@ export function SourcePage() {
         {tab === 'data' && <DataTab sourceId={id} />}
         {data && tab === 'recipe' && info.data && (
           <RecipeTab
+            key={source.id}
             sourceId={id}
             sourceName={source.name}
             profile={data}

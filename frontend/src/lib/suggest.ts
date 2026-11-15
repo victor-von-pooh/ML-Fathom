@@ -142,10 +142,10 @@ export function autoItemSteps(kind: string, profile: Profile): RecipeStep[] {
     return steps
   }
   if (kind === 'text') {
-    // 空白で区切らない文 (日本語など) は, 1 語あたりの文字が多い (英語は 5 文字ほど) ので文字ごとに
+    // 空白で区切らない文 (日本語など) は, 1 語あたりの文字が多い (英語は 5 から 6 文字) ので文字ごとに
     const words = typical(profile.columns.words, 32)
     const letters = typical(profile.columns.length, 128)
-    const byChar = letters > words * 12
+    const byChar = letters > words * 8
     const length = Math.min(512, Math.max(8, Math.ceil((byChar ? letters : words) * 1.5)))
     return [
       byChar

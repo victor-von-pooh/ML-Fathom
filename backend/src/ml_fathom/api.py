@@ -862,29 +862,31 @@ def item_preview(
     HTTPException
         中身を持たない種類か, 手順が誤っている場合は 422
     """
-    # 少ない見本で当てはめて, 画面で見せる形にする
+    # 少ない見本で当てはめて, 画面で見せる形にする (画像の形の誤りも 422)
     data = load_source(find_source(request, source_id))
     try:
         result = ml_eda.preview_items(data, body.recipe, body.count)
-    except (ValueError, KeyError, TypeError) as error:
+        vocabulary = next(
+            (
+                spec.get("state") for spec in result["steps"]
+                if spec.get("op") == "vocabulary"
+            ),
+            None,
+        )
+        items = [
+            {
+                "index": item["index"],
+                "label": item["label"],
+                "shape": list(np.shape(item["after"])),
+                "before": item_view(item["before"], data.kind),
+                "after": item_view(
+                    item["after"], data.kind, True, vocabulary
+                ),
+            }
+            for item in result["items"]
+        ]
+    except (ValueError, KeyError, TypeError, AttributeError) as error:
         raise HTTPException(422, str(error)) from error
-    vocabulary = next(
-        (
-            spec.get("state") for spec in result["steps"]
-            if spec.get("op") == "vocabulary"
-        ),
-        None,
-    )
-    items = [
-        {
-            "index": item["index"],
-            "label": item["label"],
-            "shape": list(np.shape(item["after"])),
-            "before": item_view(item["before"], data.kind),
-            "after": item_view(item["after"], data.kind, vocabulary),
-        }
-        for item in result["items"]
-    ]
     converted = {"items": items, "fit_rows": result["fit_rows"]}
 
     return converted

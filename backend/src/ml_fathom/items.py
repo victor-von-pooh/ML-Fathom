@@ -1,6 +1,5 @@
 import base64
 import io
-import json
 import math
 from typing import Any, Optional
 
@@ -11,6 +10,9 @@ from fastapi.responses import JSONResponse, Response
 
 # 点群として返す点の数の上限 (多い場合は間引く)
 MAX_POINTS = 50_000
+
+# 前と後を見比べる点群の点の数の上限 (何件も返すので少なく)
+PREVIEW_POINTS = 5_000
 
 
 def item_response(
@@ -118,7 +120,7 @@ def png_response(image: np.ndarray, size: Optional[int] = None) -> Response:
     return response
 
 
-def points_body(item: Any) -> dict[str, Any]:
+def points_body(item: Any, limit: int = MAX_POINTS) -> dict[str, Any]:
     """
     点群を, 画面で描く点と色の辞書にする関数
 
@@ -127,6 +129,8 @@ def points_body(item: Any) -> dict[str, Any]:
     item: Any
         points ((N, 3) の配列) と colors ((N, 3) の 0 から 255, 任意) の
         辞書, または (N, 3) の配列
+    limit: int = MAX_POINTS
+        返す点の数の上限 (多い場合は等間隔に間引く)
 
     Returns
     ----------
@@ -134,11 +138,28 @@ def points_body(item: Any) -> dict[str, Any]:
         points (平らな座標の並び), colors, 元の点の数 (有限でない点も
         数える)
     """
-    # 配列だけの場合は色なし
+    # 有限でない点 (距離のセンサーの欠け) は JSON にできないので除き,
+    # 多い場合は等間隔に間引く
     if not isinstance(item, dict):
         item = {"points": item, "colors": None}
-    response = points_response(item)
-    body: dict[str, Any] = json.loads(bytes(response.body))
+    points = np.asarray(item["points"], dtype=np.float32)[:, :3]
+    finite = np.isfinite(points).all(axis=1)
+    count = int(len(points))
+    points = points[finite]
+    step = max(1, math.ceil(len(points) / limit))
+    colors = item.get("colors")
+    shown = None
+    if colors is not None:
+        values = np.nan_to_num(np.asarray(colors, dtype=np.float64)[finite])
+        # 0 から 1 の色は 0 から 255 に
+        if len(values) and values.max() <= 1.0:
+            values = values * 255
+        shown = values[::step].clip(0, 255).astype(int).ravel().tolist()
+    body: dict[str, Any] = {
+        "count": count,
+        "points": points[::step].round(5).ravel().tolist(),
+        "colors": shown,
+    }
 
     return body
 
@@ -155,36 +176,17 @@ def points_response(item: Any) -> Response:
     Returns
     ----------
     response: Response
-        points (平らな座標の並び), colors, 元の点の数 (有限でない点も
-        数える)
+        points_body の JSON
     """
-    # 有限でない点 (距離のセンサーの欠け) は JSON にできないので除き,
-    # 多い場合は等間隔に間引く
-    points = np.asarray(item["points"], dtype=np.float32)[:, :3]
-    finite = np.isfinite(points).all(axis=1)
-    count = int(len(points))
-    points = points[finite]
-    step = max(1, math.ceil(len(points) / MAX_POINTS))
-    colors = item.get("colors")
-    shown = None
-    if colors is not None:
-        values = np.nan_to_num(np.asarray(colors, dtype=np.float64)[finite])
-        # 0 から 1 の色は 0 から 255 に
-        if len(values) and values.max() <= 1.0:
-            values = values * 255
-        shown = values[::step].clip(0, 255).astype(int).ravel().tolist()
-    body: dict[str, Any] = {
-        "count": count,
-        "points": points[::step].round(5).ravel().tolist(),
-        "colors": shown,
-    }
-    response = JSONResponse(body)
+    # 上限まで間引いた点
+    response = JSONResponse(points_body(item))
 
     return response
 
 
 def item_view(
-    item: Any, kind: str, state: Optional[dict[str, Any]] = None
+    item: Any, kind: str, after: bool = False,
+    state: Optional[dict[str, Any]] = None
 ) -> Any:
     """
     手順の前か後の 1 件を, 画面で見せる形にする関数
@@ -192,10 +194,12 @@ def item_view(
     Parameters
     ----------
     item: Any
-        画像の配列 ((高さ, 幅, チャンネル) か, 手順の後の (チャンネル,
-        高さ, 幅)), 文, 番号の並び, 点群
+        画像 (前は (高さ, 幅) か (高さ, 幅, チャンネル) の uint8, 後は
+        (チャンネル, 高さ, 幅) の float), 文, 番号の並び, 点群
     kind: str
         種類
+    after: bool = False
+        手順の後か
     state: Optional[dict[str, Any]] = None
         語彙の手順の当てはめた値 (番号を語に戻す)
 
@@ -203,25 +207,25 @@ def item_view(
     ----------
     view: Any
         画像は PNG の data URL, 文は文字, 番号の並びは [番号, 語] の並び,
-        点群は点と色の辞書
+        点群は点と色の辞書 (見比べ用に 5000 点まで)
     """
-    # 種類ごとに形を変える
+    # 画像の後は (チャンネル, 高さ, 幅) なので並びを戻す. 0 から 1 の値は
+    # そのまま 255 倍にし (明るさを変えない), 正規化した値だけ伸ばす
     if kind == "image":
         array = np.asarray(item)
-        if array.ndim == 3 and array.shape[0] in (1, 3) and (
-            array.shape[2] not in (1, 3)
-            or array.dtype != np.uint8
-        ):
-            array = np.moveaxis(array, 0, -1)
+        if after:
+            array = np.moveaxis(array, 0, -1).astype(np.float64)
+            if array.size and 0.0 <= array.min() and array.max() <= 1.0:
+                array = (array * 255).round().astype(np.uint8)
         encoded = base64.b64encode(png_bytes(array, 256)).decode("ascii")
         return f"data:image/png;base64,{encoded}"
     if kind == "pointcloud":
-        return points_body(item)
-    if isinstance(item, np.ndarray):
+        return points_body(item, PREVIEW_POINTS)
+    if after:
         words = (state or {}).get("vocabulary", [])
         return [
             [int(k), words[int(k)] if 0 <= int(k) < len(words) else "?"]
-            for k in item.ravel().tolist()
+            for k in np.asarray(item).ravel().tolist()
         ]
     view = str(item)[:2000]
 

@@ -6,6 +6,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from ml_fathom.app import create_app
+from ml_fathom.items import item_view
 
 # テストで使うトークン
 TOKEN = "test-token"
@@ -283,6 +284,10 @@ def test_images(client: TestClient, tmp_path: Path) -> None:
     assert len(shown["items"]) == 3
     assert shown["items"][0]["shape"] == [3, 8, 8]
     assert shown["items"][0]["after"].startswith("data:image/png;base64,")
+
+    # 4 チャンネル (RGBA) の後も PNG にできる. 0 から 1 の値は伸ばさない
+    rgba = np.full((4, 5, 6), 0.2, dtype=np.float32)
+    assert item_view(rgba, "image", True).startswith("data:image/png")
 
     exported = client.post(
         f"/api/sources/{sid}/export", json={"recipe": recipe, "name": "pets"}
