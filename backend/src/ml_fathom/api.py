@@ -919,7 +919,7 @@ def export(
     Returns
     ----------
     result: dict[str, Any]
-        書き出した場所と dataset.yaml の中身
+        書き出した場所と dataset.yaml の中身と, モデルを組むときの数
 
     Raises
     ----------
@@ -940,9 +940,53 @@ def export(
     except (ValueError, KeyError, TypeError, AttributeError) as error:
         raise HTTPException(422, str(error)) from error
     store.write_recipe(source_id, ml_eda.load_recipe(body.recipe))
-    result = {"path": str(target), "info": to_json(info)}
+    result = {
+        "path": str(target), "info": to_json(info),
+        "hints": model_hints(target, info),
+    }
 
     return result
+
+
+def model_hints(path: Path, info: dict[str, Any]) -> dict[str, Any]:
+    """
+    書き出したデータセットに合わせてモデルを組むときの数を求める関数
+
+    Parameters
+    ----------
+    path: Path
+        書き出したデータセットの場所
+    info: dict[str, Any]
+        dataset.yaml の中身
+
+    Returns
+    ----------
+    hints: dict[str, Any]
+        input_shape (1 件の入力の形), input_dtype, vocabulary (文の語彙の
+        大きさ. 文だけ), outputs (出力の幅. 分類はクラスの数, それ以外は 1)
+    """
+    # 画像などは中身の配列の形, 表は学習に使う列の数
+    train = info["splits"]["train"]
+    if "shape" in train:
+        shape = [int(size) for size in train["shape"][1:]]
+    else:
+        shape = [len(info["features"])]
+    hints: dict[str, Any] = {
+        "input_shape": shape,
+        "input_dtype": "int64" if info["kind"] == "text" else "float32",
+        "outputs": (
+            len(info["classes"]) if info["task"] == "classification" else 1
+        ),
+    }
+    if info["kind"] == "text":
+        recipe = ml_eda.load_dataset(path).recipe
+        hints["vocabulary"] = next(
+            len(step["state"]["vocabulary"])
+            for step in recipe.get("item_steps") or []
+            if step["op"] == "vocabulary"
+        )
+
+    return hints
 
 
 @router.get("/datasets")
