@@ -180,4 +180,6 @@ test('書き出しの名前の既定は, 日本語の名前ならファイルの
   expect(defaultDatasetName('my data v2', '/x/y.csv')).toBe('my_data_v2')
   expect(defaultDatasetName('名前', '/x/データ.csv')).toBe('dataset')
   expect(defaultDatasetName('images', '/x/images/')).toBe('images')
+  expect(defaultDatasetName('sales (2024)', '/x/q.csv')).toBe('sales_2024')
+  expect(defaultDatasetName('-foo.csv', '/x/-foo.csv')).toBe('foo')
 })

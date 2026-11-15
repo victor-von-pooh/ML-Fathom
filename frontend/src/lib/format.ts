@@ -86,16 +86,16 @@ export const TASK_LABELS: Record<string, string> = {
 /**
  * 書き出すデータセットの名前の既定 (英数字, _, -, . の 64 文字まで)
  *
- * 名前に英数字以外 (日本語など) が入っていれば, ファイルの名前から作る
+ * 名前に ASCII 以外の文字 (日本語など) が入っていれば, ファイルの名前から作る
  */
 export function defaultDatasetName(name: string, path: string): string {
   const stem = (value: string) => value.replace(/\.[A-Za-z0-9]+$/, '')
   const file = path.split(/[\\/]/).filter(Boolean).pop() ?? ''
-  const base = /^[A-Za-z0-9_.\- ]+$/.test(name) ? stem(name) : stem(file)
+  const base = /^[\x20-\x7e]+$/.test(name) ? stem(name) : stem(file)
   const cleaned = base
     .replace(/[^A-Za-z0-9_.-]/g, '_')
     .replace(/_+/g, '_')
-    .replace(/^[_.]+|_+$/g, '')
+    .replace(/^[_.-]+|_+$/g, '')
     .slice(0, 64)
   return cleaned || 'dataset'
 }
