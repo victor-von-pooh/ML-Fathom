@@ -13,9 +13,13 @@ from ml_eda.profile import to_json
 from pydantic import BaseModel, Field
 
 from ml_fathom.items import item_response
+from ml_fathom.samples import sample_target, write_samples
 from ml_fathom.store import SourceStore
 
 router = APIRouter(prefix="/api")
+
+# 見本を書いて登録する処理を 1 つずつにする鍵
+SAMPLES_LOCK = threading.Lock()
 
 # ファイルの変化を調べた結果を使い回す秒数と, 場所ごとの (時刻, 結果)
 STAMP_SECONDS = 3.0
@@ -453,6 +457,56 @@ def create_source(request: Request, body: SourceCreate) -> dict[str, Any]:
         ) or source
 
     return source_view(source)
+
+
+@router.post("/samples")
+def add_samples(request: Request) -> list[dict[str, Any]]:
+    """
+    操作を試すための見本のデータを置き場に書いて登録する関数
+
+    Parameters
+    ----------
+    request: Request
+        リクエスト
+
+    Returns
+    ----------
+    sources: list[dict[str, Any]]
+        登録した見本 (登録済みの場所は登録し直さない. 途中で失敗した
+        場合は, もう一度呼ぶと残りを登録する)
+
+    Raises
+    ----------
+    HTTPException
+        見本を書けない場合は 500
+    """
+    # 2 つの要求が同時に来ても 2 重に登録しないように, 全体を 1 つずつ
+    store = get_store(request)
+    with SAMPLES_LOCK:
+        try:
+            paths = write_samples(store.home / "samples")
+        except OSError as error:
+            raise HTTPException(
+                500, f"見本を書けませんでした: {error}"
+            ) from error
+        registered = {item.get("path") for item in store.read()}
+        sources = []
+        # 一覧は新しいものが先なので, 表が先頭に来るように後ろから登録
+        for name, path in reversed(paths.items()):
+            if str(path.resolve()) in registered:
+                continue
+            source = create_source(
+                request, SourceCreate(path=str(path), name=name, loader=None)
+            )
+            # 表と時系列は予測したい列を目的の列にする
+            target = sample_target(name)
+            if target:
+                source = source_view(
+                    store.update(source["id"], {"target": target}) or source
+                )
+            sources.append(source)
+
+    return sources
 
 
 @router.patch("/sources/{source_id}")
