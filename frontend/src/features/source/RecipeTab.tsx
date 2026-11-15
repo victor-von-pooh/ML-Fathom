@@ -445,6 +445,8 @@ export function RecipeTab({
                     profile.findings,
                     profile.overview.roles,
                     target ? (profile.timeseries?.columns[target]?.period ?? null) : null,
+                    profile.timeseries?.series_by ?? null,
+                    profile.timeseries?.interval_seconds ?? null,
                   )
                   if (
                     recipe.steps.length === 0 ||

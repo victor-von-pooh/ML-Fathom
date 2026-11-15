@@ -73,6 +73,8 @@ export function autoRecipe(
   findings: Finding[],
   roles: Record<string, string>,
   period: number | null = null,
+  seriesBy: string | null = null,
+  interval: number | null = null,
 ): RecipeStep[] {
   const drop: string[] = []
   const oneHot: string[] = []
@@ -106,6 +108,15 @@ export function autoRecipe(
     if (info.missing) numericMissing.push(name)
   }
   const steps: RecipeStep[] = []
+  // 重複した行と表記のゆれは, 系列や符号化の前にそろえる
+  if (findings.some((item) => item.code === 'duplicate_rows')) steps.push({ op: 'drop_duplicates' })
+  for (const item of findings.filter((entry) => entry.code === 'mixed_forms')) {
+    steps.push(
+      item.message.includes('lowercase: true')
+        ? { op: 'normalize_text', columns: item.columns, lowercase: true }
+        : { op: 'normalize_text', columns: item.columns },
+    )
+  }
   if (drop.length) steps.push({ op: 'drop_columns', columns: drop })
   if (target && columns[target]?.missing) steps.push({ op: 'drop_missing', columns: [target] })
   if (dates.length) steps.push({ op: 'datetime_parts', columns: dates })
@@ -120,19 +131,29 @@ export function autoRecipe(
       (columns[name]!.min as number) >= 0,
   )
   if (logs.length) steps.push({ op: 'log', columns: logs })
+  // 時系列は, 数値の列 (目的の列も) の 1 つ前と 1 周期前の値, 1 周期の移動平均を足し,
+  // 過去が足りない始めの行を落とす. 店ごとのような複数の系列は系列ごとにずらす
+  // (系列を分ける列を符号化する前に)
+  if (roles.time) {
+    const lag: RecipeStep = {
+      op: 'lag',
+      columns: 'auto',
+      lags: period && period > 1 ? [1, period] : [1],
+    }
+    if (period && period > 1) lag.windows = [period]
+    if (seriesBy) lag.by = [seriesBy]
+    steps.push(lag)
+    steps.push({ op: 'drop_missing' })
+    // 曜日と月 (1 日より細かい間隔なら時と曜日). 時刻の列は分割に使うので残す
+    steps.push({
+      op: 'datetime_parts',
+      columns: [roles.time],
+      parts: interval !== null && interval < 86400 ? ['hour', 'weekday'] : ['weekday', 'month'],
+      drop: false,
+    })
+  }
   if (encode.length) steps.push({ op: 'label_encode', columns: encode })
   if (oneHot.length) steps.push({ op: 'one_hot', columns: oneHot })
-  // 時系列は, 数値の列 (目的の列も) の 1 つ前と 1 周期前の値, 1 周期の移動平均を足し,
-  // 過去が足りない始めの行を落とす
-  if (roles.time) {
-    const lags = period && period > 1 ? [1, period] : [1]
-    steps.push(
-      period && period > 1
-        ? { op: 'lag', columns: 'auto', lags, windows: [period] }
-        : { op: 'lag', columns: 'auto', lags },
-    )
-    steps.push({ op: 'drop_missing' })
-  }
   steps.push({ op: 'standardize', columns: 'auto' })
   return steps
 }
