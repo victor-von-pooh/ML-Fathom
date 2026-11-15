@@ -18,7 +18,7 @@ import type {
 } from '../../api/types'
 import { Button, Card, ErrorBox, Spinner } from '../../components/ui'
 import { formatNumber, TASK_LABELS } from '../../lib/format'
-import { autoItemSteps, autoRecipe, suggestSteps } from '../../lib/suggest'
+import { autoItemSteps, autoRecipe, suggestSteps, unreadableFilter } from '../../lib/suggest'
 
 /** 手順の引数の値を, 入力の文字にする */
 function toText(value: unknown): string {
@@ -534,10 +534,19 @@ export function RecipeTab({
                     items.length === 0 ||
                     window.confirm('今の中身の手順を, 分析から作った手順に置き換えますか?')
                   ) {
-                    setItems(autoItemSteps(kind, profile))
+                    // 読めない件があれば, 書き出しで止まらないように表の手順で除く
+                    const filter = unreadableFilter(kind, profile)
+                    const has = recipe.steps.some(
+                      (step) => JSON.stringify(step) === JSON.stringify(filter),
+                    )
+                    update({
+                      ...recipe,
+                      steps: filter && !has ? [filter, ...recipe.steps] : recipe.steps,
+                      item_steps: autoItemSteps(kind, profile),
+                    })
                   }
                 }}
-                title="分析 (最も多い大きさ, 語の数, 点の数) から, 学習用の配列にする手順を作る"
+                title="分析 (最も多い大きさ, 語の数, 点の数, 読めない件) から, 学習用の配列にする手順を作る"
               >
                 学習用の配列にする手順を作る
               </Button>

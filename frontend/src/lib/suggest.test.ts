@@ -1,5 +1,5 @@
 import type { ColumnInfo, Finding, Profile } from '../api/types'
-import { autoItemSteps, autoRecipe, suggestSteps } from './suggest'
+import { autoItemSteps, autoRecipe, suggestSteps, unreadableFilter } from './suggest'
 
 /** 分析の結果の列の情報を作る */
 function column(type: string, extra: Partial<ColumnInfo> = {}): ColumnInfo {
@@ -85,4 +85,19 @@ describe('autoItemSteps', () => {
     )
     expect(cloud[0]).toEqual({ op: 'sample_points', points: 512 })
   })
+})
+
+test('読めない件があれば, 画像は大きさ, 点群は error で除く手順を作る', () => {
+  const items = { kind: 'image', count: 3, unreadable: 1 }
+  const image = { columns: { width: column('numeric') }, items } as unknown as Profile
+  expect(unreadableFilter('image', image)).toEqual({
+    op: 'filter_rows',
+    column: 'width',
+    compare: 'notna',
+  })
+  const cloud = { columns: { error: column('text') }, items } as unknown as Profile
+  expect(unreadableFilter('pointcloud', cloud)).toMatchObject({ column: 'error', compare: 'isna' })
+  expect(
+    unreadableFilter('image', { columns: {}, items: { kind: 'image', count: 3 } } as Profile),
+  ).toBe(null)
 })
