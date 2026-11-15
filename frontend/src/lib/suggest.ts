@@ -116,20 +116,53 @@ export function autoItemSteps(kind: string, profile: Profile): RecipeStep[] {
   if (kind === 'image') {
     const size = profile.items?.sizes?.[0]
     const steps: RecipeStep[] = []
-    if (size) steps.push({ op: 'resize', width: size.width, height: size.height })
+    if (size) {
+      // 写真のような大きな画像は, 長い辺を 224 までに縮める (配列が大きくなりすぎない)
+      const scale = Math.min(1, MAX_IMAGE_SIDE / Math.max(size.width, size.height))
+      steps.push({
+        op: 'resize',
+        width: Math.max(1, Math.round(size.width * scale)),
+        height: Math.max(1, Math.round(size.height * scale)),
+      })
+    }
     if (Object.keys(profile.items?.modes ?? {}).length > 1) steps.push({ op: 'rgb' })
     steps.push({ op: 'normalize' })
     return steps
   }
   if (kind === 'text') {
-    const words = profile.columns.words
-    const length = Math.min(512, Math.max(8, Math.ceil(((words?.q3 ?? 32) as number) * 1.5)))
-    return [{ op: 'vocabulary', length, max_tokens: 20000 }]
+    // 空白で区切らない文 (日本語など) は, 語の数が文字の数よりずっと少ないので文字ごとに
+    const words = typical(profile.columns.words, 32)
+    const letters = typical(profile.columns.length, 128)
+    const byChar = words * 4 < letters
+    const length = Math.min(512, Math.max(8, Math.ceil((byChar ? letters : words) * 1.5)))
+    return [
+      byChar
+        ? { op: 'vocabulary', length, max_tokens: 20000, unit: 'char' }
+        : { op: 'vocabulary', length, max_tokens: 20000 },
+    ]
   }
   if (kind === 'pointcloud') {
-    const median = (profile.columns.points?.median ?? 1024) as number
-    const points = Math.min(1024, Math.max(64, Math.round(median)))
+    const points = Math.min(
+      1024,
+      Math.max(64, Math.round(typical(profile.columns.points, 1024, 'median'))),
+    )
     return [{ op: 'sample_points', points }, { op: 'normalize_cloud' }]
   }
   return []
+}
+
+// 画像を縮める長い辺の上限
+const MAX_IMAGE_SIDE = 224
+
+/** 列のよくある大きさ (数値なら第 3 四分位か中央値, 種類が少なければ最も多い値) */
+function typical(
+  column: ColumnInfo | undefined,
+  fallback: number,
+  key: 'q3' | 'median' = 'q3',
+): number {
+  if (!column) return fallback
+  const stat = column[key]
+  if (typeof stat === 'number') return stat
+  const top = Number(column.top?.[0]?.value)
+  return Number.isFinite(top) ? top : fallback
 }

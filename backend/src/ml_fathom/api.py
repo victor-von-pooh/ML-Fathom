@@ -1,5 +1,6 @@
 import json
 import threading
+import time
 from collections import OrderedDict
 from pathlib import Path
 from typing import Any, Optional
@@ -7,12 +8,7 @@ from typing import Any, Optional
 import ml_eda
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import Response
-from ml_eda.pipeline import (
-    SPLIT_COLUMN,
-    apply_recipe,
-    frame_view,
-    sorted_classes,
-)
+from ml_eda.pipeline import frame_view
 from ml_eda.profile import to_json
 from pydantic import BaseModel, Field
 
@@ -20,6 +16,10 @@ from ml_fathom.items import item_response
 from ml_fathom.store import SourceStore
 
 router = APIRouter(prefix="/api")
+
+# ファイルの変化を調べた結果を使い回す秒数と, 場所ごとの (時刻, 結果)
+STAMP_SECONDS = 3.0
+STAMPS: dict[str, tuple[float, list[Any]]] = {}
 
 # 読み込んだデータと分析の結果を覚えておく数
 CACHE_SIZE = 8
@@ -180,8 +180,40 @@ def source_key(source: dict[str, Any]) -> str:
         場所, 更新時刻, 読み込み, 設定から作った鍵
     """
     # 更新時刻 (ナノ秒), 大きさ, inode が変われば読み直す. ディレクトリは
-    # 中のファイル (2 階層まで) の最新の更新時刻と数も見る
+    # 中のファイル (2 階層まで) の最新の更新時刻と数も見る. 中身を並べる
+    # 画面は 1 件ごとに呼ぶので, 数秒の間は前に調べた結果を使う
     path = Path(source["path"])
+    now = time.monotonic()
+    remembered = STAMPS.get(source["path"])
+    if remembered and now - remembered[0] < STAMP_SECONDS:
+        stamp = remembered[1]
+    else:
+        stamp = file_stamp(path)
+        STAMPS[source["path"]] = (now, stamp)
+    key = json.dumps(
+        [source["path"], stamp, source["loader"], source["options"]],
+        sort_keys=True, default=str
+    )
+
+    return key
+
+
+def file_stamp(path: Path) -> list[Any]:
+    """
+    ファイルかディレクトリが変わったかを見分ける値を返す関数
+
+    Parameters
+    ----------
+    path: Path
+        ファイルかディレクトリ
+
+    Returns
+    ----------
+    stamp: list[Any]
+        更新時刻, 大きさ, inode (ディレクトリは中のファイルの数と最新の
+        更新時刻も). 読めなければ [0]
+    """
+    # 中のファイルは 2 階層まで
     try:
         stat = path.stat()
         stamp: list[Any] = [stat.st_mtime_ns, stat.st_size, stat.st_ino]
@@ -193,12 +225,8 @@ def source_key(source: dict[str, Any]) -> str:
             ]
     except OSError:
         stamp = [0]
-    key = json.dumps(
-        [source["path"], stamp, source["loader"], source["options"]],
-        sort_keys=True, default=str
-    )
 
-    return key
+    return stamp
 
 
 def load_source(source: dict[str, Any]) -> ml_eda.Data:
@@ -609,7 +637,10 @@ def get_rows(
 
 
 @router.get("/sources/{source_id}/items/{index}")
-def get_item(request: Request, source_id: str, index: int) -> Response:
+def get_item(
+    request: Request, source_id: str, index: int,
+    size: Optional[int] = Query(None, ge=16, le=2048)
+) -> Response:
     """
     画像や点群など, 1 件の中身を返す関数
 
@@ -621,6 +652,8 @@ def get_item(request: Request, source_id: str, index: int) -> Response:
         データの ID
     index: int
         行の位置
+    size: Optional[int] = Query(None, ge=16, le=2048)
+        画像を縮める長い辺の画素数 (一覧の小さな表示用)
 
     Returns
     ----------
@@ -630,7 +663,7 @@ def get_item(request: Request, source_id: str, index: int) -> Response:
     data = load_source(find_source(request, source_id))
     if not 0 <= index < len(data.frame):
         raise HTTPException(404, f"{index} 番目はありません")
-    response = item_response(data, index)
+    response = item_response(data, index, size)
 
     return response
 
@@ -724,13 +757,9 @@ def preview(
     data = load_source(find_source(request, source_id))
     try:
         result = ml_eda.preview(data, body.recipe, body.upto)
-        if body.upto >= len(body.recipe.get("steps", [])) and (
-            data.item_loader is not None
-        ):
-            # 画像などは全ての中身を読まずに, 分割の件数とクラスだけを返す
-            result.update(item_summary(data, body.recipe))
-        elif body.upto >= len(body.recipe.get("steps", [])):
-            prepared = ml_eda.prepare(data, body.recipe)
+        if body.upto >= len(body.recipe.get("steps", [])):
+            # 画像などは中身を読まずに, 手順の確認と注意だけをする
+            prepared = ml_eda.prepare(data, body.recipe, read_items=False)
             result["features"] = prepared.features
             result["notes"] = prepared.notes
             result["splits"] = {
@@ -744,47 +773,6 @@ def preview(
     converted: dict[str, Any] = to_json(result)
 
     return converted
-
-
-def item_summary(data: ml_eda.Data, recipe: dict[str, Any]) -> dict[str, Any]:
-    """
-    画像, 文, 点群のレシピの分割の件数, クラス, 中身の手順の注意を返す関数
-
-    Parameters
-    ----------
-    data: ml_eda.Data
-        中身を持つデータ
-    recipe: dict[str, Any]
-        レシピ
-
-    Returns
-    ----------
-    summary: dict[str, Any]
-        splits, classes, features (空), notes
-    """
-    # 表の手順と分割だけをかける (中身は書き出しのときに読む)
-    loaded = ml_eda.load_recipe(recipe)
-    frame, roles = apply_recipe(data, loaded)
-    counts = frame[SPLIT_COLUMN].value_counts()
-    target = roles.get("target")
-    classes = (
-        sorted_classes(frame[target])
-        if target and loaded["task"] == "classification" else []
-    )
-    notes = []
-    if not loaded["item_steps"]:
-        notes.append(
-            "中身の手順 (item_steps) がありません. 画像は resize, 文は "
-            "vocabulary, 点群は sample_points で形をそろえてください"
-        )
-    summary = {
-        "splits": {k: int(v) for k, v in counts.items()},
-        "classes": classes,
-        "features": [],
-        "notes": notes,
-    }
-
-    return summary
 
 
 @router.post("/sources/{source_id}/export")

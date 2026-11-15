@@ -1,5 +1,5 @@
-import type { ColumnInfo, Finding } from '../api/types'
-import { autoRecipe, suggestSteps } from './suggest'
+import type { ColumnInfo, Finding, Profile } from '../api/types'
+import { autoItemSteps, autoRecipe, suggestSteps } from './suggest'
 
 /** 分析の結果の列の情報を作る */
 function column(type: string, extra: Partial<ColumnInfo> = {}): ColumnInfo {
@@ -50,4 +50,39 @@ test('列の型から, 全て数値で欠損の無い形にする手順を作る
   // 目的の列は手順に入れない
   const used = steps.flatMap((step) => (Array.isArray(step.columns) ? step.columns : []))
   expect(used).not.toContain('label')
+})
+
+describe('autoItemSteps', () => {
+  /** 中身の分析の結果だけを持つ分析の結果を作る */
+  const profile = (extra: Partial<Profile>) => ({ columns: {}, ...extra }) as Profile
+
+  it('大きな写真は長い辺を 224 までに縮める', () => {
+    const steps = autoItemSteps(
+      'image',
+      profile({
+        items: { kind: 'image', count: 3, sizes: [{ width: 4000, height: 3000, count: 3 }] },
+      }),
+    )
+    expect(steps[0]).toEqual({ op: 'resize', width: 224, height: 168 })
+  })
+
+  it('空白で区切らない文は文字ごと, 点の数が 1 種類の点群は最も多い値', () => {
+    const text = autoItemSteps(
+      'text',
+      profile({
+        columns: {
+          words: column('numeric', { q3: 1 }),
+          length: column('numeric', { q3: 40 }),
+        },
+      }),
+    )
+    expect(text[0]).toMatchObject({ unit: 'char', length: 60 })
+    const cloud = autoItemSteps(
+      'pointcloud',
+      profile({
+        columns: { points: column('constant', { top: [{ value: '512', count: 9 }] }) },
+      }),
+    )
+    expect(cloud[0]).toEqual({ op: 'sample_points', points: 512 })
+  })
 })

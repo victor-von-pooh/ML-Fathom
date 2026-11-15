@@ -248,6 +248,10 @@ def test_images(client: TestClient, tmp_path: Path) -> None:
     item = client.get(f"/api/sources/{sid}/items/0")
     assert item.headers["content-type"] == "image/png"
     assert client.get(f"/api/sources/{sid}/items/99").status_code == 404
+    import io
+
+    small = client.get(f"/api/sources/{sid}/items/0", params={"size": 16})
+    assert max(image.open(io.BytesIO(small.content)).size) <= 16
 
     # 中身の手順が無ければ注意, あれば分割の件数とクラス
     recipe = {
@@ -265,9 +269,39 @@ def test_images(client: TestClient, tmp_path: Path) -> None:
         f"/api/sources/{sid}/preview", json={"recipe": recipe, "upto": 0}
     ).json()
     assert view["notes"] == [] and sum(view["splits"].values()) == 12
+    wrong = {**recipe, "item_steps": [{"op": "sample_points", "points": 8}]}
+    assert client.post(
+        f"/api/sources/{sid}/preview", json={"recipe": wrong, "upto": 0}
+    ).status_code == 422
 
     # 書き出すと (件数, 3, 8, 8) の配列
     exported = client.post(
         f"/api/sources/{sid}/export", json={"recipe": recipe, "name": "pets"}
     ).json()
     assert exported["info"]["splits"]["train"]["shape"][1:] == [3, 8, 8]
+
+
+def test_points_response() -> None:
+    """
+    有限でない点を除き, 0 から 1 の色を 0 から 255 にすることを確かめる
+    関数
+
+    Parameters
+    ----------
+    None
+
+    Returns
+    ----------
+    None
+    """
+    import json
+
+    from ml_fathom.items import points_response
+
+    points = np.array([[0, 0, 0], [np.nan, 0, 0], [1, 1, np.inf], [1, 2, 3]])
+    colors = np.array([[1.0, 0.5, 0], [0, 0, 0], [0, 0, 0], [0, 1.0, 0]])
+    body = json.loads(
+        points_response({"points": points, "colors": colors}).body
+    )
+    assert body["count"] == 4 and len(body["points"]) == 6
+    assert body["colors"] == [255, 127, 0, 0, 255, 0]

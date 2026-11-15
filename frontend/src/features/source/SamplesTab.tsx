@@ -12,6 +12,9 @@ import { PointCloudView } from './PointCloudView'
 // 1 ページの件数
 const PAGE = { image: 48, text: 30, pointcloud: 20 } as Record<string, number>
 
+// 一覧の画像の長い辺 (画素)
+const THUMBNAIL = 256
+
 /** 1 つの点群を読んで 3D で描く */
 function PointCloudItem({ sourceId, index }: { sourceId: string; index: number }) {
   const item = useQuery({
@@ -22,14 +25,39 @@ function PointCloudItem({ sourceId, index }: { sourceId: string; index: number }
   if (item.error) return <ErrorBox error={item.error} />
   return (
     <div>
-      <PointCloudView item={item.data} label={`${index} 番目の点群`} />
-      <p className="mt-1 text-xs text-ink-3">
+      <p className="mb-2 text-xs text-ink-3">
         点 {formatCount(item.data.count)} 個
         {item.data.points.length / 3 < item.data.count &&
-          ` (表示は間引いた ${formatCount(item.data.points.length / 3)} 個)`}
-        . ドラッグか矢印キーで回し, ホイールで拡大. 色が無い点群は高さで色付け.
+          ` (表示は ${formatCount(item.data.points.length / 3)} 個. 間引きと, 座標が数でない点を除く)`}
       </p>
+      <PointCloudView item={item.data} label={`${index} 番目の点群`} />
     </div>
+  )
+}
+
+/** 一覧の 1 枚の画像 (読めなければ代わりの表示. 小さな画像は画素をぼかさない) */
+function Thumbnail({ src, alt }: { src: string; alt: string }) {
+  const [failed, setFailed] = useState(false)
+  const [small, setSmall] = useState(false)
+  if (failed) {
+    return (
+      <div className="flex aspect-square w-full items-center justify-center rounded bg-surface-2 text-xs text-ink-3">
+        読めません
+      </div>
+    )
+  }
+  return (
+    <img
+      src={src}
+      alt={alt}
+      loading="lazy"
+      onError={() => setFailed(true)}
+      onLoad={(event) => setSmall(event.currentTarget.naturalWidth < 128)}
+      className={clsx(
+        'aspect-square w-full rounded bg-surface-2 object-contain',
+        small && '[image-rendering:pixelated]',
+      )}
+    />
   )
 }
 
@@ -89,6 +117,7 @@ export function SamplesTab({ source, profile }: { source: Source; profile: Profi
           onChange={(event) => {
             setQuery(event.target.value)
             setOffset(0)
+            setSelected(null)
           }}
           placeholder="ラベルやファイルの名前で絞り込む"
           className="h-8 w-72 rounded-lg border border-line bg-surface px-2 text-sm"
@@ -97,7 +126,7 @@ export function SamplesTab({ source, profile }: { source: Source; profile: Profi
           <span className="text-sm text-ink-3">
             {data.total === 0
               ? '合う件がありません'
-              : `${formatNumber(data.total)} 件のうち ${offset + 1}–${Math.min(offset + page, data.total)}`}
+              : `${formatNumber(data.total)} 件のうち ${data.offset + 1}–${Math.min(data.offset + page, data.total)}`}
           </span>
         )}
         <div className="ml-auto flex gap-2">
@@ -126,11 +155,9 @@ export function SamplesTab({ source, profile }: { source: Source; profile: Profi
             return (
               <li key={index}>
                 <figure className="rounded-lg border border-line bg-surface p-1.5">
-                  <img
-                    src={api.itemUrl(source.id, index)}
+                  <Thumbnail
+                    src={`${api.itemUrl(source.id, index)}?size=${THUMBNAIL}`}
                     alt={`${path}${label ? ` (${label})` : ''}`}
-                    loading="lazy"
-                    className="aspect-square w-full rounded bg-surface-2 object-contain [image-rendering:pixelated]"
                   />
                   <figcaption className="mt-1 truncate text-xs" title={path}>
                     {label ? <span className="font-semibold">{String(label)} </span> : null}

@@ -104,7 +104,7 @@ export function SourcePage() {
         {data && tab === 'timeseries' && data.timeseries && (
           <TimeSeriesTab series={data.timeseries} />
         )}
-        {data && tab === 'samples' && <SamplesTab source={source} profile={data} />}
+        {data && tab === 'samples' && <SamplesTab key={source.id} source={source} profile={data} />}
         {tab === 'data' && <DataTab sourceId={id} />}
         {data && tab === 'recipe' && info.data && (
           <RecipeTab
