@@ -5,15 +5,24 @@ export function suggestSteps(
   findings: Finding[],
   target: string | null,
   columns: Record<string, ColumnInfo>,
+  roles: Record<string, string> = {},
 ): RecipeStep[] {
   const drop = new Set<string>()
   const steps: RecipeStep[] = []
+  // 役割のある列 (文, 長さ, 時刻など) は落とさず符号化もしない
+  const reserved = new Set(Object.values(roles))
   for (const item of findings) {
     const [column] = item.columns
-    // 目的の列には, 欠損の行を落とす以外の手順を作らない
-    if (column === target && item.code !== 'target_missing') continue
+    // 目的の列には, 欠損の行を落とすことと表記をそろえること以外の手順を作らない
+    if (column === target && !['target_missing', 'mixed_forms'].includes(item.code)) continue
     if (!column) {
       if (item.code === 'duplicate_rows') steps.push({ op: 'drop_duplicates' })
+      continue
+    }
+    if (
+      reserved.has(column) &&
+      ['id_like', 'constant', 'target_leak', 'high_cardinality'].includes(item.code)
+    ) {
       continue
     }
     if (['id_like', 'constant', 'target_leak'].includes(item.code) && column !== target) {
@@ -35,6 +44,17 @@ export function suggestSteps(
       steps.push({ op: 'label_encode', columns: [column] })
     } else if (item.code === 'target_missing') {
       steps.push({ op: 'drop_missing', columns: [column] })
+    } else if (item.code === 'mixed_forms') {
+      // 大文字と小文字だけが違う組があれば小文字にもそろえる
+      steps.push(
+        item.message.includes('lowercase: true')
+          ? { op: 'normalize_text', columns: [column], lowercase: true }
+          : { op: 'normalize_text', columns: [column] },
+      )
+    } else if (item.code === 'duplicate_items') {
+      steps.push({ op: 'drop_duplicates', columns: [column] })
+    } else if (item.code === 'empty_items') {
+      steps.push({ op: 'filter_rows', column: roles.length ?? 'length', compare: '>', value: 0 })
     }
   }
   if (drop.size > 0) steps.unshift({ op: 'drop_columns', columns: [...drop] })
@@ -143,8 +163,9 @@ export function autoItemSteps(kind: string, profile: Profile): RecipeStep[] {
   }
   if (kind === 'text') {
     // 空白で区切らない文 (日本語など) は, 1 語あたりの文字が多い (英語は 5 から 6 文字) ので文字ごとに
-    const words = typical(profile.columns.words, 32)
-    const letters = typical(profile.columns.length, 128)
+    const roles: Record<string, string> = profile.overview?.roles ?? {}
+    const words = typical(profile.columns[roles.words ?? 'words'], 32)
+    const letters = typical(profile.columns[roles.length ?? 'length'], 128)
     const byChar = letters > words * 8
     const length = Math.min(512, Math.max(8, Math.ceil((byChar ? letters : words) * 1.5)))
     return [

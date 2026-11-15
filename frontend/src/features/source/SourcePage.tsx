@@ -7,6 +7,7 @@ import { KIND_LABELS } from '../../lib/format'
 import { ColumnsTab } from './ColumnsTab'
 import { DataTab } from './DataTab'
 import { OverviewTab } from './OverviewTab'
+import { ReadAsControl } from './ReadAsControl'
 import { RecipeTab } from './RecipeTab'
 import { RelationsTab } from './RelationsTab'
 import { SamplesTab } from './SamplesTab'
@@ -34,7 +35,7 @@ export function SourcePage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['sources'] }),
   })
 
-  const tab = (search.get('tab') as TabId | null) ?? 'overview'
+  const requested = (search.get('tab') as TabId | null) ?? 'overview'
   const column = search.get('column')
   const go = (next: TabId, extra: Record<string, string> = {}) =>
     setSearch({ tab: next, ...extra }, { replace: true })
@@ -51,6 +52,8 @@ export function SourcePage() {
     { id: 'data', label: '表の中身' },
     { id: 'recipe', label: '前処理と書き出し' },
   ]
+  // 読み方を変えて無くなったタブは概要に戻す
+  const tab = data && !items.some((item) => item.id === requested) ? 'overview' : requested
   return (
     <>
       <PageHeader
@@ -63,19 +66,22 @@ export function SourcePage() {
         }
         actions={
           data && (
-            <label className="flex items-center gap-2 text-sm">
-              目的の列
-              <select
-                value={source.target ?? ''}
-                onChange={(event) => setTarget.mutate(event.target.value || null)}
-                className="h-8 rounded-lg border border-line bg-surface px-2 font-mono"
-              >
-                <option value="">なし</option>
-                {Object.keys(data.columns).map((name) => (
-                  <option key={name}>{name}</option>
-                ))}
-              </select>
-            </label>
+            <div className="flex flex-wrap items-start gap-3">
+              <ReadAsControl source={source} profile={data} />
+              <label className="flex items-center gap-2 text-sm">
+                目的の列
+                <select
+                  value={source.target ?? ''}
+                  onChange={(event) => setTarget.mutate(event.target.value || null)}
+                  className="h-8 rounded-lg border border-line bg-surface px-2 font-mono"
+                >
+                  <option value="">なし</option>
+                  {Object.keys(data.columns).map((name) => (
+                    <option key={name}>{name}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
           )
         }
       />
@@ -108,7 +114,7 @@ export function SourcePage() {
         {tab === 'data' && <DataTab sourceId={id} />}
         {data && tab === 'recipe' && info.data && (
           <RecipeTab
-            key={source.id}
+            key={`${source.id}:${source.kind}:${JSON.stringify(source.options)}`}
             sourceId={id}
             sourceName={source.name}
             profile={data}

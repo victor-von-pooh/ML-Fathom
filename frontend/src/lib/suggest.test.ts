@@ -116,3 +116,21 @@ test('時系列は過去の値と移動平均の列を足し, 始めの行を落
   expect(steps.map((step) => step.op)).toEqual(['lag', 'drop_missing', 'standardize'])
   expect(steps[0]).toEqual({ op: 'lag', columns: 'auto', lags: [1, 24], windows: [24] })
 })
+
+test('文の重複, 空の文, 目的の列の表記のゆれから手順を作る', () => {
+  const found: Finding[] = [
+    { severity: 'warning', code: 'duplicate_items', message: '', columns: ['review'] },
+    { severity: 'info', code: 'empty_items', message: '', columns: ['review'] },
+    {
+      severity: 'warning',
+      code: 'mixed_forms',
+      message: 'normalize_text (columns: [label], lowercase: true)',
+      columns: ['label'],
+    },
+  ]
+  expect(suggestSteps(found, 'label', {}, { length: 'length.1' })).toEqual([
+    { op: 'drop_duplicates', columns: ['review'] },
+    { op: 'filter_rows', column: 'length.1', compare: '>', value: 0 },
+    { op: 'normalize_text', columns: ['label'], lowercase: true },
+  ])
+})
