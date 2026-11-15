@@ -1,4 +1,5 @@
 import type { ColumnInfo, Finding, Profile } from '../api/types'
+import { defaultDatasetName } from './format'
 import { autoItemSteps, autoRecipe, suggestSteps, unreadableFilter } from './suggest'
 
 /** 分析の結果の列の情報を作る */
@@ -170,4 +171,15 @@ test('店ごとの系列は, 重複と表記をそろえてから系列ごとに
   // 系列を分ける列は ID らしくても落とさない
   const idLike = { ...panel, store: column('id') }
   expect(autoRecipe(idLike, 'sales', [], { time: 'date' }, 7, 'store')[0]?.op).toBe('lag')
+})
+
+test('書き出しの名前の既定は, 日本語の名前ならファイルの名前から作る', () => {
+  expect(defaultDatasetName('churn.csv', '/a/churn.csv')).toBe('churn')
+  expect(defaultDatasetName('日本語のレビュー', '/a/data/reviews_ja.csv')).toBe('reviews_ja')
+  expect(defaultDatasetName('顧客の解約 (表)', '/a/samples/churn.csv')).toBe('churn')
+  expect(defaultDatasetName('my data v2', '/x/y.csv')).toBe('my_data_v2')
+  expect(defaultDatasetName('名前', '/x/データ.csv')).toBe('dataset')
+  expect(defaultDatasetName('images', '/x/images/')).toBe('images')
+  expect(defaultDatasetName('sales (2024)', '/x/q.csv')).toBe('sales_2024')
+  expect(defaultDatasetName('-foo.csv', '/x/-foo.csv')).toBe('foo')
 })

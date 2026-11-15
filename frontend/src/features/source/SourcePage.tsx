@@ -127,6 +127,7 @@ export function SourcePage() {
             key={`${source.id}:${source.kind}:${JSON.stringify(source.options)}`}
             sourceId={id}
             sourceName={source.name}
+            sourcePath={source.path}
             profile={data}
             target={source.target}
             steps={info.data.steps}
