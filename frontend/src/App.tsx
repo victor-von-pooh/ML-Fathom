@@ -1,0 +1,72 @@
+import clsx from 'clsx'
+import { Database, FolderInput, Moon, Sun, Telescope } from 'lucide-react'
+import { NavLink, Route, Routes } from 'react-router'
+
+import { DatasetsPage } from './features/datasets/DatasetsPage'
+import { SourcePage } from './features/source/SourcePage'
+import { SourcesPage } from './features/sources/SourcesPage'
+import { useTheme } from './lib/themeContext'
+
+/** 左の欄の移動先 */
+function NavItem({ to, icon: Icon, label }: { to: string; icon: typeof Database; label: string }) {
+  return (
+    <NavLink
+      to={to}
+      end={to === '/'}
+      className={({ isActive }) =>
+        clsx(
+          'flex items-center gap-2 rounded-lg px-3 py-2 text-sm',
+          isActive
+            ? 'bg-accent-soft font-medium text-accent-text'
+            : 'text-ink-2 hover:bg-surface-2',
+        )
+      }
+    >
+      <Icon size={16} aria-hidden />
+      {label}
+    </NavLink>
+  )
+}
+
+export function App() {
+  const { theme, toggle } = useTheme()
+  return (
+    <div className="flex h-full">
+      <a
+        href="#main"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:rounded focus:bg-surface focus:px-3 focus:py-2"
+      >
+        本文へ移る
+      </a>
+      <nav
+        aria-label="移動"
+        className="flex w-56 shrink-0 flex-col gap-1 border-r border-line bg-surface p-3"
+      >
+        <div className="mb-3 flex items-center justify-between px-2">
+          <span className="flex items-center gap-2 text-base font-semibold">
+            <Telescope size={20} className="text-accent" aria-hidden />
+            ML-Fathom
+          </span>
+          <button
+            type="button"
+            onClick={toggle}
+            aria-label={theme === 'dark' ? '明るい表示にする' : '暗い表示にする'}
+            className="rounded p-1 text-ink-3 hover:bg-surface-2"
+          >
+            {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
+          </button>
+        </div>
+        <NavItem to="/" icon={FolderInput} label="データ" />
+        <NavItem to="/datasets" icon={Database} label="データセット" />
+      </nav>
+      <main id="main" className="min-w-0 flex-1 overflow-auto px-8 py-6">
+        <Routes>
+          <Route path="/" element={<SourcesPage />} />
+          <Route path="/sources/:id" element={<SourcePage />} />
+          <Route path="/datasets" element={<DatasetsPage />} />
+          <Route path="*" element={<p className="text-ink-3">ページが見つかりません.</p>} />
+        </Routes>
+      </main>
+    </div>
+  )
+}

@@ -1,0 +1,3 @@
+[submodule "ML-EDA"]
+	path = ML-EDA
+	url = https://github.com/victor-von-pooh/ML-EDA.git
