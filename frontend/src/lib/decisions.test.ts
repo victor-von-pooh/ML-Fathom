@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest'
 
 import type { ColumnInfo, Finding, Profile, Recipe } from '../api/types'
-import { findDecisions } from './decisions'
+import { findDecisions, toFreq } from './decisions'
 import { autoItemSteps } from './suggest'
 
 /** 分析の結果の列の情報を作る */
@@ -116,7 +116,41 @@ describe('決めてほしいこと', () => {
     expect(found[0]!.choices[0]!.action).toMatchObject({
       recipe: { split: { method: 'time', valid: 0.2 } },
     })
+    expect(found[1]!.choices.map((choice) => choice.label)).toEqual([
+      'このまま (行でずらす)',
+      '過去の値の列を外す',
+    ])
     expect(found[1]!.choices[1]!.action).toMatchObject({ recipe: { steps: [] } })
+
+    // 時刻の列と間隔が分かれば日付でずらせる. ずらした後は聞かない
+    const daily = profileOf({ sales: column('numeric') }, findings, {
+      overview: { roles: { time: 'date' } },
+      timeseries: { interval_seconds: 86400 },
+    } as unknown as Partial<Profile>)
+    const timed = { ...base, kind: 'timeseries', profile: daily, target: 'sales' }
+    const gaps = findDecisions({ ...timed, recipe: lagged }).find((item) => item.id === 'gaps')!
+    const byDate = gaps.choices.find((choice) => choice.label.startsWith('日付'))!
+    expect(byDate.label).toBe('日付でずらす (1 つ = 1 日)')
+    expect(byDate.action).toMatchObject({
+      recipe: { steps: [{ op: 'lag', columns: ['sales'], time: 'date', freq: '1D' }] },
+    })
+    const after = (byDate.action as { recipe: Recipe }).recipe
+    expect(ids({ ...timed, recipe: after })).not.toContain('gaps')
+    expect(toFreq(3600)).toBe('1h')
+    expect(toFreq(1800)).toBe('30min')
+    expect(toFreq(604800)).toBe('7D')
+    expect(toFreq(15)).toBe('15s')
+    expect(toFreq(0.5)).toBe('500ms')
+    expect(toFreq(0.0004)).toBe('400us')
+    // 月ごと (31 日) は日付でずらせない
+    const monthly = profileOf({ sales: column('numeric') }, findings, {
+      overview: { roles: { time: 'date' } },
+      timeseries: { interval_seconds: 31 * 86400 },
+    } as unknown as Partial<Profile>)
+    const month = findDecisions({ ...timed, profile: monthly, recipe: lagged }).find(
+      (item) => item.id === 'gaps',
+    )!
+    expect(month.choices.some((choice) => choice.label.startsWith('日付'))).toBe(false)
 
     const imbalance = profileOf({}, [
       { severity: 'warning', code: 'class_imbalance', message: '', columns: ['y'] },

@@ -47,6 +47,28 @@ export function withAutoItems(recipe: Recipe, kind: string, profile: Profile): R
   }
 }
 
+/** 時刻の間隔 (秒) を lag の freq にする (1D, 1h, 30min, 15s) */
+export function toFreq(seconds: number): string {
+  if (seconds % 86400 === 0) return `${seconds / 86400}D`
+  if (seconds % 3600 === 0) return `${seconds / 3600}h`
+  if (seconds % 60 === 0) return `${seconds / 60}min`
+  if (Number.isInteger(seconds)) return `${seconds}s`
+  // 1 秒の端数はミリ秒 (それより細かければマイクロ秒) で
+  const ms = seconds * 1000
+  return Number.isInteger(ms) ? `${ms}ms` : `${Math.max(1, Math.round(ms * 1000))}us`
+}
+
+// 長さの変わる間隔 (月や年. 28 日以上) は日付でずらせない
+const MONTHLY = 28 * 86400
+
+/** 時刻の間隔 (秒) を画面の言葉にする */
+function freqLabel(seconds: number): string {
+  if (seconds % 86400 === 0) return `${seconds / 86400} 日`
+  if (seconds % 3600 === 0) return `${seconds / 3600} 時間`
+  if (seconds % 60 === 0) return `${seconds / 60} 分`
+  return `${seconds} 秒`
+}
+
 /** 列を落とす手順に列を足す (無ければ先頭に手順を作る) */
 function addDrop(recipe: Recipe, column: string): Recipe {
   const index = recipe.steps.findIndex((step) => step.op === 'drop_columns')
@@ -254,24 +276,46 @@ export function findDecisions({
     })
   }
 
-  // 時刻の抜けと, 行でずらす過去の値の列
-  const lags = recipe.steps.filter((step) => step.op === 'lag')
-  if (kind === 'timeseries' && lags.length > 0 && codes('irregular_interval').length > 0) {
+  // 時刻の抜けと, 行でずらす過去の値の列 (時刻でずらす lag は除く)
+  const rowLags = recipe.steps.filter((step) => step.op === 'lag' && !step.time)
+  const timeColumn = profile.overview.roles?.time
+  const step = profile.timeseries?.interval_seconds ?? null
+  if (kind === 'timeseries' && rowLags.length > 0 && codes('irregular_interval').length > 0) {
+    const choices: DecisionChoice[] = [
+      { label: 'このまま (行でずらす)', primary: true, action: { kind: 'dismiss' } },
+    ]
+    if (timeColumn && step && step > 0 && step < MONTHLY) {
+      choices.push({
+        label: `日付でずらす (1 つ = ${freqLabel(step)})`,
+        action: {
+          kind: 'recipe',
+          recipe: {
+            ...recipe,
+            steps: recipe.steps.map((item) =>
+              item.op === 'lag' && !item.time
+                ? { ...item, time: timeColumn, freq: toFreq(step) }
+                : item,
+            ),
+          },
+        },
+      })
+    }
+    choices.push({
+      label: '過去の値の列を外す',
+      action: {
+        kind: 'recipe',
+        recipe: {
+          ...recipe,
+          steps: recipe.steps.filter((item) => item.op !== 'lag' || item.time),
+        },
+      },
+    })
     found.push({
       id: 'gaps',
       title: '時刻の抜けがあり, 過去の値の列は行でずらします',
       message:
-        '過去の値の列 (lag) は時刻ではなく行でずらすので, 休みの日のような抜けを挟むと「7 つ前」が暦の 7 日前になりません. 多くの場合はこのままでも効きますが, 暦どおりの過去が要るなら過去の値の列を外します.',
-      choices: [
-        { label: 'このまま (行でずらす)', primary: true, action: { kind: 'dismiss' } },
-        {
-          label: '過去の値の列を外す',
-          action: {
-            kind: 'recipe',
-            recipe: { ...recipe, steps: recipe.steps.filter((step) => step.op !== 'lag') },
-          },
-        },
-      ],
+        '過去の値の列 (lag) は行でずらすので, 休みの日のような抜けを挟むと「7 つ前」が暦の 7 日前になりません. 日付でずらすと暦どおりの過去 (その日が無ければ前で最も近い日) を使います. どちらが良いかはデータによる (抜けが少なければ差は小さい) ので, 書き出して学習で比べるのが確かです.',
+      choices,
     })
   }
 
