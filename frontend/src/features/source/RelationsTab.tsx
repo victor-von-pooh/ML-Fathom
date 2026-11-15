@@ -36,7 +36,13 @@ function heatmapOption(
       data: names,
       axisLabel: { rotate: 60, width: 90, overflow: 'truncate' },
     },
-    yAxis: { type: 'category', data: names, axisLabel: { width: 110, overflow: 'truncate' } },
+    // 上から下に並べ, 対角 (自分どうし) を左上から右下に
+    yAxis: {
+      type: 'category',
+      data: names,
+      inverse: true,
+      axisLabel: { width: 110, overflow: 'truncate' },
+    },
     visualMap: {
       min: signed ? -1 : 0,
       max: 1,
