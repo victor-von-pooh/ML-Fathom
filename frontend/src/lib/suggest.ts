@@ -151,6 +151,16 @@ export function autoItemSteps(kind: string, profile: Profile): RecipeStep[] {
   return []
 }
 
+/** 読めない件 (画像は大きさが欠損, 点群などは error がある件) を除く表の手順 (無ければ null) */
+export function unreadableFilter(kind: string, profile: Profile): RecipeStep | null {
+  if (!profile.items?.unreadable) return null
+  if (kind === 'image' && profile.columns.width) {
+    return { op: 'filter_rows', column: 'width', compare: 'notna' }
+  }
+  if (profile.columns.error) return { op: 'filter_rows', column: 'error', compare: 'isna' }
+  return null
+}
+
 // 画像を縮める長い辺の上限
 const MAX_IMAGE_SIDE = 224
 
