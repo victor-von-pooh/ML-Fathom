@@ -21,8 +21,8 @@ function toText(value: unknown): string {
   return String(value)
 }
 
-/** 欄の文字を値にする (空は省略. 区切り文字の \t はタブ) */
-function toValue(key: string, text: string, previous: unknown): unknown {
+/** 欄の文字を値にする (空は省略. 区切り文字の \t はタブ. sheets はシートの名前) */
+function toValue(key: string, text: string, previous: unknown, sheets: string[]): unknown {
   if (text === '') return undefined
   if (typeof previous === 'object' && previous !== null) {
     try {
@@ -31,6 +31,8 @@ function toValue(key: string, text: string, previous: unknown): unknown {
       return text
     }
   }
+  // 数の名前のシート (2020 など) は名前のまま
+  if (key === 'sheet' && sheets.includes(text)) return text
   if (NUMERIC.has(key)) {
     if (text.trim() === 'null') return null
     if (/^-?\d+$/.test(text.trim())) return Number(text.trim())
@@ -41,7 +43,16 @@ function toValue(key: string, text: string, previous: unknown): unknown {
 }
 
 /** 読み込みの設定 (Excel のシート, 区切り文字, 文字コードなど) を変える */
-export function LoaderOptions({ source, loader }: { source: Source; loader?: LoaderInfo }) {
+export function LoaderOptions({
+  source,
+  loader,
+  sheets = [],
+}: {
+  source: Source
+  loader?: LoaderInfo
+  /** Excel のシートの名前 (分析の概要から. 数の名前のシートを番号と取り違えない) */
+  sheets?: string[]
+}) {
   const queryClient = useQueryClient()
   const id = useId()
   const box = useRef<HTMLDivElement>(null)
@@ -60,7 +71,7 @@ export function LoaderOptions({ source, loader }: { source: Source; loader?: Loa
       const options: Record<string, unknown> = { ...source.options }
       for (const key of keys) {
         if (texts[key] === initial[key]) continue
-        const value = toValue(key, texts[key] ?? '', source.options[key])
+        const value = toValue(key, texts[key] ?? '', source.options[key], sheets)
         if (value === undefined) delete options[key]
         else options[key] = value
       }

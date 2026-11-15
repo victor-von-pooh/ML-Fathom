@@ -72,6 +72,7 @@ export function SourcePage() {
               key={`${source.id}:${JSON.stringify(source.options)}`}
               source={source}
               loader={info.data?.loaders.find((item) => item.name === source.loader)}
+              sheets={profile.data?.overview.sheets}
             />
             {data && (
               <>

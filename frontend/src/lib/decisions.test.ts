@@ -147,4 +147,28 @@ describe('決めてほしいこと', () => {
     const same = { ...recipe, item_steps: [tokenizers.recommended] }
     expect(ids({ ...text, recipe: same })).toEqual([])
   })
+
+  test('Excel に他のシートがあれば, シートを選ぶかを聞く', () => {
+    const profile = profileOf({ a: column('numeric') }, [], {
+      overview: { roles: {}, sheets: ['表紙', '売上'], sheet: '表紙' },
+    } as unknown as Partial<Profile>)
+    const [decision] = findDecisions({ ...base, loader: 'excel', profile, recipe, target: 'a' })
+    expect(decision!.choices.map((choice) => choice.label)).toEqual(['表紙 (このまま)', '売上'])
+    expect(decision!.choices[1]!.action).toEqual({ kind: 'source', options: { sheet: '売上' } })
+    // シートを選んだ後 (最初のシートを番号で選んだ場合も) は聞かない
+    for (const sheet of ['売上', 0]) {
+      expect(
+        ids({ ...base, loader: 'excel', options: { sheet }, profile, recipe, target: 'a' }),
+      ).toEqual([])
+    }
+    // 8 枚以上は 6 枚まで出し, 残りは読み込みの設定で選ぶことを書く
+    const names = ['0', '1', '2', '3', '4', '5', '6', '7']
+    const many = profileOf({ a: column('numeric') }, [], {
+      overview: { roles: {}, sheets: names, sheet: '0' },
+    } as unknown as Partial<Profile>)
+    const [wide] = findDecisions({ ...base, loader: 'excel', profile: many, recipe, target: 'a' })
+    expect(wide!.choices).toHaveLength(7)
+    expect(wide!.message).toContain('読み込みの設定')
+    expect(wide!.choices[1]!.action).toEqual({ kind: 'source', options: { sheet: '1' } })
+  })
 })
