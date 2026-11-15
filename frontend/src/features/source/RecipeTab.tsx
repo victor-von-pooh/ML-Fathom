@@ -316,7 +316,7 @@ export function RecipeTab({
   // 既にある手順は候補から除く (押すたびに同じ手順が増えないように)
   const suggestions = useMemo(() => {
     const present = new Set((recipe?.steps ?? []).map((step) => JSON.stringify(step)))
-    return suggestSteps(profile.findings, target, profile.columns).filter(
+    return suggestSteps(profile.findings, target, profile.columns, profile.overview.roles).filter(
       (step) => !present.has(JSON.stringify(step)),
     )
   }, [profile, target, recipe])
@@ -434,9 +434,10 @@ export function RecipeTab({
         <Card
           title={`手順 (${recipe.steps.length})`}
           actions={
-            <div className={clsx('flex flex-wrap gap-2', media && 'hidden')}>
+            <div className="flex flex-wrap gap-2">
               <Button
                 icon={Wand2}
+                className={clsx(media && 'hidden')}
                 onClick={() => {
                   const made = autoRecipe(
                     profile.columns,

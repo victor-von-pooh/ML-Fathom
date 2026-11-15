@@ -7,6 +7,7 @@ import { KIND_LABELS } from '../../lib/format'
 import { ColumnsTab } from './ColumnsTab'
 import { DataTab } from './DataTab'
 import { OverviewTab } from './OverviewTab'
+import { ReadAsControl } from './ReadAsControl'
 import { RecipeTab } from './RecipeTab'
 import { RelationsTab } from './RelationsTab'
 import { SamplesTab } from './SamplesTab'
@@ -63,19 +64,22 @@ export function SourcePage() {
         }
         actions={
           data && (
-            <label className="flex items-center gap-2 text-sm">
-              目的の列
-              <select
-                value={source.target ?? ''}
-                onChange={(event) => setTarget.mutate(event.target.value || null)}
-                className="h-8 rounded-lg border border-line bg-surface px-2 font-mono"
-              >
-                <option value="">なし</option>
-                {Object.keys(data.columns).map((name) => (
-                  <option key={name}>{name}</option>
-                ))}
-              </select>
-            </label>
+            <div className="flex flex-wrap items-start gap-3">
+              <ReadAsControl source={source} profile={data} />
+              <label className="flex items-center gap-2 text-sm">
+                目的の列
+                <select
+                  value={source.target ?? ''}
+                  onChange={(event) => setTarget.mutate(event.target.value || null)}
+                  className="h-8 rounded-lg border border-line bg-surface px-2 font-mono"
+                >
+                  <option value="">なし</option>
+                  {Object.keys(data.columns).map((name) => (
+                    <option key={name}>{name}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
           )
         }
       />
