@@ -14,15 +14,19 @@ export function SourcesPage() {
   const [adding, setAdding] = useState(false)
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const remove = useMutation({
-    mutationFn: api.deleteSource,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['sources'] }),
-  })
-  // 操作を試すための見本 (表, 時系列, 画像, 文, 点群) を置き場に作って登録
+  // 途中で失敗しても登録できた分を一覧に出すため, 成否によらず読み直す
   const samples = useMutation({
     mutationFn: api.addSamples,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['sources'] }),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['sources'] }),
   })
+  const remove = useMutation({
+    mutationFn: api.deleteSource,
+    onSuccess: () => {
+      samples.reset()
+      return queryClient.invalidateQueries({ queryKey: ['sources'] })
+    },
+  })
+  // 操作を試すための見本 (表, 時系列, 画像, 文, 点群) を置き場に作って登録
   return (
     <>
       <PageHeader
@@ -42,13 +46,12 @@ export function SourcesPage() {
       {sources.isPending && <Spinner />}
       {sources.error && <ErrorBox error={sources.error} />}
       {samples.error && <ErrorBox error={samples.error} />}
-      {samples.data && (
-        <p role="status" className="mb-3 text-sm text-ink-2">
-          {samples.data.length === 0
+      <p role="status" className="mb-3 text-sm text-ink-2 empty:hidden">
+        {samples.data &&
+          (samples.data.length === 0
             ? '見本は登録済みです'
-            : `見本を ${samples.data.length} 件登録しました (置き場の samples に作りました)`}
-        </p>
-      )}
+            : `見本を ${samples.data.length} 件登録しました (置き場の samples に作りました)`)}
+      </p>
       {sources.data?.length === 0 && (
         <EmptyState icon={FolderSearch} title="まだデータがありません">
           「データを追加」で, 分析したいファイルかディレクトリを選んでください.

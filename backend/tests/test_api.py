@@ -339,4 +339,12 @@ def test_samples(client: TestClient) -> None:
             f"/api/sources/{table['id']}/profile"
         ).json()["findings"]
     }
-    assert {"id_like", "target_leak"} <= codes
+    assert {"id_like", "target_leak", "high_missing"} <= codes
+
+    # 利用者が変えた見本は書き直さない
+    path = Path(table["path"])
+    path.write_text("a,b\n1,2\n", encoding="utf-8")
+    client.delete(f"/api/sources/{table['id']}")
+    again = client.post("/api/samples").json()
+    assert [item["kind"] for item in again] == ["table"]
+    assert path.read_text(encoding="utf-8") == "a,b\n1,2\n"
