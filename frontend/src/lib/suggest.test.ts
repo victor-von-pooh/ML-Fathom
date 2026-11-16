@@ -183,3 +183,15 @@ test('書き出しの名前の既定は, 日本語の名前ならファイルの
   expect(defaultDatasetName('sales (2024)', '/x/q.csv')).toBe('sales_2024')
   expect(defaultDatasetName('-foo.csv', '/x/-foo.csv')).toBe('foo')
 })
+
+test('系列が多ければ, 系列を分ける列は番号付けにする', () => {
+  const many = {
+    date: column('datetime'),
+    item: column('categorical', { unique: 600 }),
+    sales: column('numeric'),
+  }
+  const steps = autoRecipe(many, 'sales', [], { time: 'date', series: 'item' }, 7, 'item', 86400)
+  expect(steps.find((step) => step.op === 'label_encode')).toMatchObject({ columns: ['item'] })
+  expect(steps.some((step) => step.op === 'one_hot')).toBe(false)
+  expect(steps.find((step) => step.op === 'lag')).toMatchObject({ by: ['item'] })
+})
