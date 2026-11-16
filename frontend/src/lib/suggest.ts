@@ -93,9 +93,10 @@ export function autoRecipe(
   if (target && columns[target]?.type === 'numeric') numeric.push(target)
   for (const [name, info] of Object.entries(columns)) {
     if (name === target || name === roles.time) continue
-    // 系列を分ける列は, 落とさず埋めず, ずらした後に符号化する (文字の場合)
+    // 系列を分ける列は, 落とさず埋めず, ずらした後に符号化する (文字の場合.
+    // 商品ごとのように系列が多ければ, 列が増えすぎないように番号付け)
     if (name === seriesBy) {
-      if (!/int|float|bool/.test(info.dtype)) oneHot.push(name)
+      if (!/int|float|bool/.test(info.dtype)) (info.unique > 20 ? encode : oneHot).push(name)
       continue
     }
     if (['text', 'id', 'constant', 'empty', 'other'].includes(info.type) || leaks.has(name)) {
