@@ -307,7 +307,11 @@ export function RecipeTab({
     enabled: pending.recipe !== null,
     retry: false,
   })
-  const dirty = draft !== null && JSON.stringify(draft) !== JSON.stringify(saved.data)
+  // 保存したレシピを読み終えるまでは, 変更の印を出さない
+  const dirty =
+    draft !== null &&
+    saved.data !== undefined &&
+    JSON.stringify(draft) !== JSON.stringify(saved.data)
   // 保存と書き出しはレシピも保存するので, 編集中の印を外す
   const save = useMutation({
     mutationFn: () => api.saveRecipe(sourceId, recipe!),
@@ -666,7 +670,7 @@ export function RecipeTab({
             {save.isSuccess && <span className="text-xs text-good-text">保存しました</span>}
             {dirty && (
               <span className="text-xs text-warning-text">
-                保存していない変更があります (タブを移っても残ります)
+                保存していない変更があります (タブを移っても, 読み込み直しても残ります)
               </span>
             )}
           </div>

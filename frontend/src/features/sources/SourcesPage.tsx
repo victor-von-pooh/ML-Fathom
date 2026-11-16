@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router'
 
 import { api } from '../../api/client'
+import { clearDraft } from '../../lib/drafts'
 import { Button, Card, EmptyState, ErrorBox, PageHeader, Spinner } from '../../components/ui'
 import { KIND_LABELS } from '../../lib/format'
 import { AddSourceDialog } from './AddSourceDialog'
@@ -21,7 +22,9 @@ export function SourcesPage() {
   })
   const remove = useMutation({
     mutationFn: api.deleteSource,
-    onSuccess: () => {
+    onSuccess: (_, id) => {
+      // 登録を外したデータの編集中の手順も捨てる
+      clearDraft(id)
       samples.reset()
       return queryClient.invalidateQueries({ queryKey: ['sources'] })
     },
