@@ -42,3 +42,15 @@ test('形の違う覚えた値は捨てる', async () => {
   const drafts = await import('./drafts')
   expect(renderHook(() => drafts.useRecipeDraft('x')).result.current[0]).toBeNull()
 })
+
+test('別のタブで変えた編集中のレシピを読み直す', async () => {
+  const drafts = await import('./drafts')
+  const { result } = renderHook(() => drafts.useRecipeDraft('t'))
+  act(() => result.current[1](recipe))
+  // 別のタブが保存して編集中のレシピを消した
+  act(() => {
+    window.localStorage.removeItem('ml-fathom:draft:t')
+    window.dispatchEvent(new StorageEvent('storage', { key: 'ml-fathom:draft:t' }))
+  })
+  expect(result.current[0]).toBeNull()
+})

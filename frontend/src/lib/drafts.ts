@@ -48,6 +48,18 @@ function get(id: string): Recipe | null {
   return drafts.get(id) ?? null
 }
 
+// 別のタブで変えた (保存した, 読み方を変えた) 編集中のレシピは, 覚えたもの
+// から読み直す (古いレシピで上書きしないように)
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', (event) => {
+    const prefix = storageKey('')
+    if (event.key === null) drafts.clear()
+    else if (event.key.startsWith(prefix)) drafts.delete(event.key.slice(prefix.length))
+    else return
+    listeners.forEach((listener) => listener())
+  })
+}
+
 function subscribe(listener: () => void): () => void {
   listeners.add(listener)
   return () => listeners.delete(listener)
