@@ -380,6 +380,40 @@ def test_samples(client: TestClient) -> None:
         exported["info"]["classes"]
     )
 
+    # 画像は (チャンネル, 高さ, 幅), 点群は (点の数, 3). 語彙は無い
+    for kind, steps, shape in (
+        ("image", [{"op": "resize", "width": 8, "height": 6},
+                   {"op": "rgb"}], [3, 6, 8]),
+        ("pointcloud", [{"op": "sample_points", "points": 16}], [16, 3]),
+    ):
+        media = next(item for item in sources if item["kind"] == kind)
+        hints = client.post(f"/api/sources/{media['id']}/export", json={
+            "recipe": {
+                "target": "label", "task": "classification",
+                # 見本の画像には読めない件があるので除く
+                "steps": [
+                    {"op": "filter_rows", "column": "width",
+                     "compare": "notna"}
+                ] if kind == "image" else [],
+                "item_steps": steps, "split": {"method": "none"},
+            },
+            "name": kind,
+        }).json()["hints"]
+        assert hints["input_shape"] == shape and "vocabulary" not in hints
+        assert hints["input_dtype"] == "float32" and hints["outputs"] >= 2
+
+    # 目的の無いデータセットは出力の幅を出さない
+    table = next(item for item in sources if item["kind"] == "table")
+    hints = client.post(f"/api/sources/{table['id']}/export", json={
+        "recipe": {
+            "target": None, "task": "none",
+            "steps": [{"op": "drop_columns", "columns": ["customer_id"]}],
+            "split": {"method": "none"},
+        },
+        "name": "no_target",
+    }).json()["hints"]
+    assert hints["outputs"] is None
+
     # 見本は学習の前に直すことを含む
     table = next(item for item in sources if item["kind"] == "table")
     codes = {
