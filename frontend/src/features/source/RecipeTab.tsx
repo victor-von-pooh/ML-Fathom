@@ -666,7 +666,7 @@ export function RecipeTab({
             {save.isSuccess && <span className="text-xs text-good-text">保存しました</span>}
             {dirty && (
               <span className="text-xs text-warning-text">
-                保存していない変更があります (タブを移っても残ります)
+                保存していない変更があります (タブを移っても, 読み込み直しても残ります)
               </span>
             )}
           </div>
