@@ -1,3 +1,4 @@
+import hashlib
 from pathlib import Path
 from typing import Any
 
@@ -66,6 +67,26 @@ def write_problem(tmp_path: Path) -> Path:
     ml_quest.save_problem(problem, path)
 
     return path
+
+
+def current(path: Path) -> str:
+    """
+    問題の設定のファイルの今の中身の印を返す関数
+
+    Parameters
+    ----------
+    path: Path
+        problem.yaml を持つディレクトリ
+
+    Returns
+    ----------
+    version: str
+        中身の sha256 の 16 進
+    """
+    # 画面が確かめで受け取るものと同じ
+    version = hashlib.sha256((path / "problem.yaml").read_bytes()).hexdigest()
+
+    return version
 
 
 def without_drop(recipe: dict[str, Any]) -> dict[str, Any]:
@@ -167,10 +188,11 @@ def test_check_and_write(client: TestClient, tmp_path: Path) -> None:
 
     # 選ばずに書き戻すと誤り. 落とすと選ぶと, 両方のレシピに入る
     assert client.post(
-        f"{url}/write", json={"recipe": recipe}
+        f"{url}/write", json={"recipe": recipe, "version": current(path)}
     ).status_code == 409
     written = client.post(f"{url}/write", json={
-        "recipe": recipe, "choices": {"customers": "drop"}
+        "recipe": recipe, "choices": {"customers": "drop"},
+        "version": current(path),
     }).json()
     assert "customers をレシピで落とした" in written["changes"]
     saved = ml_quest.load_problem(path)
@@ -182,7 +204,8 @@ def test_check_and_write(client: TestClient, tmp_path: Path) -> None:
 
     # 分かる列に移すと選ぶと, 問題の設定の列の使い方が変わる
     client.post(f"{url}/write", json={
-        "recipe": recipe, "choices": {"customers": "known"}
+        "recipe": recipe, "choices": {"customers": "known"},
+        "version": current(path),
     })
     saved = ml_quest.load_problem(path)
     assert "customers" in saved["information"]["known"]
@@ -218,7 +241,9 @@ def test_forbidden_and_unlinked(client: TestClient, tmp_path: Path) -> None:
     recipe = client.get(f"/api/sources/{source['id']}/recipe").json()
     checked = client.post(f"{url}/check", json={"recipe": recipe}).json()
     assert any(c["level"] == "error" for c in checked["conflicts"])
-    response = client.post(f"{url}/write", json={"recipe": recipe})
+    response = client.post(f"{url}/write", json={
+        "recipe": recipe, "version": current(path)
+    })
     assert response.status_code == 409 and "promo" in response.json()[
         "detail"
     ]

@@ -1,6 +1,6 @@
 import hashlib
 from pathlib import Path
-from typing import Any, Literal, Optional
+from typing import Any, Literal
 
 import ml_eda
 import ml_quest
@@ -33,8 +33,8 @@ class ProblemCheck(BaseModel):
 class ProblemWrite(BaseModel):
     recipe: dict[str, Any]
     choices: dict[str, Literal["known", "drop"]] = Field(default_factory=dict)
-    version: Optional[str] = Field(
-        None, description="確かめたときの問題の設定のファイルの中身の印"
+    version: str = Field(
+        description="確かめたときの問題の設定のファイルの中身の印"
     )
 
 
@@ -169,6 +169,35 @@ def version_of(path: Path) -> str:
     version = hashlib.sha256(path.read_bytes()).hexdigest()
 
     return version
+
+
+def unchanged(path: Path, version: str) -> None:
+    """
+    問題の設定のファイルが, 確かめたときから変わっていないことを確かめる
+    関数
+
+    Parameters
+    ----------
+    path: Path
+        problem.yaml
+    version: str
+        確かめたときの中身の印
+
+    Returns
+    ----------
+    None
+
+    Raises
+    ----------
+    HTTPException
+        変わった場合は 409
+    """
+    # 中身の印の比べ
+    if version_of(path) != version:
+        raise HTTPException(
+            409, "問題の設定が他で変わりました. 確かめ直したので, 見直して"
+            "からもう一度書き戻してください"
+        )
 
 
 def trial_of(
@@ -342,13 +371,9 @@ def write_problem(
         食い違いがある場合, 書き戻した後に渡せないか前処理にかけられない
         場合は 409
     """
-    # 確かめた後に変わっていないこと
+    # 確かめた後に変わっていないこと (読む前と後の中身の印も同じ)
     source, path, problem = linked_problem(request, source_id)
-    if body.version is not None and body.version != version_of(path):
-        raise HTTPException(
-            409, "問題の設定が他で変わりました. 確かめ直してから書き戻して"
-            "ください"
-        )
+    unchanged(path, body.version)
 
     # 選ぶ問いに全て答え, 誤りが無いこと
     trial = trial_of(problem, body.recipe)
@@ -383,6 +408,7 @@ def write_problem(
         raise HTTPException(
             409, f"書き戻すと使えなくなります: {error}"
         ) from error
+    unchanged(path, body.version)
     try:
         ml_quest.save_problem(updated, path)
     except OSError as error:

@@ -3,7 +3,7 @@ import clsx from 'clsx'
 import { ClipboardList } from 'lucide-react'
 import { useId, useState } from 'react'
 
-import { api } from '../../api/client'
+import { api, ApiError } from '../../api/client'
 import type { ProblemFinding, Recipe } from '../../api/types'
 import { Button, Card, ErrorBox, Spinner } from '../../components/ui'
 
@@ -67,6 +67,12 @@ export function ProblemCard({
       void queryClient.invalidateQueries({ queryKey: ['problem-check', sourceId] })
       onWritten(result.recipe)
     },
+    // 他で変わった (409) ら確かめ直す (古い印のまま押し続けないように)
+    onError: (error) => {
+      if (error instanceof ApiError && error.status === 409) {
+        void queryClient.invalidateQueries({ queryKey: ['problem-check', sourceId] })
+      }
+    },
   })
   const errors = data?.conflicts.filter((item) => item.level === 'error') ?? []
   const unanswered = choices.filter((choice) => !picked[choice.column])
@@ -75,8 +81,11 @@ export function ProblemCard({
     check.isPlaceholderData || check.isFetching || JSON.stringify(latest) !== JSON.stringify(recipe)
   const blocked = !data || settling || errors.length > 0 || unanswered.length > 0 || write.isPending
   // 書き戻した後に編集したら, 書き戻しましたの表示を消す
+  // (タスクは保存した後に推定で埋まることがあるので比べない)
+  const withoutTask = (value: Recipe | null | undefined) =>
+    JSON.stringify(value ? { ...value, task: null } : null)
   const written =
-    write.data && JSON.stringify(latest) === JSON.stringify(write.data.recipe) ? write.data : null
+    write.data && withoutTask(latest) === withoutTask(write.data.recipe) ? write.data : null
   return (
     <Card
       title={
