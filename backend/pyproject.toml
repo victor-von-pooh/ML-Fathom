@@ -12,6 +12,7 @@ requires-python = ">=3.10"
 dependencies = [
     "fastapi>=0.115",
     "ml-eda[all]",
+    "ml-quest",
     "pydantic>=2.9",
     "pyyaml>=6.0",
     "uvicorn>=0.32"
@@ -32,6 +33,7 @@ dev = [
 
 [tool.uv.sources]
 ml-eda = { path = "../ML-EDA", editable = true }
+ml-quest = { path = "../ML-Quest", editable = true }
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/ml_fathom"]

@@ -162,7 +162,8 @@ class SourceStore:
         self, source_id: str, changes: dict[str, Any]
     ) -> Optional[dict[str, Any]]:
         """
-        登録したデータの名前, 目的の列, 読み込みの設定を変える関数
+        登録したデータの名前, 目的の列, 読み込みの設定, 始めた問題の設定を変える
+        関数
 
         Parameters
         ----------
@@ -177,7 +178,10 @@ class SourceStore:
             変えた後のデータ, 無ければ None
         """
         # 決まった項目だけを書き換える
-        allowed = {"name", "target", "loader", "options", "kind"}
+        allowed = {
+            "name", "target", "loader", "options", "kind", "problem",
+            "problem_created",
+        }
         with self.lock:
             sources = self.read()
             for item in sources:

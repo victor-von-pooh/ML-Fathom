@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, FolderSearch, Plus, Sparkles, Trash2 } from 'lucide-react'
+import { AlertTriangle, ClipboardList, FolderSearch, Plus, Sparkles, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router'
 
@@ -12,7 +12,7 @@ import { AddSourceDialog } from './AddSourceDialog'
 /** 登録したデータの一覧 */
 export function SourcesPage() {
   const sources = useQuery({ queryKey: ['sources'], queryFn: api.listSources })
-  const [adding, setAdding] = useState(false)
+  const [adding, setAdding] = useState<'data' | 'problem' | null>(null)
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   // 途中で失敗しても登録できた分を一覧に出すため, 成否によらず読み直す
@@ -40,7 +40,10 @@ export function SourcesPage() {
             <Button icon={Sparkles} disabled={samples.isPending} onClick={() => samples.mutate()}>
               {samples.isPending ? '見本を作っています…' : '見本のデータを入れる'}
             </Button>
-            <Button variant="primary" icon={Plus} onClick={() => setAdding(true)}>
+            <Button icon={ClipboardList} onClick={() => setAdding('problem')}>
+              問題の設定から始める
+            </Button>
+            <Button variant="primary" icon={Plus} onClick={() => setAdding('data')}>
               データを追加
             </Button>
           </>
@@ -84,6 +87,7 @@ export function SourcesPage() {
             <div className="mt-3 flex items-center gap-3 text-xs text-ink-3">
               <span>読み込み {source.loader}</span>
               <span>目的の列 {source.target ?? 'なし'}</span>
+              {source.problem && <span>問題の設定から</span>}
               {!source.exists && (
                 <span className="flex items-center gap-1 text-critical-text">
                   <AlertTriangle size={12} aria-hidden /> ファイルがありません
@@ -107,10 +111,11 @@ export function SourcesPage() {
       </div>
       {adding && (
         <AddSourceDialog
-          onClose={() => setAdding(false)}
+          mode={adding}
+          onClose={() => setAdding(null)}
           onAdded={(source) => {
             void queryClient.invalidateQueries({ queryKey: ['sources'] })
-            setAdding(false)
+            setAdding(null)
             void navigate(`/sources/${source.id}`)
           }}
         />

@@ -22,6 +22,7 @@ import { findDecisions, withAutoItems } from '../../lib/decisions'
 import { autoRecipe, suggestSteps } from '../../lib/suggest'
 import { useDecided } from '../../lib/useDecided'
 import { DecisionsCard } from './DecisionsCard'
+import { ProblemCard } from './ProblemCard'
 import { ItemPreviewCard } from './ItemPreviewCard'
 import { ModelHintsView } from './ModelHintsView'
 import { TokenizerTable } from './TokenizerTable'
@@ -260,6 +261,7 @@ export function RecipeTab({
   itemSteps,
   loader,
   options,
+  problem,
 }: {
   sourceId: string
   sourceName: string
@@ -274,6 +276,8 @@ export function RecipeTab({
   /** 読み込みと読み込みの設定 (決めてほしいことで読み方を変えるため) */
   loader: string
   options: Record<string, unknown>
+  /** 問題の設定から始めた場合の problem.yaml の場所 */
+  problem?: string | null
 }) {
   const media = ['image', 'text', 'pointcloud'].includes(kind)
   const [addingItem, setAddingItem] = useState('')
@@ -372,6 +376,20 @@ export function RecipeTab({
   return (
     <div className="grid gap-4 xl:grid-cols-[minmax(0,30rem)_1fr]">
       <div className="space-y-4">
+        {problem && (
+          <ProblemCard
+            sourceId={sourceId}
+            recipe={pending.recipe}
+            latest={recipe}
+            onWritten={() => {
+              // 書き戻したレシピはここにも保存したので, 編集中の印を外す
+              setSelected(null)
+              setDraft(null)
+              save.reset()
+              exporter.reset()
+            }}
+          />
+        )}
         <DecisionsCard
           sourceId={sourceId}
           decisions={decisions}
