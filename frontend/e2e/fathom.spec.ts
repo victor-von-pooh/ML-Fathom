@@ -47,3 +47,30 @@ test('目的の列を選び, 手順を作って書き出す', async ({ page }) =
   await page.getByRole('link', { name: 'データセット' }).click()
   await expect(page.getByText('people', { exact: true })).toBeVisible()
 })
+
+test('問題の設定から始め, 分からない列を使うと選んで書き戻す', async ({ page }) => {
+  // 問題の設定のディレクトリを選ぶと, 決めた状態で始まる
+  await page.goto('/')
+  await page.getByRole('button', { name: '問題の設定から始める' }).click()
+  await page
+    .getByLabel('ディレクトリのパス')
+    .fill(path.resolve(import.meta.dirname, '.work', 'problem'))
+  await page.getByRole('button', { name: '移動' }).click()
+  await page.getByRole('button', { name: 'このディレクトリを選ぶ' }).click()
+  await page.getByRole('button', { name: 'この問題の設定から始める' }).click()
+  await expect(page.getByRole('heading', { name: '総菜の作る量' })).toBeVisible()
+  await page.getByRole('tab', { name: '前処理と書き出し' }).click()
+  const card = page.getByText(/^問題の設定: 総菜の作る量/)
+  await expect(card).toBeVisible({ timeout: 20_000 })
+  await expect(page.getByText('問題の設定との食い違いはありません.')).toBeVisible()
+
+  // 客数を落とす手順を消すと, どう扱うかを選ぶまで書き戻せない
+  await page.getByRole('button', { name: '手順 1 を消す' }).click()
+  await expect(page.getByText(/customers は予測の時点で分からない列/)).toBeVisible()
+  const write = page.getByRole('button', { name: '問題の設定に書き戻す' })
+  await expect(write).toBeDisabled()
+  await page.getByRole('button', { name: 'レシピで落とす' }).click()
+  await write.click()
+  await expect(page.getByText(/書き戻しました/)).toBeVisible()
+  await expect(page.getByText('customers をレシピで落とした')).toBeVisible()
+})

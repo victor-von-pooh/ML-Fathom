@@ -633,6 +633,7 @@ dependencies = [
     { name = "fastapi", version = "0.162.5", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "fastapi", version = "0.163.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "ml-eda", extra = ["all"] },
+    { name = "ml-quest" },
     { name = "pydantic" },
     { name = "pyyaml" },
     { name = "uvicorn" },
@@ -653,6 +654,7 @@ dev = [
 requires-dist = [
     { name = "fastapi", specifier = ">=0.115" },
     { name = "ml-eda", extras = ["all"], editable = "../ML-EDA" },
+    { name = "ml-quest", editable = "../ML-Quest" },
     { name = "pydantic", specifier = ">=2.9" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "uvicorn", specifier = ">=0.32" },
@@ -667,6 +669,25 @@ dev = [
     { name = "ruff", specifier = ">=0.8" },
     { name = "types-pyyaml", specifier = ">=6.0" },
 ]
+
+[[package]]
+name = "ml-quest"
+version = "0.1.0"
+source = { editable = "../ML-Quest" }
+dependencies = [
+    { name = "pandas", version = "2.3.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "pandas", version = "3.1.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+    { name = "pyyaml" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "ml-eda", marker = "extra == 'data'", git = "https://github.com/victor-von-pooh/ML-EDA.git?rev=b08a5bc" },
+    { name = "pandas", specifier = ">=2.0" },
+    { name = "pytest", marker = "extra == 'dev'" },
+    { name = "pyyaml" },
+]
+provides-extras = ["data", "dev"]
 
 [[package]]
 name = "mypy"

@@ -9,14 +9,21 @@ import { Dialog } from '../../components/Dialog'
 import { Button, ErrorBox, Spinner } from '../../components/ui'
 import { formatBytes, KIND_LABELS } from '../../lib/format'
 
-/** ファイルかディレクトリを選び, 読み込みを確かめて登録する */
+/**
+ * ファイルかディレクトリを選び, 読み込みを確かめて登録する.
+ * problem では問題の設定 (problem.yaml か, それを持つディレクトリ) を選び,
+ * 決めた状態で始める
+ */
 export function AddSourceDialog({
   onClose,
   onAdded,
+  mode = 'data',
 }: {
   onClose: () => void
   onAdded: (source: Source) => void
+  mode?: 'data' | 'problem'
 }) {
+  const fromProblem = mode === 'problem'
   const [dir, setDir] = useState('~')
   const [typed, setTyped] = useState('')
   const [picked, setPicked] = useState<string | null>(null)
@@ -30,7 +37,11 @@ export function AddSourceDialog({
   const candidates = useQuery({
     queryKey: ['detect', picked],
     queryFn: () => api.detect(picked!),
-    enabled: picked !== null,
+    enabled: picked !== null && !fromProblem,
+  })
+  const start = useMutation({
+    mutationFn: () => api.startFromProblem(picked!),
+    onSuccess: (result) => onAdded(result.source),
   })
   const add = useMutation({
     mutationFn: () => api.createSource({ path: picked!, loader: loader || undefined }),
@@ -42,14 +53,23 @@ export function AddSourceDialog({
     setPicked(path)
     setLoader('')
     add.reset()
+    start.reset()
   }
   const best = candidates.data?.[0]
   return (
-    <Dialog title="データを追加" onClose={onClose}>
-      <p className="mb-3 text-xs text-ink-2">
-        分析するファイル (csv, json, parquet, xlsx, 画像, 文, 点群など) か,
-        画像や文のファイルを集めたディレクトリを選びます. 元のファイルは変えません.
-      </p>
+    <Dialog title={fromProblem ? '問題の設定から始める' : 'データを追加'} onClose={onClose}>
+      {fromProblem ? (
+        <p className="mb-3 text-xs text-ink-2">
+          問題の設定 (ML-Pathfinder の problem.yaml か, それを持つディレクトリ) を選びます.
+          入れたデータを登録し, 目的の列, タスク, 分割, 使わない列を決めた状態で始めます.
+          ここで変えた選び方は, 前処理のタブから問題の設定に書き戻せます.
+        </p>
+      ) : (
+        <p className="mb-3 text-xs text-ink-2">
+          分析するファイル (csv, json, parquet, xlsx, 画像, 文, 点群など) か,
+          画像や文のファイルを集めたディレクトリを選びます. 元のファイルは変えません.
+        </p>
+      )}
       <form
         className="mb-3 flex gap-2"
         onSubmit={(event) => {
@@ -145,12 +165,20 @@ export function AddSourceDialog({
       {picked && (
         <section aria-label="選んだ場所" className="rounded-lg border border-line p-3">
           <div className="mb-2 truncate font-mono text-sm">{picked}</div>
-          {candidates.isPending && <Spinner label="形式を調べています" />}
-          {candidates.error && <ErrorBox error={candidates.error} />}
-          {candidates.data && candidates.data.length === 0 && (
+          {fromProblem && (
+            <div className="flex justify-end">
+              <Button variant="primary" disabled={start.isPending} onClick={() => start.mutate()}>
+                {start.isPending ? '読み込み中…' : 'この問題の設定から始める'}
+              </Button>
+            </div>
+          )}
+          {start.error && <ErrorBox error={start.error} />}
+          {!fromProblem && candidates.isPending && <Spinner label="形式を調べています" />}
+          {!fromProblem && candidates.error && <ErrorBox error={candidates.error} />}
+          {!fromProblem && candidates.data && candidates.data.length === 0 && (
             <p className="text-sm text-critical-text">この場所を読める読み込みがありません.</p>
           )}
-          {best && (
+          {!fromProblem && best && (
             <div className="flex flex-wrap items-center gap-2 text-sm">
               <label htmlFor="loader">読み込み</label>
               <select

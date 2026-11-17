@@ -135,6 +135,7 @@ export function SourcePage() {
             itemSteps={info.data.item_steps}
             loader={source.loader}
             options={source.options}
+            problem={source.problem}
           />
         )}
       </div>

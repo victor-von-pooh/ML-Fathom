@@ -30,6 +30,29 @@ frame.loc[:70, "age"] = np.nan
 frame.to_csv(sys.argv[1], index=False)
 PY
 
+# 問題の設定の見本 (総菜の作る量) に, 日々の売れた数の表を入れて保存する
+uv run python - "$WORK" <<'PY'
+import sys
+from pathlib import Path
+
+import ml_quest
+import pandas as pd
+from ml_quest.examples import example_problem
+
+work = Path(sys.argv[1])
+rows = [
+    {"date": day.strftime("%Y-%m-%d"), "store": store, "item": item,
+     "sales": 10 + day.day_of_week, "temperature_forecast": 15.0,
+     "promo": 0, "customers": (10 + day.day_of_week) * 3}
+    for day in pd.date_range("2025-01-01", periods=40)
+    for store in ("east", "west") for item in ("a", "b")
+]
+pd.DataFrame(rows).to_csv(work / "sozai.csv", index=False)
+problem = ml_quest.attach_data(example_problem("総菜の作る量"),
+                               work / "sozai.csv")
+ml_quest.save_problem(problem, work / "problem")
+PY
+
 # データの置き場も作業用のディレクトリにし, 決まったトークンで起動
 ML_FATHOM_HOME="$WORK/home" ML_FATHOM_TOKEN=e2e-token \
   exec uv run ml-fathom --port "$PORT"

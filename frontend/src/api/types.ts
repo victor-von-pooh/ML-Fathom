@@ -10,6 +10,38 @@ export interface Source {
   target: string | null
   created_at: string
   exists: boolean
+  /** 問題の設定から始めた場合の problem.yaml の場所 */
+  problem?: string | null
+}
+
+/** 問題の設定の確かめ (ML-Quest の check の形) */
+export interface ProblemFinding {
+  level: 'error' | 'warning' | 'info'
+  id: string
+  message: string
+}
+
+/** 書き戻しで利用者が選ぶ問い (分からない列をレシピで使った) */
+export interface ProblemChoice {
+  column: string
+  options: ('known' | 'drop')[]
+  message: string
+}
+
+/** 編集中のレシピを問題の設定に試しに書き戻した結果 */
+export interface ProblemCheck {
+  name: string | null
+  path: string
+  changes: string[]
+  conflicts: ProblemFinding[]
+  choices: ProblemChoice[]
+}
+
+/** 問題の設定に書き戻した結果 */
+export interface ProblemWritten {
+  changes: string[]
+  recipe: Recipe
+  path: string
 }
 
 export interface LoaderInfo {

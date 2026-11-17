@@ -13,6 +13,7 @@ from fastapi.routing import APIRoute
 from fastapi.staticfiles import StaticFiles
 
 from ml_fathom.api import router
+from ml_fathom.problems import router as problem_router
 from ml_fathom.settings import get_data_dir
 from ml_fathom.store import SourceStore
 
@@ -337,6 +338,7 @@ def create_app(
 
     # API と画面の登録
     app.include_router(router)
+    app.include_router(problem_router)
     mount_frontend(app, STATIC_DIR)
 
     return app

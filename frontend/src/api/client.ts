@@ -10,6 +10,8 @@ import type {
   Rows,
   Source,
   ItemPreview,
+  ProblemCheck,
+  ProblemWritten,
 } from './types'
 
 /** API がエラーを返したときの例外 */
@@ -92,4 +94,10 @@ export const api = {
   exportDataset: (id: string, recipe: Recipe, name: string, overwrite: boolean) =>
     request<ExportResult>(`/api/sources/${id}/export`, json('POST', { recipe, name, overwrite })),
   datasets: () => request<DatasetSummary[]>('/api/datasets'),
+  startFromProblem: (path: string) =>
+    request<{ source: Source; notes: string[] }>('/api/problems/start', json('POST', { path })),
+  checkProblem: (id: string, recipe: Recipe) =>
+    request<ProblemCheck>(`/api/sources/${id}/problem/check`, json('POST', { recipe })),
+  writeProblem: (id: string, recipe: Recipe, choices: Record<string, 'known' | 'drop'>) =>
+    request<ProblemWritten>(`/api/sources/${id}/problem/write`, json('POST', { recipe, choices })),
 }
