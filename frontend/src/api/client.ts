@@ -98,6 +98,14 @@ export const api = {
     request<{ source: Source; notes: string[] }>('/api/problems/start', json('POST', { path })),
   checkProblem: (id: string, recipe: Recipe) =>
     request<ProblemCheck>(`/api/sources/${id}/problem/check`, json('POST', { recipe })),
-  writeProblem: (id: string, recipe: Recipe, choices: Record<string, 'known' | 'drop'>) =>
-    request<ProblemWritten>(`/api/sources/${id}/problem/write`, json('POST', { recipe, choices })),
+  writeProblem: (
+    id: string,
+    recipe: Recipe,
+    choices: Record<string, 'known' | 'drop'>,
+    version?: string,
+  ) =>
+    request<ProblemWritten>(
+      `/api/sources/${id}/problem/write`,
+      json('POST', { recipe, choices, version }),
+    ),
 }

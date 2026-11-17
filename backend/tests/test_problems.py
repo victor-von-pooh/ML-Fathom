@@ -4,6 +4,7 @@ from typing import Any
 import ml_quest
 import pandas as pd
 import pytest
+import yaml
 from fastapi.testclient import TestClient
 from ml_quest.examples import example_problem
 
@@ -233,3 +234,70 @@ def test_forbidden_and_unlinked(client: TestClient, tmp_path: Path) -> None:
     assert client.post(f"{url}/check", json={
         "recipe": recipe
     }).status_code == 404
+
+
+def test_review_cases(client: TestClient, tmp_path: Path) -> None:
+    """
+    置き換わった問題の設定, 拡張子の無いファイル, 確かめた後の変更, 列を
+    使う手順の後で落とすこと, 目的の列の変更を確かめる関数
+
+    Parameters
+    ----------
+    client: TestClient
+        クライアント
+    tmp_path: Path
+        一時ディレクトリ
+
+    Returns
+    ----------
+    None
+    """
+    # 客数の過去の値を使い, 客数は落とすと選ぶ (前処理にかけられる)
+    path = write_problem(tmp_path)
+    source = client.post(
+        "/api/problems/start", json={"path": str(path)}
+    ).json()["source"]
+    url = f"/api/sources/{source['id']}/problem"
+    recipe = without_drop(client.get(
+        f"/api/sources/{source['id']}/recipe"
+    ).json())
+    recipe["steps"].append({"op": "lag", "columns": ["customers"],
+                            "lags": [2], "by": ["store", "item"]})
+    checked = client.post(f"{url}/check", json={"recipe": recipe}).json()
+    written = client.post(f"{url}/write", json={
+        "recipe": recipe, "choices": {"customers": "drop"},
+        "version": checked["version"],
+    })
+    assert written.status_code == 200
+    preview = client.post(f"/api/sources/{source['id']}/preview", json={
+        "recipe": written.json()["recipe"],
+        "upto": len(written.json()["recipe"]["steps"]),
+    })
+    assert preview.status_code == 200
+
+    # 確かめた後に変わった問題の設定には書き戻さない
+    stale = client.post(f"{url}/write", json={
+        "recipe": recipe, "choices": {"customers": "drop"},
+        "version": checked["version"],
+    })
+    assert stale.status_code == 409 and "他で変わりました" in stale.json()[
+        "detail"
+    ]
+
+    # 目的の列を変えると, 前の目的の列をどう扱うかを選ぶ
+    other = dict(written.json()["recipe"], target="customers", steps=[
+        {"op": "lag", "columns": ["sales"], "lags": [2],
+         "by": ["store", "item"]},
+    ])
+    checked = client.post(f"{url}/check", json={"recipe": other}).json()
+    assert "sales" in [c["column"] for c in checked["choices"]]
+
+    # 拡張子の無いファイルと, 問題の設定でない YAML (レシピ)
+    plain = tmp_path / "myproblem"
+    plain.write_text((path / "problem.yaml").read_text("utf-8"), "utf-8")
+    assert client.post("/api/problems/start", json={
+        "path": str(plain)
+    }).status_code == 422
+    (path / "problem.yaml").write_text(yaml.safe_dump(recipe), "utf-8")
+    replaced = client.post(f"{url}/check", json={"recipe": recipe})
+    assert replaced.status_code == 422

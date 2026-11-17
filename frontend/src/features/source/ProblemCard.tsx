@@ -1,7 +1,7 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import clsx from 'clsx'
 import { ClipboardList } from 'lucide-react'
-import { useState } from 'react'
+import { useId, useState } from 'react'
 
 import { api } from '../../api/client'
 import type { ProblemFinding, Recipe } from '../../api/types'
@@ -27,24 +27,40 @@ const OPTIONS = {
 export function ProblemCard({
   sourceId,
   recipe,
+  latest,
   onWritten,
 }: {
   sourceId: string
   /** 編集中のレシピ (打つたびに試さないよう, 少し待ったもの) */
   recipe: Recipe | null
+  /** 待つ前の最新の編集中のレシピ (書き戻すのはこれ) */
+  latest: Recipe | null
   onWritten: (recipe: Recipe) => void
 }) {
   const queryClient = useQueryClient()
+  const idBase = useId()
   const [picked, setPicked] = useState<Record<string, 'known' | 'drop'>>({})
-  const key = ['problem-check', sourceId, JSON.stringify(recipe)]
+  // 編集のたびにカードが消えないように, 確かめ直す間は前の結果を出す
   const check = useQuery({
-    queryKey: key,
+    queryKey: ['problem-check', sourceId, JSON.stringify(recipe)],
     queryFn: () => api.checkProblem(sourceId, recipe!),
     enabled: recipe !== null,
+    placeholderData: keepPreviousData,
     retry: false,
   })
+  const data = check.data
+  const choices = data?.choices ?? []
   const write = useMutation({
-    mutationFn: () => api.writeProblem(sourceId, recipe!, picked),
+    mutationFn: () =>
+      api.writeProblem(
+        sourceId,
+        latest!,
+        // 今の選ぶ問いの答えだけ (前に出て消えた問いの答えは送らない)
+        Object.fromEntries(
+          choices.filter((c) => picked[c.column]).map((c) => [c.column, picked[c.column]!]),
+        ),
+        data?.version,
+      ),
     onSuccess: (result) => {
       setPicked({})
       queryClient.setQueryData(['recipe', sourceId], result.recipe)
@@ -52,11 +68,15 @@ export function ProblemCard({
       onWritten(result.recipe)
     },
   })
-  const data = check.data
-  const choices = data?.choices ?? []
   const errors = data?.conflicts.filter((item) => item.level === 'error') ?? []
   const unanswered = choices.filter((choice) => !picked[choice.column])
-  const blocked = !data || errors.length > 0 || unanswered.length > 0 || write.isPending
+  // 確かめが最新の編集に追いついていない間は書き戻さない
+  const settling =
+    check.isPlaceholderData || check.isFetching || JSON.stringify(latest) !== JSON.stringify(recipe)
+  const blocked = !data || settling || errors.length > 0 || unanswered.length > 0 || write.isPending
+  // 書き戻した後に編集したら, 書き戻しましたの表示を消す
+  const written =
+    write.data && JSON.stringify(latest) === JSON.stringify(write.data.recipe) ? write.data : null
   return (
     <Card
       title={
@@ -71,7 +91,9 @@ export function ProblemCard({
         問題の設定 (ML-Pathfinder) で決めた状態から始めたデータです. ここで変えた選び方を,
         問題の設定と比べて書き戻せます. 列の使い方は自動では変えません.
       </p>
-      {check.isPending && recipe !== null && <Spinner label="問題の設定と比べています" />}
+      {check.isPending && check.fetchStatus !== 'idle' && (
+        <Spinner label="問題の設定と比べています" />
+      )}
       {check.error && <ErrorBox error={check.error} />}
       {data && (
         <div className="space-y-3 text-sm">
@@ -100,15 +122,15 @@ export function ProblemCard({
               </ul>
             </section>
           )}
-          {choices.map((choice) => (
+          {choices.map((choice, index) => (
             <div key={choice.column} className="rounded-lg border border-line p-3">
-              <p id={`choice-${choice.column}`} className="text-xs text-ink-2">
+              <p id={`${idBase}-${index}`} className="text-xs text-ink-2">
                 {choice.message}
               </p>
               <div
                 className="mt-2 flex flex-wrap gap-2"
                 role="group"
-                aria-labelledby={`choice-${choice.column}`}
+                aria-labelledby={`${idBase}-${index}`}
               >
                 {choice.options.map((option) => (
                   <Button
@@ -144,18 +166,20 @@ export function ProblemCard({
         </div>
       )}
       {write.error && <ErrorBox error={write.error} />}
-      {write.data && (
-        <div role="status" className="mt-3 text-xs text-good-text">
-          書き戻しました (レシピもここに保存しました).
-          {write.data.changes.length > 0 && (
-            <ul className="mt-1 list-disc pl-5">
-              {write.data.changes.map((text) => (
-                <li key={text}>{text}</li>
-              ))}
-            </ul>
-          )}
-        </div>
-      )}
+      <div role="status" className="mt-3 text-xs text-good-text empty:hidden">
+        {written && (
+          <>
+            書き戻しました (レシピもここに保存しました).
+            {written.changes.length > 0 && (
+              <ul className="mt-1 list-disc pl-5">
+                {written.changes.map((text) => (
+                  <li key={text}>{text}</li>
+                ))}
+              </ul>
+            )}
+          </>
+        )}
+      </div>
     </Card>
   )
 }

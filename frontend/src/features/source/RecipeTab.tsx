@@ -380,6 +380,7 @@ export function RecipeTab({
           <ProblemCard
             sourceId={sourceId}
             recipe={pending.recipe}
+            latest={recipe}
             onWritten={() => {
               // 書き戻したレシピはここにも保存したので, 編集中の印を外す
               setSelected(null)

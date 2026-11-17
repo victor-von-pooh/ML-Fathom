@@ -32,6 +32,8 @@ export interface ProblemChoice {
 export interface ProblemCheck {
   name: string | null
   path: string
+  /** 書き戻すときに送り返す, 問題の設定のファイルの中身の印 */
+  version: string
   changes: string[]
   conflicts: ProblemFinding[]
   choices: ProblemChoice[]

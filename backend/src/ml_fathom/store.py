@@ -178,7 +178,10 @@ class SourceStore:
             変えた後のデータ, 無ければ None
         """
         # 決まった項目だけを書き換える
-        allowed = {"name", "target", "loader", "options", "kind", "problem"}
+        allowed = {
+            "name", "target", "loader", "options", "kind", "problem",
+            "problem_created",
+        }
         with self.lock:
             sources = self.read()
             for item in sources:
