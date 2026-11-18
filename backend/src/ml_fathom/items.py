@@ -1,6 +1,7 @@
 import base64
 import io
 import math
+from pathlib import Path
 from typing import Any, Optional
 
 import ml_eda
@@ -52,12 +53,130 @@ def item_response(
         response = png_response(item, size)
     elif data.kind == "pointcloud":
         response = points_response(item)
+    elif data.kind == "capture":
+        try:
+            response = JSONResponse(capture_body(data, index, item))
+        except Exception as error:
+            raise HTTPException(
+                422, f"撮影を描けませんでした: {error}"
+            ) from error
     else:
         response = JSONResponse({"text": str(item)})
     # 同じ画面で何度も開くので, 少しの間はブラウザに覚えさせる
     response.headers["Cache-Control"] = "private, max-age=60"
 
     return response
+
+
+def capture_body(
+    data: ml_eda.Data, index: int, item: dict[str, Any]
+) -> dict[str, Any]:
+    """
+    多視点の撮影の 1 件を, 画面で描く形にする関数
+
+    Parameters
+    ----------
+    data: ml_eda.Data
+        多視点の撮影のデータ
+    index: int
+        行の位置
+    item: dict[str, Any]
+        load_item で読んだ撮影の中身
+
+    Returns
+    ----------
+    body: dict[str, Any]
+        frames (番号, 追跡, 画像と深度と信頼度の有無), layout (上から見た
+        カメラの配置), intrinsics, point_cloud (点群の有無)
+    """
+    # 場所はファイルの有無だけを返す (画面は番号で 1 枚ずつ取る)
+    distance = data.frame["distance_median"].iloc[index]
+    layout = ml_eda.capture_layout(
+        item, None if distance != distance else float(distance)
+    )
+    body = {
+        "frames": [
+            {"index": number, "tracking": frame.get("tracking"),
+             "image": frame.get("image") is not None,
+             "depth": (frame.get("raw_depth") or frame.get("depth"))
+             is not None,
+             "confidence": frame.get("confidence") is not None}
+            for number, frame in enumerate(item["frames"])
+        ],
+        "layout": layout,
+        # JSON にできない値 (NaN など) は None
+        "intrinsics": {
+            key: value if isinstance(value, (int, float))
+            and math.isfinite(value) else None
+            for key, value in item["intrinsics"].items()
+        },
+        "point_cloud": item.get("point_cloud") is not None,
+    }
+
+    return body
+
+
+def capture_layer(
+    item: dict[str, Any], frame: int, layer: str
+) -> np.ndarray:
+    """
+    多視点の撮影の 1 枚の, 画像か深度か信頼度を配列で読む関数
+
+    Parameters
+    ----------
+    item: dict[str, Any]
+        load_item で読んだ撮影の中身 (場所は撮影のディレクトリの中に限る)
+    frame: int
+        枚の番号
+    layer: str
+        image, depth (生の深度. 無ければ穴を埋めた深度), confidence
+
+    Returns
+    ----------
+    array: np.ndarray
+        8 ビット (深度は欠けを除いた 2 % 点から 98 % 点で 0 から 255 に.
+        欠けは 0. 信頼度は値のまま)
+
+    Raises
+    ----------
+    HTTPException
+        無い枚か, その枚に無い層は 404
+    """
+    # 層ごとの場所
+    from PIL import Image
+
+    if not 0 <= frame < len(item["frames"]):
+        raise HTTPException(404, f"{frame} 枚目はありません")
+    entry = item["frames"][frame]
+    place = {
+        "image": entry.get("image"),
+        "depth": entry.get("raw_depth") or entry.get("depth"),
+        "confidence": entry.get("confidence"),
+    }.get(layer)
+    if not place:
+        raise HTTPException(404, f"{frame} 枚目に {layer} がありません")
+    if layer == "image":
+        array: np.ndarray = ml_eda.media.read_image(Path(place))
+        return array
+    with Image.open(place) as image:
+        values = np.asarray(image, dtype=np.float64)
+    if values.ndim == 3:
+        # 色の付いた形で保存した深度や信頼度は先頭のチャンネル
+        values = values[:, :, 0]
+
+    # 深度は欠け (0) を除いた 2 % 点から 98 % 点で明るさに (遠い数画素で
+    # 全体が暗くならないように). 信頼度は 0 から 255 のまま
+    if layer == "confidence":
+        array = values.clip(0, 255).astype(np.uint8)
+        return array
+    valid = values[values > 0]
+    low, high = (
+        np.percentile(valid, [2, 98]) if valid.size else (0.0, 1.0)
+    )
+    scaled = (values - low) / max(float(high - low), 1e-9) * 255
+    array = np.where(values > 0, scaled.clip(0, 255), 0).astype(np.uint8)
+
+    return array
 
 
 def png_bytes(image: np.ndarray, size: Optional[int] = None) -> bytes:

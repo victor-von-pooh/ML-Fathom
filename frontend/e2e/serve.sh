@@ -53,6 +53,53 @@ problem = ml_quest.attach_data(example_problem("総菜の作る量"),
 ml_quest.save_problem(problem, work / "problem")
 PY
 
+# 多視点の撮影の見本 (中心の周りを 6 枚で一周. 画像, 生の深度, 信頼度)
+uv run python - "$WORK/captures/round" <<'PY'
+import json
+import math
+import sys
+from pathlib import Path
+
+import numpy as np
+from PIL import Image
+
+place = Path(sys.argv[1])
+for name in ("images", "raw_depth", "confidence"):
+    (place / name).mkdir(parents=True)
+frames = []
+for index in range(6):
+    angle = 2 * math.pi * index / 6
+    position = np.array([math.sin(angle), 0.2, math.cos(angle)])
+    back = position / np.linalg.norm(position)
+    right = np.cross([0.0, 1.0, 0.0], back)
+    right = right / np.linalg.norm(right)
+    pose = np.eye(4)
+    pose[:3, 0], pose[:3, 1] = right, np.cross(back, right)
+    pose[:3, 2], pose[:3, 3] = back, position
+    Image.new("RGB", (64, 48), (40 * index, 120, 200)).save(
+        place / "images" / f"{index}.jpg"
+    )
+    depth = np.linspace(900, 1100, 48 * 64).reshape(48, 64)
+    Image.fromarray(depth.astype(np.uint16)).save(
+        place / "raw_depth" / f"{index}.png"
+    )
+    Image.fromarray(np.full((48, 64), 200, np.uint8)).save(
+        place / "confidence" / f"{index}.png"
+    )
+    frames.append({
+        "file_path": f"images/{index}.jpg",
+        "transform_matrix": pose.tolist(),
+        "raw_depth_file_path": f"raw_depth/{index}.png",
+        "confidence_file_path": f"confidence/{index}.png",
+    })
+(place / "transforms.json").write_text(json.dumps({
+    "fl_x": 50.0, "fl_y": 50.0, "cx": 32.0, "cy": 24.0, "w": 64, "h": 48,
+    "depth": {"depth_format": "png16_millimeter", "invalid_value": 0},
+    "coordinate_convention": {"world_up": [0.0, 1.0, 0.0]},
+    "frames": frames,
+}), "utf-8")
+PY
+
 # データの置き場も作業用のディレクトリにし, 決まったトークンで起動
 ML_FATHOM_HOME="$WORK/home" ML_FATHOM_TOKEN=e2e-token \
   exec uv run ml-fathom --port "$PORT"

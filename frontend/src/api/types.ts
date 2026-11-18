@@ -199,6 +199,10 @@ export interface ItemsInfo {
   unreadable?: number
   /** 文を区切る単位の比較 (文だけ) */
   tokenizers?: TokenizerComparison
+  /** 多視点の撮影の枚数, 深度の割合 (中央値), 撮影距離の範囲 (メートル) */
+  frames?: { min: number; median: number; max: number } | null
+  depth?: { valid: number | null; confident: number | null }
+  distance?: { min: number | null; max: number | null }
 }
 
 /** 文を区切る単位 (文字, 語, 部分語) ごとの測った値 */
@@ -284,6 +288,27 @@ export interface DatasetSummary {
   splits: Record<string, number>
   features: number
   created_at: string
+}
+
+/** 多視点の撮影の 1 件 (各枚と上から見たカメラの配置) */
+export interface CaptureItem {
+  frames: {
+    index: number
+    tracking: string | null
+    image: boolean
+    depth: boolean
+    confidence: boolean
+  }[]
+  layout: {
+    /** 物の周りを回った撮影か (違えば位置は null) */
+    orbit: boolean
+    cameras: { frame: number; x: number | null; y: number | null; tracked: boolean }[]
+    /** 最も大きい方位の隙間 (度) と, その始まりの方位 (度. 上から見て反時計回り) */
+    gap: number | null
+    gap_from: number | null
+  }
+  intrinsics: Record<string, number | null>
+  point_cloud: boolean
 }
 
 export interface PointsItem {

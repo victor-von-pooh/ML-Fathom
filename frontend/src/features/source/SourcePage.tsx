@@ -77,19 +77,22 @@ export function SourcePage() {
             {data && (
               <>
                 <ReadAsControl source={source} profile={data} />
-                <label className="flex items-center gap-2 text-sm">
-                  目的の列
-                  <select
-                    value={source.target ?? ''}
-                    onChange={(event) => setTarget.mutate(event.target.value || null)}
-                    className="h-8 rounded-lg border border-line bg-surface px-2 font-mono"
-                  >
-                    <option value="">なし</option>
-                    {Object.keys(data.columns).map((name) => (
-                      <option key={name}>{name}</option>
-                    ))}
-                  </select>
-                </label>
+                {/* 多視点の撮影は前処理と書き出しを扱わないので, 目的の列は選ばない */}
+                {source.kind !== 'capture' && (
+                  <label className="flex items-center gap-2 text-sm">
+                    目的の列
+                    <select
+                      value={source.target ?? ''}
+                      onChange={(event) => setTarget.mutate(event.target.value || null)}
+                      className="h-8 rounded-lg border border-line bg-surface px-2 font-mono"
+                    >
+                      <option value="">なし</option>
+                      {Object.keys(data.columns).map((name) => (
+                        <option key={name}>{name}</option>
+                      ))}
+                    </select>
+                  </label>
+                )}
               </>
             )}
           </div>
@@ -122,7 +125,13 @@ export function SourcePage() {
         )}
         {data && tab === 'samples' && <SamplesTab key={source.id} source={source} profile={data} />}
         {tab === 'data' && <DataTab sourceId={id} />}
-        {data && tab === 'recipe' && info.data && (
+        {data && tab === 'recipe' && source.kind === 'capture' && (
+          <p className="rounded-xl border border-line bg-surface p-4 text-sm text-ink-2">
+            多視点の撮影は, 今は読み込みと分析だけです. 前処理と書き出しは, 多視点の学習の正解
+            (何を正解の形にするか) が決まってから足します.
+          </p>
+        )}
+        {data && tab === 'recipe' && info.data && source.kind !== 'capture' && (
           <RecipeTab
             key={`${source.id}:${source.kind}:${JSON.stringify(source.options)}`}
             sourceId={id}

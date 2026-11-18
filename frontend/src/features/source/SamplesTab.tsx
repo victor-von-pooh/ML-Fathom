@@ -7,10 +7,11 @@ import type { PointsItem, Profile, Source } from '../../api/types'
 import { Button, Card, ErrorBox, Spinner, StatTile } from '../../components/ui'
 import { formatCount, formatNumber } from '../../lib/format'
 import { useDebounced } from '../../lib/useDebounced'
+import { CaptureView } from './CaptureView'
 import { PointCloudView } from './PointCloudView'
 
 // 1 ページの件数
-const PAGE = { image: 48, text: 30, pointcloud: 20 } as Record<string, number>
+const PAGE = { image: 48, text: 30, pointcloud: 20, capture: 20 } as Record<string, number>
 
 // 一覧の画像の長い辺 (画素)
 const THUMBNAIL = 256
@@ -61,7 +62,7 @@ function Thumbnail({ src, alt }: { src: string; alt: string }) {
   )
 }
 
-/** 画像, 文, 点群の中身を 1 件ずつ見る */
+/** 画像, 文, 点群, 多視点の撮影の中身を 1 件ずつ見る */
 export function SamplesTab({ source, profile }: { source: Source; profile: Profile }) {
   const kind = source.kind
   const page = PAGE[kind] ?? 30
@@ -102,8 +103,32 @@ export function SamplesTab({ source, profile }: { source: Source; profile: Profi
               hint="0 から 255"
             />
           )}
+          {items.frames && (
+            <StatTile
+              label="1 回の撮影の枚数"
+              value={formatNumber(items.frames.median)}
+              hint={`中央値. ${items.frames.min} から ${items.frames.max}`}
+            />
+          )}
+          {items.depth && items.depth.confident !== null && (
+            <StatTile
+              label="信頼できる深度の画素"
+              value={`${(items.depth.confident * 100).toFixed(1)} %`}
+              hint="撮影ごとの割合の中央値"
+            />
+          )}
+          {items.distance && items.distance.min !== null && items.distance.max !== null && (
+            <StatTile
+              label="撮影距離"
+              value={`${items.distance.min.toFixed(2)}–${items.distance.max.toFixed(2)} m`}
+              hint="枚ごとの深度の中央値の範囲"
+            />
+          )}
           {items.unreadable !== undefined && (
-            <StatTile label="読めないファイル" value={items.unreadable} />
+            <StatTile
+              label={kind === 'capture' ? '読めない撮影' : '読めないファイル'}
+              value={items.unreadable}
+            />
           )}
         </div>
       )}
@@ -229,6 +254,52 @@ export function SamplesTab({ source, profile }: { source: Source; profile: Profi
               <p className="text-sm text-ink-3">左の一覧から選ぶと, 3D で表示します.</p>
             ) : (
               <PointCloudItem sourceId={source.id} index={selected} />
+            )}
+          </Card>
+        </div>
+      )}
+      {data && kind === 'capture' && (
+        <div className="grid gap-4 lg:grid-cols-[18rem_1fr]">
+          <ul
+            aria-label="撮影"
+            className="max-h-[70vh] overflow-auto rounded-xl border border-line bg-surface"
+          >
+            {data.rows.map((row, at) => {
+              const index = data.index[at]!
+              const confident = valueOf(row, 'depth_confident')
+              const gap = valueOf(row, 'view_gap')
+              return (
+                <li key={index}>
+                  <button
+                    type="button"
+                    aria-current={selected === index}
+                    onClick={() => setSelected(index)}
+                    className={clsx(
+                      'flex w-full flex-col px-3 py-1.5 text-left text-sm hover:bg-surface-2',
+                      selected === index && 'bg-accent-soft',
+                    )}
+                  >
+                    <span className="truncate font-mono">{String(valueOf(row, 'path'))}</span>
+                    <span className="text-xs text-ink-3">
+                      {valueOf(row, 'error')
+                        ? '読めません'
+                        : `${formatNumber(valueOf(row, 'frames'))} 枚`}
+                      {typeof confident === 'number' &&
+                        ` · 信頼できる深度 ${(confident * 100).toFixed(1)} %`}
+                      {typeof gap === 'number' && ` · 隙間 ${gap.toFixed(0)} 度`}
+                    </span>
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
+          <Card title={selected === null ? '撮影を選んでください' : `${selected} 番目の撮影`}>
+            {selected === null ? (
+              <p className="text-sm text-ink-3">
+                左の一覧から選ぶと, 上から見たカメラの配置と各枚の画像を表示します.
+              </p>
+            ) : (
+              <CaptureView sourceId={source.id} index={selected} />
             )}
           </Card>
         </div>
