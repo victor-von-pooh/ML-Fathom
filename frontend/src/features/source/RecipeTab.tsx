@@ -22,6 +22,7 @@ import { findDecisions, withAutoItems } from '../../lib/decisions'
 import { autoRecipe, suggestSteps } from '../../lib/suggest'
 import { useDecided } from '../../lib/useDecided'
 import { DecisionsCard } from './DecisionsCard'
+import { Findings } from './Findings'
 import { ProblemCard } from './ProblemCard'
 import { ItemPreviewCard } from './ItemPreviewCard'
 import { ModelHintsView } from './ModelHintsView'
@@ -373,6 +374,11 @@ export function RecipeTab({
   }
   const result = preview.data
   const isFinal = upto === recipe.steps.length
+  // 分割の後の気付きは重要度つきで出し, 同じ文は注意の並びから除く
+  const findings = result?.findings ?? []
+  const notes = (result?.notes ?? []).filter(
+    (note) => !findings.some((item) => item.message === note),
+  )
   return (
     <div className="grid gap-4 xl:grid-cols-[minmax(0,30rem)_1fr]">
       <div className="space-y-4">
@@ -426,9 +432,12 @@ export function RecipeTab({
             <select
               id="split"
               value={recipe.split.method}
-              onChange={(event) =>
-                update({ ...recipe, split: { ...recipe.split, method: event.target.value } })
-              }
+              onChange={(event) => {
+                const split: Recipe['split'] = { ...recipe.split, method: event.target.value }
+                // 分けないときはグループの列の欄を出さないので, 隠れたまま残さない
+                if (split.method === 'none') delete split.column
+                update({ ...recipe, split })
+              }}
               className="h-8 rounded border border-line bg-surface px-2"
             >
               <option value="random">無作為</option>
@@ -462,23 +471,35 @@ export function RecipeTab({
                 />
               </div>
             ))}
-            {recipe.split.method === 'group' && (
+            {/* グループの列は group の分割に使い, 他の分割では分割をまたぐ重なりを確かめる
+                (分けないときは重なりが無いので出さない) */}
+            {recipe.split.method !== 'none' && (
               <>
                 <label htmlFor="split-column" className="text-ink-3">
                   グループの列
+                  {recipe.split.method !== 'group' && (
+                    <span className="block text-xs"> (任意. 分割をまたぐ重なりを確かめる)</span>
+                  )}
                 </label>
                 <select
                   id="split-column"
                   value={recipe.split.column ?? ''}
-                  onChange={(event) =>
-                    update({ ...recipe, split: { ...recipe.split, column: event.target.value } })
-                  }
+                  onChange={(event) => {
+                    // 空を選んだら列の指定を消す (古い列で重なりを確かめ続けないように)
+                    const split: Recipe['split'] = { ...recipe.split, column: event.target.value }
+                    if (!split.column) delete split.column
+                    update({ ...recipe, split })
+                  }}
                   className="h-8 rounded border border-line bg-surface px-2 font-mono"
                 >
-                  <option value="">選ぶ…</option>
+                  <option value="">{recipe.split.method === 'group' ? '選ぶ…' : 'なし'}</option>
                   {columns.map((column) => (
                     <option key={column}>{column}</option>
                   ))}
+                  {/* 今のデータに無い列 (読み方を変えたなど) も, 選んだままと分かるように出す */}
+                  {recipe.split.column && !columns.includes(recipe.split.column) && (
+                    <option value={recipe.split.column}>{recipe.split.column}</option>
+                  )}
                 </select>
               </>
             )}
@@ -817,13 +838,21 @@ ${
                   {result.classes && result.classes.length > 0 && (
                     <div>クラス: {result.classes.join(', ')}</div>
                   )}
-                  {result.notes && result.notes.length > 0 && (
-                    <ul className="mt-2 list-disc pl-5 text-warning-text">
-                      {result.notes.map((note) => (
-                        <li key={note}>{note}</li>
-                      ))}
-                    </ul>
-                  )}
+                  {/* 選んだ列などで変わる注意と気付きを, 読み上げにも知らせる */}
+                  <div role="status" aria-live="polite">
+                    {notes.length > 0 && (
+                      <ul className="mt-2 list-disc pl-5 text-warning-text">
+                        {notes.map((note) => (
+                          <li key={note}>{note}</li>
+                        ))}
+                      </ul>
+                    )}
+                    {findings.length > 0 && (
+                      <div className="mt-2">
+                        <Findings findings={findings} />
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
             </div>

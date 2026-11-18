@@ -259,6 +259,8 @@ export interface PreviewResult {
   removed: string[]
   features?: string[]
   notes?: string[]
+  /** 分割の後に分かる気付き (分割をまたぐグループや画像の重なり. 文は notes にも入る) */
+  findings?: Finding[]
   splits?: Record<string, number>
   classes?: string[]
 }

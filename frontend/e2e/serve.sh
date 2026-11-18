@@ -30,6 +30,22 @@ frame.loc[:70, "age"] = np.nan
 frame.to_csv(sys.argv[1], index=False)
 PY
 
+# 同じ会員が複数の行にいる表 (分割をまたぐグループの重なりを確かめる)
+uv run python - "$WORK/visits.csv" <<'PY'
+import sys
+
+import numpy as np
+import pandas as pd
+
+rng = np.random.default_rng(1)
+rows = 120
+pd.DataFrame({
+    "member_id": np.repeat(np.arange(30), 4),
+    "spend": rng.normal(100, 20, rows).round(),
+    "churned": rng.choice(["yes", "no"], rows),
+}).to_csv(sys.argv[1], index=False)
+PY
+
 # 問題の設定の見本 (総菜の作る量) に, 日々の売れた数の表を入れて保存する
 uv run python - "$WORK" <<'PY'
 import sys

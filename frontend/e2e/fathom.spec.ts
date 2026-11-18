@@ -48,6 +48,49 @@ test('目的の列を選び, 手順を作って書き出す', async ({ page }) =
   await expect(page.getByText('people', { exact: true })).toBeVisible()
 })
 
+test('無作為の分割でもグループの列を選ぶと, 分割をまたぐ重なりを注意する', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'データを追加' }).first().click()
+  await page.getByLabel('ディレクトリのパス').fill(path.dirname(TABLE))
+  await page.getByRole('button', { name: '移動' }).click()
+  await page.getByRole('button', { name: /visits\.csv/ }).click()
+  await page.getByRole('button', { name: '追加', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'visits.csv' })).toBeVisible()
+
+  // 無作為の分割に, 同じ会員が複数の行にいる列をグループの列として選ぶ
+  await page.getByRole('tab', { name: '前処理と書き出し' }).click()
+  const split = page.getByRole('combobox', { name: '分割', exact: true })
+  await split.selectOption('random')
+  const group = page.getByRole('combobox', { name: /グループの列 \(任意/ })
+  await expect(group).toHaveValue('')
+  await group.selectOption('member_id')
+  await expect(page.getByText('group_overlap')).toBeVisible({ timeout: 20_000 })
+  await expect(page.getByText(/member_id の同じ値が .* 複数の分割にまたがります/)).toBeVisible()
+
+  // 空を選ぶと列の指定が消え, 気付きも消える
+  const cleared = page.waitForResponse(
+    (response) =>
+      response.url().includes('/preview') &&
+      !(response.request().postData() ?? '').includes('"column"'),
+  )
+  await group.selectOption('')
+  await cleared
+  await expect(page.getByText('学習に使う列')).toBeVisible({ timeout: 20_000 })
+  await expect(page.getByText('group_overlap')).toHaveCount(0)
+
+  // 分けないにすると欄が隠れ, 列の指定も消える
+  await group.selectOption('member_id')
+  await expect(page.getByText('group_overlap')).toBeVisible({ timeout: 20_000 })
+  await split.selectOption('none')
+  await expect(page.getByRole('combobox', { name: /グループの列/ })).toHaveCount(0)
+  await split.selectOption('random')
+  await expect(page.getByRole('combobox', { name: /グループの列 \(任意/ })).toHaveValue('')
+
+  // group の分割では同じ欄が分割に使う列になる
+  await split.selectOption('group')
+  await expect(page.getByRole('combobox', { name: 'グループの列', exact: true })).toBeVisible()
+})
+
 test('問題の設定から始め, 分からない列を使うと選んで書き戻す', async ({ page }) => {
   // 問題の設定のディレクトリを選ぶと, 決めた状態で始まる
   await page.goto('/')
