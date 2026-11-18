@@ -187,6 +187,18 @@ def test_recipe_preview_and_export(
     assert "color=red" in view["added"]
     assert view["splits"] == {"train": 90, "valid": 30}
     assert view["classes"] == ["a", "b"]
+    assert view["findings"] == []
+
+    # グループの列を選ぶと, 層化でも分割をまたぐ同じ値を気付きにする
+    grouped = {**recipe, "split": {**recipe["split"], "column": "color"}}
+    view = client.post(
+        f"/api/sources/{sid}/preview", json={"recipe": grouped, "upto": 3}
+    ).json()
+    overlap = view["findings"][0]
+    assert overlap["code"] == "group_overlap"
+    assert overlap["severity"] == "warning"
+    assert overlap["columns"] == ["color"]
+    assert overlap["message"] in view["notes"]
 
     # 書き出しと一覧. 同じ名前は置き換えの指定が無ければ 409
     body = {"recipe": recipe, "name": "demo"}

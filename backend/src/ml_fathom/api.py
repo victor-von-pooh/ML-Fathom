@@ -954,7 +954,7 @@ def preview(
     ----------
     result: dict[str, Any]
         前と後の行数, 列, 先頭の行, 足した列と消えた列,
-        upto が全ての手順なら学習に使う列と注意
+        upto が全ての手順なら学習に使う列, 注意, 分割の後の気付き
     """
     data = load_source(find_source(request, source_id))
     try:
@@ -964,6 +964,8 @@ def preview(
             prepared = ml_eda.prepare(data, body.recipe, read_items=False)
             result["features"] = prepared.features
             result["notes"] = prepared.notes
+            # 分割の後に分かる気付き (分割をまたぐグループや画像の重なり)
+            result["findings"] = prepared.findings
             result["splits"] = {
                 name: int(len(frame))
                 for name, frame in prepared.frames.items()
