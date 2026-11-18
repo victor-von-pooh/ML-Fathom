@@ -58,11 +58,17 @@ def problem_file(text: str) -> Path:
     HTTPException
         無い場合は 404, YAML のファイルでない場合は 422
     """
-    # ディレクトリなら中の problem.yaml
-    path = Path(text.strip()).expanduser().resolve()
-    if path.is_dir():
-        path = path / "problem.yaml"
-    if not path.is_file():
+    # ディレクトリなら中の problem.yaml (読めない場所の形は 422)
+    try:
+        path = Path(text.strip()).expanduser().resolve()
+        if path.is_dir():
+            path = path / "problem.yaml"
+        found = path.is_file()
+    except (OSError, ValueError, RuntimeError) as error:
+        raise HTTPException(
+            422, f"問題の設定の場所として読めません: {error}"
+        ) from error
+    if not found:
         raise HTTPException(404, f"{path} に問題の設定がありません")
     if path.suffix.lower() not in SUFFIXES:
         raise HTTPException(
@@ -165,8 +171,13 @@ def version_of(path: Path) -> str:
     version: str
         中身の sha256 の 16 進
     """
-    # ファイルの中身の要約
-    version = hashlib.sha256(path.read_bytes()).hexdigest()
+    # ファイルの中身の要約 (読んだ後に消えた場合も 422)
+    try:
+        version = hashlib.sha256(path.read_bytes()).hexdigest()
+    except OSError as error:
+        raise HTTPException(
+            422, f"問題の設定を読めません: {error}"
+        ) from error
 
     return version
 

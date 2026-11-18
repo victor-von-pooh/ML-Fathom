@@ -146,6 +146,11 @@ def test_start_from_problem(client: TestClient, tmp_path: Path) -> None:
     assert client.post("/api/problems/start", json={
         "path": str(tmp_path / "none")
     }).status_code == 404
+    for broken in ("/tmp/a\x00b", "~nosuchuser0123/problem.yaml",
+                   "/" + "a" * 5000):
+        assert client.post("/api/problems/start", json={
+            "path": broken
+        }).status_code == 422
     empty = tmp_path / "empty"
     ml_quest.save_problem(example_problem("総菜の作る量"), empty)
     response = client.post("/api/problems/start", json={"path": str(empty)})
