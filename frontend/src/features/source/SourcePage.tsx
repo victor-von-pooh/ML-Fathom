@@ -77,19 +77,22 @@ export function SourcePage() {
             {data && (
               <>
                 <ReadAsControl source={source} profile={data} />
-                <label className="flex items-center gap-2 text-sm">
-                  目的の列
-                  <select
-                    value={source.target ?? ''}
-                    onChange={(event) => setTarget.mutate(event.target.value || null)}
-                    className="h-8 rounded-lg border border-line bg-surface px-2 font-mono"
-                  >
-                    <option value="">なし</option>
-                    {Object.keys(data.columns).map((name) => (
-                      <option key={name}>{name}</option>
-                    ))}
-                  </select>
-                </label>
+                {/* 多視点の撮影は前処理と書き出しを扱わないので, 目的の列は選ばない */}
+                {source.kind !== 'capture' && (
+                  <label className="flex items-center gap-2 text-sm">
+                    目的の列
+                    <select
+                      value={source.target ?? ''}
+                      onChange={(event) => setTarget.mutate(event.target.value || null)}
+                      className="h-8 rounded-lg border border-line bg-surface px-2 font-mono"
+                    >
+                      <option value="">なし</option>
+                      {Object.keys(data.columns).map((name) => (
+                        <option key={name}>{name}</option>
+                      ))}
+                    </select>
+                  </label>
+                )}
               </>
             )}
           </div>

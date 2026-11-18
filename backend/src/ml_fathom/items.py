@@ -54,7 +54,12 @@ def item_response(
     elif data.kind == "pointcloud":
         response = points_response(item)
     elif data.kind == "capture":
-        response = JSONResponse(capture_body(data, index, item))
+        try:
+            response = JSONResponse(capture_body(data, index, item))
+        except Exception as error:
+            raise HTTPException(
+                422, f"撮影を描けませんでした: {error}"
+            ) from error
     else:
         response = JSONResponse({"text": str(item)})
     # 同じ画面で何度も開くので, 少しの間はブラウザに覚えさせる
@@ -99,7 +104,12 @@ def capture_body(
             for number, frame in enumerate(item["frames"])
         ],
         "layout": layout,
-        "intrinsics": item["intrinsics"],
+        # JSON にできない値 (NaN など) は None
+        "intrinsics": {
+            key: value if isinstance(value, (int, float))
+            and math.isfinite(value) else None
+            for key, value in item["intrinsics"].items()
+        },
         "point_cloud": item.get("point_cloud") is not None,
     }
 
@@ -150,6 +160,9 @@ def capture_layer(
         return array
     with Image.open(place) as image:
         values = np.asarray(image, dtype=np.float64)
+    if values.ndim == 3:
+        # 色の付いた形で保存した深度や信頼度は先頭のチャンネル
+        values = values[:, :, 0]
 
     # 深度は欠け (0) を除いた 2 % 点から 98 % 点で明るさに (遠い数画素で
     # 全体が暗くならないように). 信頼度は 0 から 255 のまま

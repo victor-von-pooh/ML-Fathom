@@ -5,10 +5,8 @@ import { useState } from 'react'
 import { api } from '../../api/client'
 import type { CaptureItem } from '../../api/types'
 import { Button, ErrorBox, Spinner } from '../../components/ui'
+import { MAP, gapPath } from '../../lib/orbit'
 import { PointCloudView } from './PointCloudView'
-
-/** 配置の図の大きさ (画素) と, カメラの最も遠い位置を描く半径 */
-const MAP = { size: 280, radius: 110 }
 
 /** 一覧の 1 枚の長い辺 (画素) */
 const THUMBNAIL = 192
@@ -21,23 +19,6 @@ const LAYERS = {
 } as const
 
 type Layer = keyof typeof LAYERS
-
-/** 方位 (度. 上から見て反時計回り) と半径の点を, 図の座標にする (画面の y は下向き) */
-function polar(degrees: number, radius: number): [number, number] {
-  const angle = (degrees * Math.PI) / 180
-  const center = MAP.size / 2
-  return [center + radius * Math.cos(angle), center - radius * Math.sin(angle)]
-}
-
-/** 最も大きい隙間の扇形の道筋 */
-function gapPath(from: number, gap: number): string {
-  const [x0, y0] = polar(from, MAP.radius + 14)
-  const [x1, y1] = polar(from + gap, MAP.radius + 14)
-  const center = MAP.size / 2
-  const large = gap > 180 ? 1 : 0
-  // 画面の y は下向きなので, 反時計回りは掃く向き 0
-  return `M ${center} ${center} L ${x0} ${y0} A ${MAP.radius + 14} ${MAP.radius + 14} 0 ${large} 0 ${x1} ${y1} Z`
-}
 
 /** 物の中心から上から見たカメラの配置と, 周回の最も大きい隙間 */
 function OrbitMap({ layout }: { layout: CaptureItem['layout'] }) {
@@ -97,7 +78,7 @@ function OrbitMap({ layout }: { layout: CaptureItem['layout'] }) {
       <figcaption className="mt-1 text-xs text-ink-3">
         十字が物の中心, 点がカメラ (白抜きは追跡できなかった枚). 破線の円は中心から {far.toFixed(2)}{' '}
         m. 色を付けた扇形が, 方位の最も大きい隙間 ({(layout.gap ?? 0).toFixed(0)} 度.
-        その向きから見た形は, 撮った画像からは分かりません)
+        追跡できた枚だけで測る. その向きから見た形は, 撮った画像からは分かりません)
       </figcaption>
     </figure>
   )
@@ -117,9 +98,11 @@ function CaptureCloud({ sourceId, index }: { sourceId: string; index: number }) 
 /** 多視点の撮影の 1 件 (配置, 各枚の画像と深度と信頼度, 点群) */
 export function CaptureView({ sourceId, index }: { sourceId: string; index: number }) {
   const [layer, setLayer] = useState<Layer>('image')
-  const [showCloud, setShowCloud] = useState(false)
+  // 点群を開いた撮影 (別の撮影を選んだら閉じる. 層の選び方は比べられるように残す)
+  const [cloudFor, setCloudFor] = useState<number | null>(null)
+  const showCloud = cloudFor === index
   const item = useQuery({
-    queryKey: ['item', sourceId, index],
+    queryKey: ['item', sourceId, index, 'capture'],
     queryFn: () => api.item<CaptureItem>(sourceId, index),
   })
   if (item.isPending) return <Spinner label="撮影を読み込み中" />
@@ -189,7 +172,7 @@ export function CaptureView({ sourceId, index }: { sourceId: string; index: numb
           {showCloud ? (
             <CaptureCloud sourceId={sourceId} index={index} />
           ) : (
-            <Button onClick={() => setShowCloud(true)}>撮影の点群を見る</Button>
+            <Button onClick={() => setCloudFor(index)}>撮影の点群を見る</Button>
           )}
         </section>
       )}

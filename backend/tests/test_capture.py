@@ -157,10 +157,13 @@ def test_capture_limits(client: TestClient, tmp_path: Path) -> None:
     Image.new("RGB", (4, 4)).save(tmp_path / "secret.png")
     transforms = json.loads((place / "transforms.json").read_text("utf-8"))
     transforms["frames"][0]["file_path"] = "../secret.png"
+    transforms["fl_x"] = float("nan")
     (place / "transforms.json").write_text(json.dumps(transforms), "utf-8")
     source = client.post("/api/sources", json={"path": str(place)}).json()
     url = f"/api/sources/{source['id']}/items/0"
-    assert client.get(url).json()["frames"][0]["image"] is False
+    item = client.get(url).json()
+    assert item["frames"][0]["image"] is False
+    assert item["intrinsics"]["fl_x"] is None
     assert client.get(f"{url}/frames/0").status_code == 404
 
     # 表のデータには撮影の 1 枚は無い

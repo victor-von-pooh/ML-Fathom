@@ -96,6 +96,10 @@ class Cache:
 DATA_CACHE = Cache(CACHE_SIZE)
 PROFILE_CACHE = Cache(CACHE_SIZE * 4)
 
+# 多視点の撮影の 1 件の中身 (各枚の場所と姿勢. 1 枚ずつの要求で読み直さ
+# ないように)
+CAPTURE_CACHE = Cache(CACHE_SIZE * 4)
+
 
 class SourceCreate(BaseModel):
     path: str = Field(description="ファイルかディレクトリ (~ から書ける)")
@@ -770,17 +774,18 @@ def get_capture_frame(
     Returns
     ----------
     response: Response
-        PNG (深度と信頼度は最小と最大で 0 から 255 に)
+        PNG (深度は欠けを除いた 2 % 点から 98 % 点で 0 から 255 に,
+        信頼度は値のまま)
     """
     # 撮影の中身から, 撮影のディレクトリの中に限った場所だけを読む
-    data, item = capture_of(request, source_id, index)
+    item = capture_of(request, source_id, index)
     try:
         array = capture_layer(item, frame, layer)
+        response = png_response(array, size)
     except HTTPException:
         raise
     except Exception as error:
         raise HTTPException(422, f"読めませんでした: {error}") from error
-    response = png_response(array, size)
     response.headers["Cache-Control"] = "private, max-age=60"
 
     return response
@@ -808,7 +813,7 @@ def get_capture_cloud(
         点と色の JSON (5 万点まで間引く)
     """
     # 撮影のディレクトリの中の点群だけ
-    _, item = capture_of(request, source_id, index)
+    item = capture_of(request, source_id, index)
     if not item.get("point_cloud"):
         raise HTTPException(404, "この撮影には点群がありません")
     try:
@@ -822,9 +827,9 @@ def get_capture_cloud(
 
 def capture_of(
     request: Request, source_id: str, index: int
-) -> tuple[ml_eda.Data, dict[str, Any]]:
+) -> dict[str, Any]:
     """
-    多視点の撮影のデータと, 1 件の中身を返す関数
+    多視点の撮影の 1 件の中身を返す関数 (読み込みが同じ間は覚える)
 
     Parameters
     ----------
@@ -837,27 +842,32 @@ def capture_of(
 
     Returns
     ----------
-    loaded: tuple[ml_eda.Data, dict[str, Any]]
-        データと, load_item で読んだ撮影の中身
+    item: dict[str, Any]
+        load_item で読んだ撮影の中身
 
     Raises
     ----------
     HTTPException
         多視点の撮影でない場合は 422, 無い行は 404, 読めない撮影は 422
     """
-    # 種類と行の確かめ
-    data = load_source(find_source(request, source_id))
+    # 種類と行の確かめ. 中身は読み込みの鍵と行の位置で覚える
+    source = find_source(request, source_id)
+    data = load_source(source)
     if data.kind != "capture":
         raise HTTPException(422, "多視点の撮影のデータではありません")
     if not 0 <= index < len(data.frame):
         raise HTTPException(404, f"{index} 番目はありません")
+    key = f"{source_key(source)}:{index}"
+    item: Optional[dict[str, Any]] = CAPTURE_CACHE.get(key)
+    if item is not None:
+        return item
     try:
         item = data.load_item(index)
     except Exception as error:
         raise HTTPException(422, f"読めませんでした: {error}") from error
-    loaded = (data, item)
+    CAPTURE_CACHE.put(key, item)
 
-    return loaded
+    return item
 
 
 @router.get("/sources/{source_id}/recipe")
