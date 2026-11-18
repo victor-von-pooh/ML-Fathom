@@ -67,7 +67,8 @@ export function AddSourceDialog({
       ) : (
         <p className="mb-3 text-xs text-ink-2">
           分析するファイル (csv, json, parquet, xlsx, 画像, 文, 点群など) か,
-          画像や文のファイルを集めたディレクトリを選びます. 元のファイルは変えません.
+          画像や文のファイルを集めたディレクトリや, 多視点の撮影 (transforms.json を持つ)
+          のディレクトリを選びます. 元のファイルは変えません.
         </p>
       )}
       <form
