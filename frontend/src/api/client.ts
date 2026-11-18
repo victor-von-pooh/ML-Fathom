@@ -10,6 +10,7 @@ import type {
   Rows,
   Source,
   ItemPreview,
+  PointsItem,
   ProblemCheck,
   ProblemWritten,
 } from './types'
@@ -84,6 +85,15 @@ export const api = {
   },
   itemUrl: (id: string, index: number) => `/api/sources/${id}/items/${index}`,
   item: <T>(id: string, index: number) => request<T>(`/api/sources/${id}/items/${index}`),
+  captureFrameUrl: (
+    id: string,
+    index: number,
+    frame: number,
+    layer: 'image' | 'depth' | 'confidence',
+    size: number,
+  ) => `/api/sources/${id}/items/${index}/frames/${frame}?layer=${layer}&size=${size}`,
+  captureCloud: (id: string, index: number) =>
+    request<PointsItem>(`/api/sources/${id}/items/${index}/cloud`),
   recipe: (id: string) => request<Recipe>(`/api/sources/${id}/recipe`),
   saveRecipe: (id: string, recipe: Recipe) =>
     request<Recipe>(`/api/sources/${id}/recipe`, json('PUT', { recipe })),

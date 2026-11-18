@@ -3,7 +3,7 @@ import threading
 import time
 from collections import OrderedDict
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 import ml_eda
 import numpy as np
@@ -14,7 +14,13 @@ from ml_eda.pipeline import frame_view
 from ml_eda.profile import to_json
 from pydantic import BaseModel, Field
 
-from ml_fathom.items import item_response, item_view
+from ml_fathom.items import (
+    capture_layer,
+    item_response,
+    item_view,
+    png_response,
+    points_response,
+)
 from ml_fathom.samples import sample_target, write_samples
 from ml_fathom.store import SourceStore
 
@@ -735,6 +741,123 @@ def get_item(
     response = item_response(data, index, size)
 
     return response
+
+
+@router.get("/sources/{source_id}/items/{index}/frames/{frame}")
+def get_capture_frame(
+    request: Request, source_id: str, index: int, frame: int,
+    layer: Literal["image", "depth", "confidence"] = "image",
+    size: Optional[int] = Query(None, ge=16, le=2048)
+) -> Response:
+    """
+    多視点の撮影の 1 枚の画像, 深度, 信頼度を PNG で返す関数
+
+    Parameters
+    ----------
+    request: Request
+        リクエスト
+    source_id: str
+        データの ID
+    index: int
+        撮影の行の位置
+    frame: int
+        枚の番号
+    layer: Literal["image", "depth", "confidence"] = "image"
+        返す層
+    size: Optional[int] = Query(None, ge=16, le=2048)
+        縮める長い辺の画素数
+
+    Returns
+    ----------
+    response: Response
+        PNG (深度と信頼度は最小と最大で 0 から 255 に)
+    """
+    # 撮影の中身から, 撮影のディレクトリの中に限った場所だけを読む
+    data, item = capture_of(request, source_id, index)
+    try:
+        array = capture_layer(item, frame, layer)
+    except HTTPException:
+        raise
+    except Exception as error:
+        raise HTTPException(422, f"読めませんでした: {error}") from error
+    response = png_response(array, size)
+    response.headers["Cache-Control"] = "private, max-age=60"
+
+    return response
+
+
+@router.get("/sources/{source_id}/items/{index}/cloud")
+def get_capture_cloud(
+    request: Request, source_id: str, index: int
+) -> Response:
+    """
+    多視点の撮影の点群を, 画面で描く点と色の JSON で返す関数
+
+    Parameters
+    ----------
+    request: Request
+        リクエスト
+    source_id: str
+        データの ID
+    index: int
+        撮影の行の位置
+
+    Returns
+    ----------
+    response: Response
+        点と色の JSON (5 万点まで間引く)
+    """
+    # 撮影のディレクトリの中の点群だけ
+    _, item = capture_of(request, source_id, index)
+    if not item.get("point_cloud"):
+        raise HTTPException(404, "この撮影には点群がありません")
+    try:
+        cloud = ml_eda.media.read_cloud(Path(item["point_cloud"]))
+    except Exception as error:
+        raise HTTPException(422, f"読めませんでした: {error}") from error
+    response = points_response(cloud)
+
+    return response
+
+
+def capture_of(
+    request: Request, source_id: str, index: int
+) -> tuple[ml_eda.Data, dict[str, Any]]:
+    """
+    多視点の撮影のデータと, 1 件の中身を返す関数
+
+    Parameters
+    ----------
+    request: Request
+        リクエスト
+    source_id: str
+        データの ID
+    index: int
+        撮影の行の位置
+
+    Returns
+    ----------
+    loaded: tuple[ml_eda.Data, dict[str, Any]]
+        データと, load_item で読んだ撮影の中身
+
+    Raises
+    ----------
+    HTTPException
+        多視点の撮影でない場合は 422, 無い行は 404, 読めない撮影は 422
+    """
+    # 種類と行の確かめ
+    data = load_source(find_source(request, source_id))
+    if data.kind != "capture":
+        raise HTTPException(422, "多視点の撮影のデータではありません")
+    if not 0 <= index < len(data.frame):
+        raise HTTPException(404, f"{index} 番目はありません")
+    try:
+        item = data.load_item(index)
+    except Exception as error:
+        raise HTTPException(422, f"読めませんでした: {error}") from error
+    loaded = (data, item)
+
+    return loaded
 
 
 @router.get("/sources/{source_id}/recipe")

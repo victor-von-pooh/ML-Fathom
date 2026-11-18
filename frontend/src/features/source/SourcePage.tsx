@@ -122,7 +122,13 @@ export function SourcePage() {
         )}
         {data && tab === 'samples' && <SamplesTab key={source.id} source={source} profile={data} />}
         {tab === 'data' && <DataTab sourceId={id} />}
-        {data && tab === 'recipe' && info.data && (
+        {data && tab === 'recipe' && source.kind === 'capture' && (
+          <p className="rounded-xl border border-line bg-surface p-4 text-sm text-ink-2">
+            多視点の撮影は, 今は読み込みと分析だけです. 前処理と書き出しは, 多視点の学習の正解
+            (何を正解の形にするか) が決まってから足します.
+          </p>
+        )}
+        {data && tab === 'recipe' && info.data && source.kind !== 'capture' && (
           <RecipeTab
             key={`${source.id}:${source.kind}:${JSON.stringify(source.options)}`}
             sourceId={id}

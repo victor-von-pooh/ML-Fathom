@@ -74,3 +74,27 @@ test('問題の設定から始め, 分からない列を使うと選んで書き
   await expect(page.getByText(/書き戻しました/)).toBeVisible()
   await expect(page.getByText('customers をレシピで落とした')).toBeVisible()
 })
+
+test('多視点の撮影を登録し, カメラの配置と各枚の深度を見る', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'データを追加' }).first().click()
+  await page
+    .getByLabel('ディレクトリのパス')
+    .fill(path.resolve(import.meta.dirname, '.work', 'captures'))
+  await page.getByRole('button', { name: '移動' }).click()
+  await page.getByRole('button', { name: 'このディレクトリを選ぶ' }).click()
+  await expect(page.getByLabel('読み込み', { exact: true })).toHaveValue('capture')
+  await page.getByRole('button', { name: '追加', exact: true }).click()
+  await expect(page.getByText('多視点の撮影 · capture')).toBeVisible({ timeout: 20_000 })
+
+  // 中身を見る: 一周 6 枚なので隙間は 60 度
+  await page.getByRole('tab', { name: '中身を見る' }).click()
+  await page.getByRole('list', { name: '撮影' }).getByRole('button').first().click()
+  await expect(page.getByRole('img', { name: /カメラ 6 台の配置.*隙間 60 度/ })).toBeVisible()
+  await page.getByRole('radio', { name: '深度' }).check()
+  await expect(page.getByRole('img', { name: '0 枚目の深度' })).toBeVisible()
+
+  // 前処理は今は扱わないと知らせる
+  await page.getByRole('tab', { name: '前処理と書き出し' }).click()
+  await expect(page.getByText(/多視点の撮影は, 今は読み込みと分析だけです/)).toBeVisible()
+})
