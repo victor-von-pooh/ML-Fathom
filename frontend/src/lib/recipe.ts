@@ -34,6 +34,50 @@ export function canKeepUnlabeled(
   return column === undefined || sampled || column.missing > 0
 }
 
+/**
+ * 目的の列を外したときの編集中のレシピ. 編集中のもの (無ければ保存したもの) に
+ * split.unlabeled があれば消したものを返し, 無ければ null (変えない).
+ * 編集中のレシピから消すので, 目的の列を戻しても残すには戻らず, 保存する
+ * まで編集中の印が出る
+ */
+export function untargetedDraft(draft: Recipe | null, saved: Recipe | null): Recipe | null {
+  const base = draft ?? saved
+  if (!base || base.split.unlabeled === undefined) return null
+  return withUnlabeled(base, false)
+}
+
+/**
+ * 書き出したデータセットを ML-Found の学習スクリプトで読む例.
+ * 検証用と unlabeled の行は, その分割がある場合だけ
+ */
+export function usageSnippet(
+  path: string,
+  splits: Record<string, unknown>,
+  media: boolean,
+): string {
+  const valid =
+    'valid' in splits
+      ? 'valid_loader = DataLoader(TensorDataset(*dataset.tensors("valid")), batch_size=64)'
+      : null
+  const unlabeled =
+    'unlabeled' in splits ? '# 正解の無い行: dataset.tensors("unlabeled") (入力だけ)' : null
+  const sizes = media
+    ? '# 入力の形: dataset.info["splits"]["train"]["shape"][1:], クラスの数: len(dataset.info["classes"])'
+    : '# 入力の次元: len(dataset.features), クラスの数: len(dataset.info["classes"])'
+  const lines = [
+    'from ml_eda import load_dataset',
+    'from torch.utils.data import DataLoader, TensorDataset',
+    '',
+    `dataset = load_dataset("${path}")`,
+    'train_loader = DataLoader(TensorDataset(*dataset.tensors("train")), batch_size=64, shuffle=True)',
+    valid,
+    unlabeled,
+    sizes,
+  ]
+  const snippet = lines.filter((line) => line !== null).join('\n')
+  return snippet
+}
+
 /** 分割の名前の表示 (unlabeled は正解の無い分割と分かるように) */
 export function splitLabel(name: string): string {
   return name === 'unlabeled' ? 'unlabeled (正解なし)' : name

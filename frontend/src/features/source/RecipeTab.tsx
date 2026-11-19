@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import clsx from 'clsx'
 import { ArrowDown, ArrowUp, Plus, Save, Sparkles, Trash2, Upload, Wand2 } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
 import { useRecipeDraft } from '../../lib/drafts'
 import { useDebounced } from '../../lib/useDebounced'
@@ -19,7 +19,14 @@ import type {
 import { Button, Card, ErrorBox, Spinner } from '../../components/ui'
 import { defaultDatasetName, formatNumber, TASK_LABELS } from '../../lib/format'
 import { findDecisions, withAutoItems } from '../../lib/decisions'
-import { canKeepUnlabeled, fitUnlabeled, splitLabel, withUnlabeled } from '../../lib/recipe'
+import {
+  canKeepUnlabeled,
+  fitUnlabeled,
+  splitLabel,
+  untargetedDraft,
+  usageSnippet,
+  withUnlabeled,
+} from '../../lib/recipe'
 import { autoRecipe, suggestSteps } from '../../lib/suggest'
 import { useDecided } from '../../lib/useDecided'
 import { DecisionsCard } from './DecisionsCard'
@@ -289,8 +296,15 @@ export function RecipeTab({
   // 目的の列は上の指定に合わせる
   const [draft, setDraft] = useRecipeDraft(sourceId)
   const base = draft ?? saved.data ?? null
+  // 目的の列が無いのに正解の欠けた行を残す指定があれば, 編集中のレシピから消す
+  // (目的の列を外すときにも消す. ここは別の経路で外れた場合のため)
+  useEffect(() => {
+    if (target) return
+    const next = untargetedDraft(draft, saved.data ?? null)
+    if (next) setDraft(next)
+  }, [target, draft, saved.data, setDraft])
   // タスクを決めていない場合は, 分析で推定したタスク (分類か回帰) にする.
-  // 目的の列を外した場合は, 正解の欠けた行を残す指定も消す (欄も出さない)
+  // 目的の列が無ければ, 上で消すまでの間も正解の欠けた行を残す指定を外して試す
   const guessed = profile.target?.task ?? 'none'
   const recipe = useMemo(
     () =>
@@ -802,21 +816,11 @@ export function RecipeTab({
               {exporter.data.hints && <ModelHintsView hints={exporter.data.hints} />}
               <p className="text-xs text-ink-3">ML-Found の学習スクリプトでの使い方:</p>
               <pre className="overflow-auto rounded bg-surface-2 p-2 text-xs">
-                {`from ml_eda import load_dataset
-from torch.utils.data import DataLoader, TensorDataset
-
-dataset = load_dataset("${exporter.data.path}")
-train_loader = DataLoader(TensorDataset(*dataset.tensors("train")), batch_size=64, shuffle=True)
-valid_loader = DataLoader(TensorDataset(*dataset.tensors("valid")), batch_size=64)
-${
-  'unlabeled' in ((exporter.data.info.splits as Record<string, unknown> | undefined) ?? {})
-    ? '# 正解の無い行: dataset.tensors("unlabeled") (入力だけ)\n'
-    : ''
-}${
-                  media
-                    ? '# 入力の形: dataset.info["splits"]["train"]["shape"][1:], クラスの数: len(dataset.info["classes"])'
-                    : '# 入力の次元: len(dataset.features), クラスの数: len(dataset.info["classes"])'
-                }`}
+                {usageSnippet(
+                  exporter.data.path,
+                  (exporter.data.info.splits as Record<string, unknown> | undefined) ?? {},
+                  media,
+                )}
               </pre>
             </div>
           )}

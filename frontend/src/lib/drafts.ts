@@ -65,17 +65,22 @@ function subscribe(listener: () => void): () => void {
   return () => listeners.delete(listener)
 }
 
+/** データの編集中のレシピを読む (前処理のタブの外から変えるため) */
+export function readDraft(id: string): Recipe | null {
+  return get(id)
+}
+
+/** データの編集中のレシピを変える (null で編集をやめる) */
+export function writeDraft(id: string, recipe: Recipe | null): void {
+  drafts.set(id, recipe)
+  store(id, recipe)
+  listeners.forEach((listener) => listener())
+}
+
 /** データの編集中のレシピと, それを変える関数 (null で編集をやめる) */
 export function useRecipeDraft(id: string): [Recipe | null, (recipe: Recipe | null) => void] {
   const draft = useSyncExternalStore(subscribe, () => get(id))
-  const setDraft = useCallback(
-    (recipe: Recipe | null) => {
-      drafts.set(id, recipe)
-      store(id, recipe)
-      listeners.forEach((listener) => listener())
-    },
-    [id],
-  )
+  const setDraft = useCallback((recipe: Recipe | null) => writeDraft(id, recipe), [id])
   return [draft, setDraft]
 }
 

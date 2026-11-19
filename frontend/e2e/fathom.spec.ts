@@ -130,10 +130,25 @@ test('正解の欠けた行を unlabeled の分割に残し, 保存して読み�
   await expect(unlabeled).toHaveValue('keep', { timeout: 20_000 })
   await expect(page.getByText(/保存していない変更があります/)).toHaveCount(0)
 
-  // 落とすに戻して保存すると, 項目ごと消える
-  await unlabeled.selectOption('drop')
+  // 前処理のタブの外で目的の列を外して戻しても, 残すには戻らない
+  // (外したときに編集中のレシピから消し, 保存するまで編集中の印が出る)
+  const target = page.getByRole('combobox', { name: '目的の列' })
+  await page.getByRole('tab', { name: '概要と気付き' }).click()
+  await target.selectOption('')
+  await expect(target).toHaveValue('')
+  await target.selectOption('status')
+  await expect(target).toHaveValue('status')
+  await page.getByRole('tab', { name: '前処理と書き出し' }).click()
+  await expect(unlabeled).toHaveValue('drop', { timeout: 20_000 })
   await expect(page.getByText(/unlabeled: keep/)).toHaveCount(0)
+  await expect(page.getByText(/保存していない変更があります/)).toBeVisible()
   await expect(page.getByText(/unlabeled \(正解なし\)/)).toHaveCount(0, { timeout: 20_000 })
+
+  // 前処理のタブで外すと欄が消える. 戻して, 落とすのまま保存すると項目ごと消える
+  await target.selectOption('')
+  await expect(unlabeled).toHaveCount(0)
+  await target.selectOption('status')
+  await expect(unlabeled).toHaveValue('drop')
   await page.getByRole('button', { name: 'レシピを保存' }).click()
   await expect(page.getByText('保存しました')).toBeVisible()
   await page.reload()
@@ -143,9 +158,15 @@ test('正解の欠けた行を unlabeled の分割に残し, 保存して読み�
 })
 
 test('目的の列の欠けた行が無いデータでは, 正解の欠けた行を残す欄を選べない', async ({ page }) => {
-  await page.goto('/')
-  await page.getByRole('link', { name: 'people.csv' }).first().click()
-  await page.getByRole('tab', { name: '前処理と書き出し' }).click()
+  // 他のテストに頼らないように, 別の名前で登録して目的の列を決める
+  const created = await page.request.post('/api/sources', {
+    data: { path: TABLE, name: 'people-labeled' },
+  })
+  expect(created.ok()).toBe(true)
+  const { id } = (await created.json()) as { id: string }
+  const patched = await page.request.patch(`/api/sources/${id}`, { data: { target: 'bought' } })
+  expect(patched.ok()).toBe(true)
+  await page.goto(`/sources/${id}?tab=recipe`)
   await expect(page.getByRole('combobox', { name: '正解の欠けた行' })).toBeDisabled({
     timeout: 20_000,
   })

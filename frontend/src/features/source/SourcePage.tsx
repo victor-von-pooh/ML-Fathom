@@ -3,7 +3,9 @@ import { Link, useParams, useSearchParams } from 'react-router'
 
 import { api } from '../../api/client'
 import { ErrorBox, PageHeader, Spinner, Tabs, type TabItem } from '../../components/ui'
+import { readDraft, writeDraft } from '../../lib/drafts'
 import { KIND_LABELS } from '../../lib/format'
+import { untargetedDraft } from '../../lib/recipe'
 import { ColumnsTab } from './ColumnsTab'
 import { DataTab } from './DataTab'
 import { OverviewTab } from './OverviewTab'
@@ -33,7 +35,19 @@ export function SourcePage() {
   })
   const setTarget = useMutation({
     mutationFn: (target: string | null) => api.updateSource(id, { target }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['sources'] }),
+    onSuccess: async (_source, target) => {
+      // 目的の列を外したら, 正解の欠けた行を残す指定を編集中のレシピから消す
+      // (目的の列の無い keep は誤り. 前処理のタブを開いていなくても消す)
+      if (target === null) {
+        const saved = await queryClient.fetchQuery({
+          queryKey: ['recipe', id],
+          queryFn: () => api.recipe(id),
+        })
+        const next = untargetedDraft(readDraft(id), saved)
+        if (next) writeDraft(id, next)
+      }
+      await queryClient.invalidateQueries({ queryKey: ['sources'] })
+    },
   })
 
   const requested = (search.get('tab') as TabId | null) ?? 'overview'
