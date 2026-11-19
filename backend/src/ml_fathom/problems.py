@@ -6,6 +6,7 @@ import ml_eda
 import ml_quest
 import yaml
 from fastapi import APIRouter, HTTPException, Request
+from ml_quest.check import is_column_part
 from pydantic import BaseModel, Field
 
 from ml_fathom.api import find_source, get_store, load_source, source_view
@@ -112,6 +113,42 @@ def read_problem(path: Path) -> dict[str, Any]:
         )
 
     return problem
+
+
+def require_column(problem: dict[str, Any]) -> None:
+    """
+    受け持ちが列の予測 (予測するで, 正解が表の列) でなければ止める関数
+
+    ML-Quest の版 2 の問題の設定は, 受け持ち (作る, 並べるなど) と正解の
+    種類 (領域, 点群など) を持つ. レシピの下書きと書き戻しは列の予測だけ
+
+    Parameters
+    ----------
+    problem: dict[str, Any]
+        問題の設定 (版 2. load_problem が版 1 を移したもの)
+
+    Returns
+    ----------
+    None
+
+    Raises
+    ----------
+    HTTPException
+        列の予測でない場合は 422 (受け持ちと正解の種類と, できることの文)
+    """
+    # 受け持ちと正解の種類 (答えていなければ未定)
+    if is_column_part(problem):
+        return
+    part = ml_quest.PART
+    role = ml_quest.get_value(problem, f"{part}.role") or "未定"
+    kind = ml_quest.get_value(problem, f"{part}.target.kind") or "未定"
+    raise HTTPException(
+        422,
+        f"この問題の設定の受け持ちは {role} (正解の種類 {kind}) です. "
+        "問題の設定から始めることと書き戻しは, 今は予測する (predict) で"
+        "正解が表の列 (column) の場合だけです. データは「データを追加」"
+        "から入れて分析できます"
+    )
 
 
 def linked_problem(
@@ -234,7 +271,8 @@ def trial_of(
     HTTPException
         レシピの形の誤りと, 書き戻せない答えは 422
     """
-    # レシピの形を確かめてから
+    # 列の予測であることと, レシピの形を確かめてから
+    require_column(problem)
     try:
         checked = ml_eda.load_recipe(recipe)
         trial: dict[str, Any] = ml_quest.apply_recipe(problem, checked)
@@ -271,6 +309,7 @@ def start_from_problem(
     # 渡せる問題の設定と, 入れたデータ
     path = problem_file(body.path)
     problem = read_problem(path)
+    require_column(problem)
     try:
         start = ml_quest.recipe_from(problem)
         recipe = ml_eda.load_recipe(start["recipe"])
