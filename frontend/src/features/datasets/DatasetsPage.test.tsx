@@ -30,7 +30,7 @@ const DATASETS: DatasetSummary[] = [
         kind: 'capture',
         role: 'input',
         units: 'meter',
-        convention: { pose: 'camera_to_world' },
+        convention: { pose: 'camera_to_world', depth: 'z', pixel_center: 0.5 },
         shape: [8, 24, 32],
         formats: ['transforms.json'],
       },
@@ -93,6 +93,9 @@ test('版 2 は項目と出どころ, 版 1 は表, 知らない版は「読め�
   expect(card.getByText('版 2 · ファイルの組')).toBeInTheDocument()
   expect(card.getByText(/予測する · 点群 \(point_cloud\)/)).toBeInTheDocument()
   expect(card.getByText('pose=camera_to_world')).toBeInTheDocument()
+  expect(
+    card.getByText(/深度 z \(カメラの前の軸に沿った距離\) · 画素の中心 \+0\.5/),
+  ).toBeInTheDocument()
   expect(card.getByText(/train 3 件, valid 1 件 \(全て 4 件\)/)).toBeInTheDocument()
   expect(card.getByText(/今ある処理の出力 \(process\)/)).toBeInTheDocument()
   expect(card.getByText('{"voxel":0.01}')).toBeInTheDocument()

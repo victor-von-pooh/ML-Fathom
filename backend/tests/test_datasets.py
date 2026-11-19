@@ -188,6 +188,10 @@ def test_capture_clouds_export(client: TestClient, tmp_path: Path) -> None:
     assert info["split"]["method"] == "group"
     assert info["target"]["kind"] == "point_cloud"
     assert set(info["splits"]) == {"train", "valid"}
+    # 元の場所は名前だけ (手元のディレクトリの構成を残さない)
+    assert info["source"]["captures"] == "captures"
+    assert info["source"]["clouds"] == "clouds"
+    assert str(tmp_path) not in str(info["source"])
 
     # 壊れた点群は 500 でなく 422
     broken = tmp_path / "broken"
@@ -202,7 +206,7 @@ def test_capture_clouds_export(client: TestClient, tmp_path: Path) -> None:
     assert response.status_code == 422
     assert "書き出せませんでした" in response.json()["detail"]
 
-        # 一覧は単位と正規化を出す
+    # 一覧は単位と正規化, 深度の測り方と画素の中心を出し, 元の場所を出さない
     item = client.get("/api/datasets").json()[0]
     assert item["form"] == "items"
     entries = {entry["name"]: entry for entry in item["entries"]}
@@ -211,6 +215,11 @@ def test_capture_clouds_export(client: TestClient, tmp_path: Path) -> None:
     assert item["normalization"] == "view_center"
     assert item["items"] == len(names)
     assert item["target"]["origin"]["type"] == "synthetic"
+    convention = entries["capture"]["convention"]
+    assert convention["depth"] == "z"
+    assert convention["pixel_center"] == 0.5
+    shown = {key: value for key, value in item.items() if key != "path"}
+    assert str(sample["captures"]) not in str(shown)
 
 
 def test_list_unreadable(client: TestClient, tmp_path: Path) -> None:

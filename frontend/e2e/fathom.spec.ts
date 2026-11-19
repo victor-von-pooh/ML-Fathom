@@ -305,7 +305,9 @@ test('撮影と点群の組をグループで分けて書き出し, 一覧で確
 
   await expect(page.getByText(/書き出しました/)).toBeVisible({ timeout: 30_000 })
   await expect(page.getByText(/train 2 件, valid 2 件/)).toBeVisible()
-  await expect(page.getByText(/capture_shift と normalize_capture/)).toBeVisible()
+  await expect(
+    page.getByText(/normalize_capture で同じ正規化をかけて read_capture で読み/),
+  ).toBeVisible()
 
   // 欄を変えると前の結果を消し, 同じ名前は置き換えの印が無ければ止まる
   await form.getByLabel('同じ名前があれば置き換える').uncheck()
@@ -321,4 +323,8 @@ test('撮影と点群の組をグループで分けて書き出し, 一覧で確
   await expect(card.getByText(/予測する · 点群 \(point_cloud\)/)).toBeVisible()
   await expect(card.getByText('view_center', { exact: false })).toBeVisible()
   await expect(card.getByText(/作った正確な正解 \(synthetic\)/)).toBeVisible()
+  // 深度から点に戻す決まり (合成の見本は z と +0.5)
+  await expect(
+    card.getByText(/深度 z \(カメラの前の軸に沿った距離\) · 画素の中心 \+0\.5/),
+  ).toBeVisible()
 })

@@ -8,6 +8,7 @@ import { Card, EmptyState, ErrorBox, PageHeader, Spinner } from '../../component
 import { formatNumber, KIND_LABELS, TASK_LABELS } from '../../lib/format'
 import {
   conventionText,
+  depthConventionText,
   ENTRY_KIND_LABELS,
   ORIGIN_LABELS,
   originNote,
@@ -97,7 +98,14 @@ function ItemsCard({ item }: { item: ItemsDataset }) {
                   </td>
                   <td className="pr-2">{entry.kind}</td>
                   <td className="pr-2">{entry.units ?? '—'}</td>
-                  <td className="font-mono break-all">{conventionText(entry.convention)}</td>
+                  <td className="break-all">
+                    <span className="font-mono">{conventionText(entry.convention)}</span>
+                    {depthConventionText(entry.kind, entry.convention) && (
+                      <div className="text-ink-2">
+                        {depthConventionText(entry.kind, entry.convention)}
+                      </div>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>

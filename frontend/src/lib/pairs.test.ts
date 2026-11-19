@@ -2,6 +2,7 @@ import { expect, test } from 'vitest'
 
 import {
   conventionText,
+  depthConventionText,
   itemsSnippet,
   originNote,
   parseClasses,
@@ -58,6 +59,21 @@ test('座標の決まりを 1 行にし, 空の値を除く', () => {
     'origin=top_left, axes=["row","column"]',
   )
   expect(conventionText(null)).toBe('—')
+  // 深度の測り方と画素の中心は別の行に出す
+  expect(conventionText({ pose: 'camera_to_world', depth: 'z', pixel_center: 0.5 })).toBe(
+    'pose=camera_to_world',
+  )
+})
+
+test('撮影の深度の測り方と画素の中心を 1 行にし, 欄の無い撮影は書き出し直しを勧める', () => {
+  expect(depthConventionText('capture', { depth: 'z', pixel_center: 0.5 })).toBe(
+    '深度 z (カメラの前の軸に沿った距離) · 画素の中心 +0.5 (行 r, 列 c の画素は (c + 0.5, r + 0.5))',
+  )
+  expect(depthConventionText('capture', { depth: 'ray' })).toBe('深度 ray (光線に沿った距離)')
+  expect(depthConventionText('capture', { pose: 'camera_to_world' })).toMatch(
+    /書き出し直すと入ります/,
+  )
+  expect(depthConventionText('point_cloud', { depth: 'z' })).toBeNull()
 })
 
 test('load_items の使い方の例は, ある分割と正規化だけを書く', () => {
@@ -70,5 +86,5 @@ test('load_items の使い方の例は, ある分割と正規化だけを書く'
   const full = itemsSnippet('/d/objects', { train: {}, valid: {}, test: {} }, [], true)
   expect(full).toContain('valid = dataset.split("valid")')
   expect(full).toContain('test = dataset.split("test")')
-  expect(full).toContain('capture_shift と normalize_capture')
+  expect(full).toContain('normalize_capture で同じ正規化をかけて read_capture で読み')
 })
