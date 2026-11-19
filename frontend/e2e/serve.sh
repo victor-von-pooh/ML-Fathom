@@ -46,6 +46,24 @@ pd.DataFrame({
 }).to_csv(sys.argv[1], index=False)
 PY
 
+# 目的の列が一部の行にだけある表 (正解の欠けた行を unlabeled の分割に残す)
+uv run python - "$WORK/sensors.csv" <<'PY'
+import sys
+
+import numpy as np
+import pandas as pd
+
+rng = np.random.default_rng(2)
+rows = 100
+frame = pd.DataFrame({
+    "level": rng.normal(0, 1, rows).round(3),
+    "spread": rng.normal(1, 0.2, rows).round(3),
+    "status": rng.choice(["normal", "fault"], rows),
+})
+frame.loc[60:, "status"] = np.nan
+frame.to_csv(sys.argv[1], index=False)
+PY
+
 # 問題の設定の見本 (総菜の作る量) に, 日々の売れた数の表を入れて保存する
 uv run python - "$WORK" <<'PY'
 import sys

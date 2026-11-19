@@ -226,6 +226,74 @@ def test_recipe_preview_and_export(
     assert client.get("/api/sources").json() == []
 
 
+def test_unlabeled_split(client: TestClient, tmp_path: Path) -> None:
+    """
+    正解の欠けた行を unlabeled の分割に残すレシピの保存と書き出しを確かめる関数
+
+    Parameters
+    ----------
+    client: TestClient
+        クライアント
+    tmp_path: Path
+        pytest が用意する一時ディレクトリ
+
+    Returns
+    ----------
+    None
+    """
+    # 目的の列の 20 行が欠けた表
+    file = write_table(tmp_path)
+    frame = pd.read_csv(file)
+    frame.loc[100:, "label"] = np.nan
+    frame.to_csv(file, index=False)
+    sid = client.post("/api/sources", json={"path": str(file)}).json()["id"]
+    recipe = {
+        "format_version": 1, "target": "label", "task": "classification",
+        "steps": [
+            {"op": "drop_columns", "columns": ["id"]},
+            {"op": "impute", "columns": ["x"], "strategy": "median"},
+            {"op": "one_hot", "columns": "auto"},
+        ],
+        "split": {
+            "method": "random", "valid": 0.25, "test": 0.0, "seed": 0,
+            "unlabeled": "keep",
+        },
+    }
+
+    # 保存して読み直すと keep のまま. 知らない値は 422
+    url = f"/api/sources/{sid}/recipe"
+    assert client.put(url, json={"recipe": recipe}).status_code == 200
+    assert client.get(url).json()["split"]["unlabeled"] == "keep"
+    bad = {**recipe, "split": {**recipe["split"], "unlabeled": "yes"}}
+    assert client.put(url, json={"recipe": bad}).status_code == 422
+
+    # 正解の付いた分割は落とす場合と同じで, 欠けた行は unlabeled に
+    view = client.post(
+        f"/api/sources/{sid}/preview", json={"recipe": recipe, "upto": 3}
+    ).json()
+    assert view["splits"] == {"train": 75, "valid": 25, "unlabeled": 20}
+    dropped = {**recipe, "split": {**recipe["split"], "unlabeled": "drop"}}
+    view = client.post(
+        f"/api/sources/{sid}/preview", json={"recipe": dropped, "upto": 3}
+    ).json()
+    assert view["splits"] == {"train": 75, "valid": 25}
+
+    # 目的の列の無い keep は誤り
+    untargeted = {**recipe, "target": None, "task": "none"}
+    assert client.post(
+        f"/api/sources/{sid}/preview", json={"recipe": untargeted, "upto": 3}
+    ).status_code == 422
+
+    # 書き出しと一覧にも unlabeled の分割が並ぶ
+    exported = client.post(
+        f"/api/sources/{sid}/export", json={"recipe": recipe, "name": "semi"}
+    )
+    assert exported.status_code == 200
+    assert exported.json()["hints"]["outputs"] == 2
+    datasets = client.get("/api/datasets").json()
+    assert datasets[0]["splits"] == {"train": 75, "valid": 25, "unlabeled": 20}
+
+
 def test_images(client: TestClient, tmp_path: Path) -> None:
     """
     画像のフォルダの登録, 中身の PNG, 中身の手順の様子と書き出しを

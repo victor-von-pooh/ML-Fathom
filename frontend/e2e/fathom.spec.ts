@@ -91,6 +91,66 @@ test('無作為の分割でもグループの列を選ぶと, 分割をまたぐ
   await expect(page.getByRole('combobox', { name: 'グループの列', exact: true })).toBeVisible()
 })
 
+test('正解の欠けた行を unlabeled の分割に残し, 保存して読み直す', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'データを追加' }).first().click()
+  await page.getByLabel('ディレクトリのパス').fill(path.dirname(TABLE))
+  await page.getByRole('button', { name: '移動' }).click()
+  await page.getByRole('button', { name: /sensors\.csv/ }).click()
+  await page.getByRole('button', { name: '追加', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'sensors.csv' })).toBeVisible()
+
+  // 目的の列が無ければ欄を出さない
+  await page.getByRole('tab', { name: '前処理と書き出し' }).click()
+  const unlabeled = page.getByRole('combobox', { name: '正解の欠けた行' })
+  await expect(page.getByRole('combobox', { name: 'タスク' })).toBeVisible({ timeout: 20_000 })
+  await expect(unlabeled).toHaveCount(0)
+
+  // 目的の列を選ぶと, 欠けた行の数と使いどころを添えて出る (既定は落とす)
+  await page.getByRole('combobox', { name: '目的の列' }).selectOption('status')
+  await expect(unlabeled).toHaveValue('drop')
+  await expect(unlabeled).toBeEnabled()
+  await expect(page.getByText(/目的の列の欠けた行: 40 行/)).toBeVisible()
+  await expect(page.getByText(/分割: train 48 行, valid 12 行$/)).toBeVisible({
+    timeout: 20_000,
+  })
+
+  // 残すと, 正解の付いた分割は同じまま unlabeled の分割が足される
+  await unlabeled.selectOption('keep')
+  await expect(page.getByText(/unlabeled \(正解なし\) 40 行/)).toBeVisible({ timeout: 20_000 })
+  await expect(page.getByText(/train 48 行, valid 12 行/)).toBeVisible()
+  await expect(page.getByText(/unlabeled: keep/)).toBeVisible()
+
+  // 保存して読み込み直しても残すのまま
+  // (保存すると編集中のレシピを消すので, 読み直した値は保存したレシピのもの)
+  await page.getByRole('button', { name: 'レシピを保存' }).click()
+  await expect(page.getByText('保存しました')).toBeVisible()
+  await page.reload()
+  await page.getByRole('tab', { name: '前処理と書き出し' }).click()
+  await expect(unlabeled).toHaveValue('keep', { timeout: 20_000 })
+  await expect(page.getByText(/保存していない変更があります/)).toHaveCount(0)
+
+  // 落とすに戻して保存すると, 項目ごと消える
+  await unlabeled.selectOption('drop')
+  await expect(page.getByText(/unlabeled: keep/)).toHaveCount(0)
+  await expect(page.getByText(/unlabeled \(正解なし\)/)).toHaveCount(0, { timeout: 20_000 })
+  await page.getByRole('button', { name: 'レシピを保存' }).click()
+  await expect(page.getByText('保存しました')).toBeVisible()
+  await page.reload()
+  await page.getByRole('tab', { name: '前処理と書き出し' }).click()
+  await expect(unlabeled).toHaveValue('drop', { timeout: 20_000 })
+  await expect(page.getByText(/unlabeled:/)).toHaveCount(0)
+})
+
+test('目的の列の欠けた行が無いデータでは, 正解の欠けた行を残す欄を選べない', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('link', { name: 'people.csv' }).first().click()
+  await page.getByRole('tab', { name: '前処理と書き出し' }).click()
+  await expect(page.getByRole('combobox', { name: '正解の欠けた行' })).toBeDisabled({
+    timeout: 20_000,
+  })
+})
+
 test('問題の設定から始め, 分からない列を使うと選んで書き戻す', async ({ page }) => {
   // 問題の設定のディレクトリを選ぶと, 決めた状態で始まる
   await page.goto('/')
