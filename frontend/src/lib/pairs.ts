@@ -63,15 +63,16 @@ export function parseClasses(text: string): Parsed<Record<string, string> | unde
  * 空なら undefined (グループ無し)
  */
 export function parseGroups(text: string): Parsed<Record<string, string> | undefined> {
-  const groups: Record<string, string> = {}
+  // Map で集める (constructor や __proto__ のような id も 1 件として扱う)
+  const groups = new Map<string, string>()
   for (const line of lines(text)) {
     const match = /^([^,\t]+?)\s*[,\t]\s*(.+)$/.exec(line)
     if (!match) return { value: null, error: `「件の id,グループ」の形ではありません: ${line}` }
-    const [, key, group] = match
-    if (key! in groups) return { value: null, error: `同じ件が 2 つあります: ${key}` }
-    groups[key!] = group!.trim()
+    const key = match[1]!
+    if (groups.has(key)) return { value: null, error: `同じ件が 2 つあります: ${key}` }
+    groups.set(key, match[2]!.trim())
   }
-  const value = Object.keys(groups).length > 0 ? groups : undefined
+  const value = groups.size > 0 ? Object.fromEntries(groups) : undefined
   return { value, error: null }
 }
 
@@ -123,7 +124,7 @@ export function itemsSnippet(
   const lines = [
     'from ml_eda import load_items',
     '',
-    `dataset = load_items("${path}")`,
+    `dataset = load_items(${JSON.stringify(path)})`,
     `train = dataset.split("train")    # len と番号で 1 件. PyTorch の Dataset に包める`,
     `item = train[0]                   # {${keys}} の辞書`,
     'valid' in splits ? 'valid = dataset.split("valid")' : null,

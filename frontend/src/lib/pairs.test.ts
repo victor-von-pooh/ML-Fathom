@@ -28,6 +28,10 @@ test('グループを件の id から辞書にし, カンマとタブの区切�
   expect(parseGroups('')).toEqual({ value: undefined, error: null })
   expect(parseGroups('scan_1').error).toMatch(/件の id,グループ/)
   expect(parseGroups('a,x\na,y').error).toMatch(/同じ件/)
+  // 組み込みの名前の id も 1 件として扱う
+  const builtin = parseGroups('constructor,a\n__proto__,b').value!
+  expect(Object.keys(builtin)).toEqual(['constructor', '__proto__'])
+  expect(builtin['__proto__']).toBe('b')
 })
 
 test('設定は YAML の辞書だけを受け取る', () => {

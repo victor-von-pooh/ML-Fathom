@@ -70,8 +70,10 @@ function ItemsCard({ item }: { item: ItemsDataset }) {
       <dl className="grid grid-cols-[7rem_1fr] gap-1 text-sm">
         <dt className="text-ink-3">受け持ちと正解</dt>
         <dd>
-          {ROLE_LABELS[item.role] ?? item.role} ·{' '}
-          {ENTRY_KIND_LABELS[item.target.kind] ?? item.target.kind} ({item.target.kind})
+          {item.role ? (ROLE_LABELS[item.role] ?? item.role) : '—'} ·{' '}
+          {item.target.kind
+            ? `${ENTRY_KIND_LABELS[item.target.kind] ?? item.target.kind} (${item.target.kind})`
+            : '—'}
         </dd>
         <dt className="text-ink-3">項目</dt>
         <dd>

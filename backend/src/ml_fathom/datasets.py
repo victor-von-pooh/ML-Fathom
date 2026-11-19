@@ -1,3 +1,4 @@
+import datetime as dt
 from pathlib import Path
 from typing import Any, Optional
 
@@ -125,17 +126,24 @@ def dataset_summary(path: Path) -> Optional[dict[str, Any]]:
             error=f"dataset.yaml を読めません: {error}"
         )
         return summary
-    info = info if isinstance(info, dict) else {}
+    if not isinstance(info, dict):
+        summary.update(
+            form="unreadable", unknown_version=False,
+            error="dataset.yaml が辞書ではありません"
+        )
+        return summary
     version = info.get("format_version")
+    created = info.get("created_at")
+    if isinstance(created, (dt.date, dt.datetime)):
+        created = created.isoformat()
     summary.update(
         format_version=version,
-        created_at=(
-            None if info.get("created_at") is None
-            else str(info.get("created_at"))
-        )
+        created_at=None if created is None else str(created)
     )
+
+    # 版は整数だけ (1.0 や true は ML-EDA も読まない)
     known = (DATASET_FORMAT_VERSION, ITEMS_FORMAT_VERSION)
-    if isinstance(version, bool) or version not in known:
+    if type(version) is not int or version not in known:
         summary.update(
             form="unreadable", unknown_version=True,
             error=(
@@ -149,10 +157,10 @@ def dataset_summary(path: Path) -> Optional[dict[str, Any]]:
             summary.update(items_summary(path))
         else:
             summary.update(table_summary(path))
-    except (OSError, ValueError, KeyError, TypeError,
-            AttributeError) as error:
+    except Exception as error:  # noqa: BLE001 (1 件の誤りで一覧を止めない)
         summary.update(
-            form="unreadable", unknown_version=False, error=str(error)
+            form="unreadable", unknown_version=False,
+            error=str(error) or type(error).__name__
         )
     summary = to_json(summary)
 

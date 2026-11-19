@@ -328,8 +328,8 @@ export interface ItemEntry {
 /** 版 2 (入力と正解がファイルの組. load_items で読む) */
 export interface ItemsDataset extends DatasetBase {
   form: 'items'
-  role: string
-  target: { kind: string; entries: string[]; origin: PairOrigin }
+  role: string | null
+  target: { kind: string | null; entries: string[]; origin: PairOrigin }
   entries: ItemEntry[]
   splits: Record<string, number>
   items: number

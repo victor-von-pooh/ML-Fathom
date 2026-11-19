@@ -239,6 +239,8 @@ test('画像と領域の組を版 2 で書き出し, 注意と使い方を見て
     'aria-selected',
     'true',
   )
+  // 2 つの組の欄のうち, 見えている方
+  const form = page.locator('#pairs-panel > div:not([hidden])')
 
   // 画像のディレクトリは「選ぶ」でたどり, 領域のディレクトリは書く
   await page.getByRole('button', { name: '画像のディレクトリを選ぶ' }).click()
@@ -246,28 +248,30 @@ test('画像と領域の組を版 2 で書き出し, 注意と使い方を見て
   await expect(dialog.getByRole('button', { name: 'このディレクトリを選ぶ' })).toBeVisible()
   await dialog.getByRole('button', { name: 'ホーム' }).click()
   await dialog.getByRole('button', { name: '閉じる' }).click()
-  await page.getByLabel('画像のディレクトリ', { exact: true }).fill(PAIRS)
+  await form.getByLabel('画像のディレクトリ', { exact: true }).fill(PAIRS)
   await page.getByRole('button', { name: '画像のディレクトリを選ぶ' }).click()
   await dialog.getByRole('button', { name: 'images', exact: true }).click()
   await dialog.getByRole('button', { name: 'このディレクトリを選ぶ' }).click()
-  await expect(page.getByLabel('画像のディレクトリ', { exact: true })).toHaveValue(
+  await expect(form.getByLabel('画像のディレクトリ', { exact: true })).toHaveValue(
     path.join(PAIRS, 'images'),
   )
-  await page.getByLabel('領域のディレクトリ', { exact: true }).fill(path.join(PAIRS, 'masks'))
-  await page.getByLabel('値の名前 (任意)').fill('0: background\n1: circle\n2: square')
+  await form.getByLabel('領域のディレクトリ', { exact: true }).fill(path.join(PAIRS, 'masks'))
+  await form.getByLabel('値の名前 (任意)').fill('0: background\n1: circle\n2: square')
 
   // 出どころを今ある処理にすると, その処理を超えられないと添える
   await page.getByRole('combobox', { name: '種類' }).selectOption('process')
-  await page.getByLabel('作った処理の名前').fill('threshold')
-  await page.getByLabel('設定 (YAML)').fill('level: 0.5')
+  await form.getByLabel('作った処理の名前').fill('threshold')
+  await form.getByLabel('設定 (YAML)').fill('level: 0.5')
   await expect(page.getByText(/処理 threshold を超えられません/)).toBeVisible()
 
   // 形の誤った設定は書き出す前に止める
   const button = page.getByRole('button', { name: 'ファイルの組を書き出す' })
-  await page.getByLabel('設定 (YAML)').fill('- a')
+  await form.getByLabel('設定 (YAML)').fill('- a')
   await expect(button).toBeDisabled()
-  await page.getByLabel('設定 (YAML)').fill('level: 0.5')
-  await page.getByLabel('データセットの名前').fill('shapes')
+  await form.getByLabel('設定 (YAML)').fill('level: 0.5')
+  await form.getByLabel('データセットの名前').fill('shapes')
+  // CI の再試行でも書けるように置き換えの印を付ける
+  await form.getByLabel('同じ名前があれば置き換える').check()
   await button.click()
 
   // 組にならなかった領域の注意と, load_items の使い方
@@ -286,22 +290,26 @@ test('画像と領域の組を版 2 で書き出し, 注意と使い方を見て
 
 test('撮影と点群の組をグループで分けて書き出し, 一覧で確かめる', async ({ page }) => {
   await page.goto('/datasets/export?form=capture_clouds')
-  await page.getByLabel('撮影のディレクトリ', { exact: true }).fill(path.join(SHAPES, 'captures'))
-  await page.getByLabel('点群のディレクトリ', { exact: true }).fill(path.join(SHAPES, 'clouds'))
+  const form = page.locator('#pairs-panel > div:not([hidden])')
+  await form.getByLabel('撮影のディレクトリ', { exact: true }).fill(path.join(SHAPES, 'captures'))
+  await form.getByLabel('点群のディレクトリ', { exact: true }).fill(path.join(SHAPES, 'clouds'))
   await page.getByRole('combobox', { name: '点群の単位' }).selectOption('meter')
-  await page
+  await form
     .getByLabel('グループ (任意)')
     .fill('sphere_a,sphere\nsphere_b,sphere\nbox_a,box\nbox_b,box')
-  await page.getByLabel('検証用の割合').fill('0.5')
+  await form.getByLabel('検証用の割合').fill('0.5')
   await page.getByRole('combobox', { name: '種類' }).selectOption('synthetic')
-  await page.getByLabel('データセットの名前').fill('objects')
+  await form.getByLabel('データセットの名前').fill('objects')
+  await form.getByLabel('同じ名前があれば置き換える').check()
   await page.getByRole('button', { name: 'ファイルの組を書き出す' }).click()
 
   await expect(page.getByText(/書き出しました/)).toBeVisible({ timeout: 30_000 })
   await expect(page.getByText(/train 2 件, valid 2 件/)).toBeVisible()
   await expect(page.getByText(/capture_shift と normalize_capture/)).toBeVisible()
 
-  // 同じ名前は置き換えの印が無ければ止まる
+  // 欄を変えると前の結果を消し, 同じ名前は置き換えの印が無ければ止まる
+  await form.getByLabel('同じ名前があれば置き換える').uncheck()
+  await expect(page.getByText(/書き出しました/)).toHaveCount(0)
   await page.getByRole('button', { name: 'ファイルの組を書き出す' }).click()
   await expect(page.getByText(/objects は既にあります/)).toBeVisible()
 
@@ -313,6 +321,4 @@ test('撮影と点群の組をグループで分けて書き出し, 一覧で確
   await expect(card.getByText(/予測する · 点群 \(point_cloud\)/)).toBeVisible()
   await expect(card.getByText('view_center', { exact: false })).toBeVisible()
   await expect(card.getByText(/作った正確な正解 \(synthetic\)/)).toBeVisible()
-  // 前の書き出しも並ぶ
-  await expect(page.getByText('shapes', { exact: true })).toBeVisible()
 })

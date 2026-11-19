@@ -189,7 +189,20 @@ def test_capture_clouds_export(client: TestClient, tmp_path: Path) -> None:
     assert info["target"]["kind"] == "point_cloud"
     assert set(info["splits"]) == {"train", "valid"}
 
-    # 一覧は単位と正規化を出す
+    # 壊れた点群は 500 でなく 422
+    broken = tmp_path / "broken"
+    broken.mkdir()
+    (broken / "sphere_a.ply").write_text(
+        "ply\nelement vertex 3\nproperty float x\nend_header\n",
+        encoding="utf-8"
+    )
+    response = client.post("/api/datasets/capture_clouds", json={
+        **body, "clouds": str(broken), "name": "broken", "groups": None,
+    })
+    assert response.status_code == 422
+    assert "書き出せませんでした" in response.json()["detail"]
+
+        # 一覧は単位と正規化を出す
     item = client.get("/api/datasets").json()[0]
     assert item["form"] == "items"
     entries = {entry["name"]: entry for entry in item["entries"]}
@@ -243,12 +256,23 @@ def test_list_unreadable(client: TestClient, tmp_path: Path) -> None:
     )
     (root / "empty").mkdir()
     (root / ".half.writing").mkdir()
+    (root / "float").mkdir()
+    (root / "float" / "dataset.yaml").write_text(
+        "format_version: 1.0\n", encoding="utf-8"
+    )
+    (root / "listed").mkdir()
+    (root / "listed" / "dataset.yaml").write_text(
+        "- 1\n- 2\n", encoding="utf-8"
+    )
 
     # 版 1 は今までどおり, 他は読めないものとして並ぶ
     datasets = {
         item["name"]: item for item in client.get("/api/datasets").json()
     }
-    assert set(datasets) == {"v1", "future", "broken"}
+    assert set(datasets) == {"v1", "future", "broken", "float", "listed"}
+    assert datasets["float"]["unknown_version"] is True
+    assert datasets["listed"]["unknown_version"] is False
+    assert "辞書" in datasets["listed"]["error"]
     assert datasets["v1"]["form"] == "table"
     assert datasets["v1"]["format_version"] == 1
     assert datasets["v1"]["splits"] == {"train": 30, "valid": 10}
@@ -258,3 +282,11 @@ def test_list_unreadable(client: TestClient, tmp_path: Path) -> None:
     assert datasets["broken"]["form"] == "unreadable"
     assert datasets["broken"]["unknown_version"] is False
     assert "entries" in datasets["broken"]["error"]
+
+    # 壊れたレシピ (YAML の誤り) も 1 件の誤りにして一覧を止めない
+    (root / "v1" / "recipe.yaml").write_text("a: [", encoding="utf-8")
+    listed = client.get("/api/datasets")
+    assert listed.status_code == 200
+    v1 = next(item for item in listed.json() if item["name"] == "v1")
+    assert v1["form"] == "unreadable"
+    assert v1["unknown_version"] is False

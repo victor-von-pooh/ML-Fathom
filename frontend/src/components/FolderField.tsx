@@ -42,7 +42,8 @@ function FolderDialog({
           ホーム
         </Button>
         <span className="truncate font-mono">{listing.data?.path}</span>
-        {listing.data && (
+        {/* 開けなかった場合は前の一覧が残るので, 選べないようにする */}
+        {listing.data && !listing.isError && (
           <Button variant="primary" className="ml-auto" onClick={() => onPick(listing.data.path)}>
             このディレクトリを選ぶ
           </Button>

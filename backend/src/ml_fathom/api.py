@@ -40,6 +40,10 @@ CACHE_SIZE = 8
 # 表の中身として一度に返す行の上限
 MAX_ROWS = 500
 
+# データセットの書き出しを 1 つずつにする鍵 (同じ名前の一時ディレクトリを
+# 2 つの書き出しが同時に使わないように)
+EXPORT_LOCK = threading.Lock()
+
 
 class Cache:
     def __init__(self, size: int):
@@ -1108,10 +1112,11 @@ def export(
     data = load_source(find_source(request, source_id))
     try:
         target = store.dataset_dir(body.name)
-        info = ml_eda.export_dataset(
-            data, body.recipe, target, name=body.name,
-            overwrite=body.overwrite
-        )
+        with EXPORT_LOCK:
+            info = ml_eda.export_dataset(
+                data, body.recipe, target, name=body.name,
+                overwrite=body.overwrite
+            )
     except FileExistsError as error:
         raise HTTPException(409, f"{body.name} は既にあります") from error
     except (ValueError, KeyError, TypeError, AttributeError) as error:
@@ -1285,6 +1290,54 @@ def pair_result(target: Path, info: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
+def exists_error(
+    body: PairExport, error: FileExistsError
+) -> HTTPException:
+    """
+    書き出す場所が既にある場合の 409 を作る関数
+
+    Parameters
+    ----------
+    body: PairExport
+        書き出しの要求
+    error: FileExistsError
+        ML-EDA の誤り (置き換えの指定が無いか, データセットでない場所)
+
+    Returns
+    ----------
+    result: HTTPException
+        409 (置き換えを指定した場合は ML-EDA の理由)
+    """
+    # 置き換えを指定していなければ名前で, していればデータセットでない場所
+    detail = str(error) if body.overwrite else f"{body.name} は既にあります"
+    result = HTTPException(409, detail)
+
+    return result
+
+
+def export_message(error: Exception) -> str:
+    """
+    書き出しの誤りを画面に出す文にする関数
+
+    Parameters
+    ----------
+    error: Exception
+        書き出しの誤り
+
+    Returns
+    ----------
+    message: str
+        ML-EDA の誤りの文 (想定していない誤りは種類を添える)
+    """
+    # 入力の誤り (ValueError) はそのまま, 他は壊れたファイルなどとして
+    if isinstance(error, ValueError):
+        message = str(error)
+    else:
+        message = f"書き出せませんでした ({type(error).__name__}): {error}"
+
+    return message
+
+
 @router.post("/datasets/image_masks")
 def export_image_masks(
     request: Request, body: ImageMaskExport
@@ -1314,16 +1367,17 @@ def export_image_masks(
     store = get_store(request)
     try:
         target = store.dataset_dir(body.name)
-        info = ml_eda.export_image_masks(
-            Path(body.images).expanduser(), Path(body.masks).expanduser(),
-            target, classes=body.classes or None,
-            mask_suffix=body.mask_suffix, **pair_options(body)
-        )
+        with EXPORT_LOCK:
+            info = ml_eda.export_image_masks(
+                Path(body.images).expanduser(),
+                Path(body.masks).expanduser(), target,
+                classes=body.classes or None,
+                mask_suffix=body.mask_suffix, **pair_options(body)
+            )
     except FileExistsError as error:
-        raise HTTPException(409, f"{body.name} は既にあります") from error
-    except (OSError, ValueError, KeyError, TypeError,
-            AttributeError) as error:
-        raise HTTPException(422, str(error)) from error
+        raise exists_error(body, error) from error
+    except Exception as error:  # noqa: BLE001 (壊れたファイルも理由を返す)
+        raise HTTPException(422, export_message(error)) from error
     result = pair_result(target, info)
 
     return result
@@ -1358,15 +1412,16 @@ def export_capture_clouds(
     store = get_store(request)
     try:
         target = store.dataset_dir(body.name)
-        info = ml_eda.export_capture_clouds(
-            Path(body.captures).expanduser(), Path(body.clouds).expanduser(),
-            target, cloud_units=body.cloud_units, **pair_options(body)
-        )
+        with EXPORT_LOCK:
+            info = ml_eda.export_capture_clouds(
+                Path(body.captures).expanduser(),
+                Path(body.clouds).expanduser(), target,
+                cloud_units=body.cloud_units, **pair_options(body)
+            )
     except FileExistsError as error:
-        raise HTTPException(409, f"{body.name} は既にあります") from error
-    except (OSError, ValueError, KeyError, TypeError,
-            AttributeError) as error:
-        raise HTTPException(422, str(error)) from error
+        raise exists_error(body, error) from error
+    except Exception as error:  # noqa: BLE001 (壊れたファイルも理由を返す)
+        raise HTTPException(422, export_message(error)) from error
     result = pair_result(target, info)
 
     return result

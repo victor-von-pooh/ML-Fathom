@@ -1,9 +1,9 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Upload } from 'lucide-react'
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { Link, useSearchParams } from 'react-router'
 
-import { api } from '../../api/client'
+import { api, ApiError } from '../../api/client'
 import type { PairExportBase, PairExportResult } from '../../api/types'
 import { FolderField } from '../../components/FolderField'
 import { Button, Card, ErrorBox, PageHeader, Tabs, type TabItem } from '../../components/ui'
@@ -70,15 +70,20 @@ function ratio(text: string): number | null {
  */
 function commonBody(fields: CommonFields): { body: PairExportBase | null; errors: string[] } {
   const errors: string[] = []
-  const valid = ratio(fields.valid)
-  const test = ratio(fields.test)
+  if (!fields.name.trim()) errors.push('データセットの名前を入れてください')
+  // 分けない場合は割合の欄を使わない (止めた欄の誤りで書き出せなくならないように)
+  const none = fields.method === 'none'
+  const valid = none ? 0 : ratio(fields.valid)
+  const test = none ? 0 : ratio(fields.test)
   const seed = Number(fields.seed)
   if (valid === null) errors.push('検証用の割合は 0 以上 1 未満にしてください')
   if (test === null) errors.push('テスト用の割合は 0 以上 1 未満にしてください')
   if (valid !== null && test !== null && valid + test >= 1) {
     errors.push('検証用とテスト用の割合の和は 1 未満にしてください')
   }
-  if (!Number.isInteger(seed)) errors.push('乱数の種は整数にしてください')
+  if (fields.seed.trim() === '' || !Number.isInteger(seed) || seed < 0) {
+    errors.push('乱数の種は 0 以上の整数にしてください')
+  }
   const groups = parseGroups(fields.groups)
   if (groups.error) errors.push(groups.error)
   const settings = parseSettings(fields.originSettings)
@@ -88,7 +93,7 @@ function commonBody(fields: CommonFields): { body: PairExportBase | null; errors
   }
   if (errors.length > 0) return { body: null, errors }
   const body: PairExportBase = {
-    name: fields.name,
+    name: fields.name.trim(),
     overwrite: fields.overwrite,
     split: {
       ...(fields.method ? { method: fields.method } : {}),
@@ -260,7 +265,7 @@ function ExportCard({
   const result = mutation.data
   const info = result?.info as
     | {
-        splits?: Record<string, { items: number }>
+        splits?: Record<string, { items?: number } | undefined>
         target?: { entries?: string[] }
         entries?: Record<string, unknown>
         normalization?: unknown
@@ -289,7 +294,7 @@ function ExportCard({
         </label>
       </div>
       {errors.length > 0 && (
-        <ul className="mt-3 list-disc pl-5 text-xs text-critical-text">
+        <ul id={`${prefix}-reasons`} className="mt-3 list-disc pl-5 text-xs text-critical-text">
           {errors.map((error) => (
             <li key={error}>{error}</li>
           ))}
@@ -299,30 +304,37 @@ function ExportCard({
         variant="primary"
         icon={Upload}
         className="mt-3"
-        disabled={mutation.isPending || !fields.name || errors.length > 0}
+        disabled={mutation.isPending || errors.length > 0}
+        aria-describedby={errors.length > 0 ? `${prefix}-reasons` : undefined}
         onClick={onExport}
       >
         {mutation.isPending ? '書き出し中…' : 'ファイルの組を書き出す'}
       </Button>
       {mutation.error && (
         <ErrorBox error={mutation.error}>
-          {String(mutation.error).includes('既にあります') && (
-            <p className="mt-1 text-xs">
-              置き換える場合は「同じ名前があれば置き換える」に印を付けてください.
-            </p>
-          )}
+          {mutation.error instanceof ApiError &&
+            mutation.error.status === 409 &&
+            !fields.overwrite && (
+              <p className="mt-1 text-xs">
+                置き換える場合は「同じ名前があれば置き換える」に印を付けてください.
+              </p>
+            )}
         </ErrorBox>
       )}
-      {result && (
-        <div className="mt-3 space-y-2 text-sm">
-          <p className="text-good-text">書き出しました: {result.path}</p>
-          <p>
-            分割:{' '}
-            {Object.entries(splits)
-              .map(([split, value]) => `${splitLabel(split)} ${formatNumber(value.items)} 件`)
-              .join(', ')}
-          </p>
-          <div role="status" aria-live="polite">
+      {/* 書き出しの結果と注意は, 常にある枠に入れて読み上げる */}
+      <div role="status" aria-live="polite" className="mt-3 space-y-2 text-sm">
+        {result && (
+          <>
+            <p className="text-good-text">書き出しました: {result.path}</p>
+            <p>
+              分割:{' '}
+              {Object.entries(splits)
+                .map(
+                  ([split, value]) =>
+                    `${splitLabel(split)} ${formatNumber(value?.items ?? null)} 件`,
+                )
+                .join(', ')}
+            </p>
             {result.notes.length > 0 ? (
               <>
                 <p className="text-xs text-ink-3">書き出しの注意:</p>
@@ -335,7 +347,11 @@ function ExportCard({
             ) : (
               <p className="text-xs text-ink-3">書き出しの注意はありません.</p>
             )}
-          </div>
+          </>
+        )}
+      </div>
+      {result && (
+        <div className="mt-2 space-y-2 text-sm">
           <p className="text-xs text-ink-3">学習のスクリプトでの使い方:</p>
           <pre className="overflow-auto rounded bg-surface-2 p-2 text-xs">
             {itemsSnippet(
@@ -377,6 +393,10 @@ function ImageMasksForm() {
       }),
     onSuccess: () => client.invalidateQueries({ queryKey: ['datasets'] }),
   })
+  // 欄を変えたら前の結果と誤りを消す (古い場所や使い方を出したままにしない)
+  const { reset } = exporter
+  const inputs = JSON.stringify([images, masks, classes, suffix, fields])
+  useEffect(() => reset(), [inputs, reset])
   return (
     <div className="grid gap-4 lg:grid-cols-2">
       <div className="space-y-4">
@@ -459,6 +479,10 @@ function CaptureCloudsForm() {
       }),
     onSuccess: () => client.invalidateQueries({ queryKey: ['datasets'] }),
   })
+  // 欄を変えたら前の結果と誤りを消す
+  const { reset } = exporter
+  const inputs = JSON.stringify([captures, clouds, units, fields])
+  useEffect(() => reset(), [inputs, reset])
   return (
     <div className="grid gap-4 lg:grid-cols-2">
       <div className="space-y-4">
@@ -539,9 +563,14 @@ export function PairExportPage() {
           label="書き出す組"
         />
       </div>
-      {/* タブごとに欄を分ける (切り替えても入れた値は捨てる) */}
+      {/* 両方の欄を残し, 選んでいない方を隠す (切り替えても入れた値と結果を残す) */}
       <div id="pairs-panel" role="tabpanel" aria-labelledby={`pairs-tab-${form}`}>
-        {form === 'image_masks' ? <ImageMasksForm /> : <CaptureCloudsForm />}
+        <div hidden={form !== 'image_masks'}>
+          <ImageMasksForm />
+        </div>
+        <div hidden={form !== 'capture_clouds'}>
+          <CaptureCloudsForm />
+        </div>
       </div>
     </>
   )
