@@ -3,6 +3,7 @@ import { Database, FolderInput, Moon, Sun, Telescope } from 'lucide-react'
 import { NavLink, Route, Routes } from 'react-router'
 
 import { DatasetsPage } from './features/datasets/DatasetsPage'
+import { PairExportPage } from './features/datasets/PairExportPage'
 import { SourcePage } from './features/source/SourcePage'
 import { SourcesPage } from './features/sources/SourcesPage'
 import { useTheme } from './lib/themeContext'
@@ -64,6 +65,7 @@ export function App() {
           <Route path="/" element={<SourcesPage />} />
           <Route path="/sources/:id" element={<SourcePage />} />
           <Route path="/datasets" element={<DatasetsPage />} />
+          <Route path="/datasets/export" element={<PairExportPage />} />
           <Route path="*" element={<p className="text-ink-3">ページが見つかりません.</p>} />
         </Routes>
       </main>

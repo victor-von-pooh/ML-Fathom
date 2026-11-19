@@ -134,6 +134,22 @@ for index in range(6):
 }), "utf-8")
 PY
 
+# ファイルの組の見本 (ML-EDA の合成の見本). 画像と領域 (組にならない領域を
+# 1 つ足す) と, 単純な形の撮影と正確な点群
+uv run python - "$WORK" <<'PY'
+import shutil
+import sys
+from pathlib import Path
+
+from ml_eda.synthetic import write_image_masks, write_shape_captures
+
+work = Path(sys.argv[1])
+sample = write_image_masks(work / "pairs", count=8)
+shutil.copyfile(sample["masks"] / "sample_000.png",
+                sample["masks"] / "orphan.png")
+write_shape_captures(work / "shapes", views=4, points=300)
+PY
+
 # データの置き場も作業用のディレクトリにし, 決まったトークンで起動
 ML_FATHOM_HOME="$WORK/home" ML_FATHOM_TOKEN=e2e-token \
   exec uv run ml-fathom --port "$PORT"

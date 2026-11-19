@@ -1,9 +1,12 @@
 import type {
   Candidate,
+  CaptureCloudExport,
   DatasetSummary,
   ExportResult,
+  ImageMaskExport,
   Info,
   Listing,
+  PairExportResult,
   PreviewResult,
   Profile,
   Recipe,
@@ -104,6 +107,10 @@ export const api = {
   exportDataset: (id: string, recipe: Recipe, name: string, overwrite: boolean) =>
     request<ExportResult>(`/api/sources/${id}/export`, json('POST', { recipe, name, overwrite })),
   datasets: () => request<DatasetSummary[]>('/api/datasets'),
+  exportImageMasks: (body: ImageMaskExport) =>
+    request<PairExportResult>('/api/datasets/image_masks', json('POST', body)),
+  exportCaptureClouds: (body: CaptureCloudExport) =>
+    request<PairExportResult>('/api/datasets/capture_clouds', json('POST', body)),
   startFromProblem: (path: string) =>
     request<{ source: Source; notes: string[] }>('/api/problems/start', json('POST', { path })),
   checkProblem: (id: string, recipe: Recipe) =>

@@ -48,6 +48,15 @@ valid_loader = DataLoader(TensorDataset(*dataset.tensors("valid")), batch_size=6
 # 入力の形: dataset.info["splits"]["train"]["shape"][1:], 分類のクラスの数: len(dataset.info["classes"])
 ```
 
+画像と領域, 多視点の撮影と点群のように入力と正解がファイルの組のデータは, 「データセット」の「ファイルの組を書き出す」で書き出し (`dataset.yaml` の版 2), `load_items` で読む.
+
+```python
+from ml_eda import load_items
+
+dataset = load_items("~/.ml-fathom/datasets/<名前>")
+item = dataset.split("train")[0]   # {"id", "split", "group", 項目の名前: 中身}
+```
+
 学習の環境に ML-EDA を入れる方法は ML-EDA の README を参照.
 
 ## 開発

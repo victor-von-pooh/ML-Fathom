@@ -1,10 +1,171 @@
 import { useQuery } from '@tanstack/react-query'
-import { Database } from 'lucide-react'
+import { AlertTriangle, Database, Upload } from 'lucide-react'
+import { Link } from 'react-router'
 
 import { api } from '../../api/client'
+import type { ItemsDataset, TableDataset, UnreadableDataset, DatasetSummary } from '../../api/types'
 import { Card, EmptyState, ErrorBox, PageHeader, Spinner } from '../../components/ui'
 import { formatNumber, KIND_LABELS, TASK_LABELS } from '../../lib/format'
+import {
+  conventionText,
+  ENTRY_KIND_LABELS,
+  ORIGIN_LABELS,
+  originNote,
+  ROLE_LABELS,
+} from '../../lib/pairs'
 import { splitLabel } from '../../lib/recipe'
+
+/** 分割ごとの数を 1 行にする */
+function splitText(splits: Record<string, number>, unit: string): string {
+  return Object.entries(splits)
+    .map(([split, count]) => `${splitLabel(split)} ${formatNumber(count)}${unit}`)
+    .join(', ')
+}
+
+/** 場所と作った時刻 (どの版にも共通) */
+function Footer({ item }: { item: DatasetSummary }) {
+  return (
+    <>
+      <dt className="text-ink-3">場所</dt>
+      <dd className="truncate font-mono text-xs" title={item.path}>
+        {item.path}
+      </dd>
+      <dt className="text-ink-3">作った時刻</dt>
+      <dd>{item.created_at?.slice(0, 19).replace('T', ' ') ?? '—'}</dd>
+    </>
+  )
+}
+
+/** 版 1 (1 件 = 1 行の表) */
+function TableCard({ item }: { item: TableDataset }) {
+  return (
+    <Card title={<span className="font-mono">{item.name}</span>} actions={<Badge>版 1 · 表</Badge>}>
+      <dl className="grid grid-cols-[7rem_1fr] gap-1 text-sm">
+        <dt className="text-ink-3">種類とタスク</dt>
+        <dd>
+          {KIND_LABELS[item.kind] ?? item.kind} · {TASK_LABELS[item.task] ?? item.task}
+        </dd>
+        <dt className="text-ink-3">目的の列</dt>
+        <dd className="font-mono">{item.target ?? 'なし'}</dd>
+        <dt className="text-ink-3">学習に使う列</dt>
+        <dd>{item.features}</dd>
+        <dt className="text-ink-3">分割</dt>
+        <dd>{splitText(item.splits, '')}</dd>
+        <Footer item={item} />
+      </dl>
+    </Card>
+  )
+}
+
+/** 版 2 (入力と正解がファイルの組) */
+function ItemsCard({ item }: { item: ItemsDataset }) {
+  const origin = item.target.origin
+  const note = originNote(origin)
+  const settings = origin.settings ?? {}
+  return (
+    <Card
+      title={<span className="font-mono">{item.name}</span>}
+      actions={<Badge>版 2 · ファイルの組</Badge>}
+    >
+      <dl className="grid grid-cols-[7rem_1fr] gap-1 text-sm">
+        <dt className="text-ink-3">受け持ちと正解</dt>
+        <dd>
+          {ROLE_LABELS[item.role] ?? item.role} ·{' '}
+          {ENTRY_KIND_LABELS[item.target.kind] ?? item.target.kind} ({item.target.kind})
+        </dd>
+        <dt className="text-ink-3">項目</dt>
+        <dd>
+          <table className="w-full text-xs">
+            <thead className="text-left text-ink-3">
+              <tr>
+                <th className="pr-2 font-normal">名前</th>
+                <th className="pr-2 font-normal">種類</th>
+                <th className="pr-2 font-normal">単位</th>
+                <th className="font-normal">座標の決まり</th>
+              </tr>
+            </thead>
+            <tbody>
+              {item.entries.map((entry) => (
+                <tr key={entry.name} className="align-top">
+                  <td className="pr-2 font-mono">
+                    {entry.name}
+                    <span className="ml-1 text-ink-3">
+                      ({entry.role === 'target' ? '正解' : '入力'})
+                    </span>
+                  </td>
+                  <td className="pr-2">{entry.kind}</td>
+                  <td className="pr-2">{entry.units ?? '—'}</td>
+                  <td className="font-mono break-all">{conventionText(entry.convention)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </dd>
+        <dt className="text-ink-3">分割</dt>
+        <dd>
+          {splitText(item.splits, ' 件')} (全て {formatNumber(item.items)} 件)
+        </dd>
+        <dt className="text-ink-3">正解の出どころ</dt>
+        <dd>
+          {ORIGIN_LABELS[origin.type] ?? origin.type} ({origin.type})
+          {origin.name && <span className="ml-1 font-mono">{origin.name}</span>}
+          {Object.keys(settings).length > 0 && (
+            <div className="font-mono text-xs break-all text-ink-2">{JSON.stringify(settings)}</div>
+          )}
+          {note && <p className="mt-1 text-xs text-warning-text">{note}</p>}
+        </dd>
+        {item.normalization && (
+          <>
+            <dt className="text-ink-3">正規化</dt>
+            <dd>{item.normalization} (表の shift の列. 推論のときは同じ正規化をかける)</dd>
+          </>
+        )}
+        {item.notes.length > 0 && (
+          <>
+            <dt className="text-ink-3">書き出しの注意</dt>
+            <dd>
+              <ul className="list-disc pl-4 text-xs text-warning-text">
+                {item.notes.map((text) => (
+                  <li key={text}>{text}</li>
+                ))}
+              </ul>
+            </dd>
+          </>
+        )}
+        <Footer item={item} />
+      </dl>
+    </Card>
+  )
+}
+
+/** 読めないもの (知らない版, 壊れたもの). 一覧から消さずに理由を出す */
+function UnreadableCard({ item }: { item: UnreadableDataset }) {
+  return (
+    <Card
+      title={<span className="font-mono">{item.name}</span>}
+      actions={
+        <span className="flex items-center gap-1 text-xs text-critical-text">
+          <AlertTriangle size={14} aria-hidden />
+          {item.unknown_version ? '読めない版' : '読めない'}
+        </span>
+      }
+    >
+      <dl className="grid grid-cols-[7rem_1fr] gap-1 text-sm">
+        <dt className="text-ink-3">版</dt>
+        <dd className="font-mono">{String(item.format_version ?? '—')}</dd>
+        <dt className="text-ink-3">理由</dt>
+        <dd className="break-words">{item.error}</dd>
+        <Footer item={item} />
+      </dl>
+    </Card>
+  )
+}
+
+function Badge({ children }: { children: string }) {
+  return (
+    <span className="rounded-full bg-surface-2 px-2 py-0.5 text-xs text-ink-2">{children}</span>
+  )
+}
 
 /** 書き出した学習用のデータセットの一覧 */
 export function DatasetsPage() {
@@ -13,42 +174,35 @@ export function DatasetsPage() {
     <>
       <PageHeader
         title="書き出したデータセット"
-        subtitle="ML-Found の学習スクリプトで load_dataset から読み込めます"
+        subtitle="表は load_dataset, ファイルの組 (版 2) は load_items で ML-EDA から読み込めます"
+        actions={
+          <Link
+            to="/datasets/export"
+            className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-line bg-surface px-3 text-sm font-medium hover:bg-surface-2"
+          >
+            <Upload className="size-4" aria-hidden />
+            ファイルの組を書き出す
+          </Link>
+        }
       />
       {datasets.isPending && <Spinner />}
       {datasets.error && <ErrorBox error={datasets.error} />}
       {datasets.data?.length === 0 && (
         <EmptyState icon={Database} title="まだ書き出していません">
-          データの「前処理と書き出し」で学習用に書き出すと, ここに並びます.
+          データの「前処理と書き出し」で学習用に書き出すか, 「ファイルの組を書き出す」で 画像と領域,
+          撮影と点群の組を書き出すと, ここに並びます.
         </EmptyState>
       )}
       <div className="grid gap-3 md:grid-cols-2">
-        {datasets.data?.map((item) => (
-          <Card key={item.path} title={<span className="font-mono">{item.name}</span>}>
-            <dl className="grid grid-cols-[7rem_1fr] gap-1 text-sm">
-              <dt className="text-ink-3">種類とタスク</dt>
-              <dd>
-                {KIND_LABELS[item.kind] ?? item.kind} · {TASK_LABELS[item.task] ?? item.task}
-              </dd>
-              <dt className="text-ink-3">目的の列</dt>
-              <dd className="font-mono">{item.target ?? 'なし'}</dd>
-              <dt className="text-ink-3">学習に使う列</dt>
-              <dd>{item.features}</dd>
-              <dt className="text-ink-3">分割</dt>
-              <dd>
-                {Object.entries(item.splits)
-                  .map(([split, rows]) => `${splitLabel(split)} ${formatNumber(rows)}`)
-                  .join(', ')}
-              </dd>
-              <dt className="text-ink-3">場所</dt>
-              <dd className="truncate font-mono text-xs" title={item.path}>
-                {item.path}
-              </dd>
-              <dt className="text-ink-3">作った時刻</dt>
-              <dd>{item.created_at?.slice(0, 19).replace('T', ' ')}</dd>
-            </dl>
-          </Card>
-        ))}
+        {datasets.data?.map((item) =>
+          item.form === 'table' ? (
+            <TableCard key={item.path} item={item} />
+          ) : item.form === 'items' ? (
+            <ItemsCard key={item.path} item={item} />
+          ) : (
+            <UnreadableCard key={item.path} item={item} />
+          ),
+        )}
       </div>
     </>
   )

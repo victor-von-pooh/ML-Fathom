@@ -218,7 +218,101 @@ test('多視点の撮影を登録し, カメラの配置と各枚の深度を見
   await page.getByRole('radio', { name: '深度' }).check()
   await expect(page.getByRole('img', { name: '0 枚目の深度' })).toBeVisible()
 
-  // 前処理は今は扱わないと知らせる
+  // 前処理のタブでは書き出さず, 点群と組にする書き出しへ案内する
   await page.getByRole('tab', { name: '前処理と書き出し' }).click()
-  await expect(page.getByText(/多視点の撮影は, 今は読み込みと分析だけです/)).toBeVisible()
+  await expect(page.getByText(/ここでは前処理と書き出しをしません/)).toBeVisible()
+  await page.getByRole('link', { name: 'ファイルの組を書き出す' }).click()
+  await expect(page.getByRole('tab', { name: '撮影と点群' })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  )
+})
+
+// e2e/serve.sh が ML-EDA の合成の見本で作ったファイルの組
+const PAIRS = path.resolve(import.meta.dirname, '.work', 'pairs')
+const SHAPES = path.resolve(import.meta.dirname, '.work', 'shapes')
+
+test('画像と領域の組を版 2 で書き出し, 注意と使い方を見て一覧で確かめる', async ({ page }) => {
+  await page.goto('/datasets')
+  await page.getByRole('link', { name: 'ファイルの組を書き出す' }).click()
+  await expect(page.getByRole('tab', { name: '画像と領域' })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  )
+
+  // 画像のディレクトリは「選ぶ」でたどり, 領域のディレクトリは書く
+  await page.getByRole('button', { name: '画像のディレクトリを選ぶ' }).click()
+  const dialog = page.getByRole('dialog', { name: '画像のディレクトリ' })
+  await expect(dialog.getByRole('button', { name: 'このディレクトリを選ぶ' })).toBeVisible()
+  await dialog.getByRole('button', { name: 'ホーム' }).click()
+  await dialog.getByRole('button', { name: '閉じる' }).click()
+  await page.getByLabel('画像のディレクトリ', { exact: true }).fill(PAIRS)
+  await page.getByRole('button', { name: '画像のディレクトリを選ぶ' }).click()
+  await dialog.getByRole('button', { name: 'images', exact: true }).click()
+  await dialog.getByRole('button', { name: 'このディレクトリを選ぶ' }).click()
+  await expect(page.getByLabel('画像のディレクトリ', { exact: true })).toHaveValue(
+    path.join(PAIRS, 'images'),
+  )
+  await page.getByLabel('領域のディレクトリ', { exact: true }).fill(path.join(PAIRS, 'masks'))
+  await page.getByLabel('値の名前 (任意)').fill('0: background\n1: circle\n2: square')
+
+  // 出どころを今ある処理にすると, その処理を超えられないと添える
+  await page.getByRole('combobox', { name: '種類' }).selectOption('process')
+  await page.getByLabel('作った処理の名前').fill('threshold')
+  await page.getByLabel('設定 (YAML)').fill('level: 0.5')
+  await expect(page.getByText(/処理 threshold を超えられません/)).toBeVisible()
+
+  // 形の誤った設定は書き出す前に止める
+  const button = page.getByRole('button', { name: 'ファイルの組を書き出す' })
+  await page.getByLabel('設定 (YAML)').fill('- a')
+  await expect(button).toBeDisabled()
+  await page.getByLabel('設定 (YAML)').fill('level: 0.5')
+  await page.getByLabel('データセットの名前').fill('shapes')
+  await button.click()
+
+  // 組にならなかった領域の注意と, load_items の使い方
+  await expect(page.getByText(/書き出しました/)).toBeVisible({ timeout: 20_000 })
+  await expect(page.getByText(/orphan/)).toBeVisible()
+  await expect(page.getByText(/dataset = load_items\(/)).toBeVisible()
+
+  // 一覧に版 2 として並ぶ
+  await page.getByRole('link', { name: 'データセットの一覧へ' }).click()
+  const card = page.locator('section', { has: page.getByText('shapes', { exact: true }) })
+  await expect(card.getByText('版 2 · ファイルの組')).toBeVisible()
+  await expect(card.getByText(/予測する · 領域 \(mask\)/)).toBeVisible()
+  await expect(card.getByText(/今ある処理の出力 \(process\)/)).toBeVisible()
+  await expect(card.getByText(/全て 8 件/)).toBeVisible()
+})
+
+test('撮影と点群の組をグループで分けて書き出し, 一覧で確かめる', async ({ page }) => {
+  await page.goto('/datasets/export?form=capture_clouds')
+  await page.getByLabel('撮影のディレクトリ', { exact: true }).fill(path.join(SHAPES, 'captures'))
+  await page.getByLabel('点群のディレクトリ', { exact: true }).fill(path.join(SHAPES, 'clouds'))
+  await page.getByRole('combobox', { name: '点群の単位' }).selectOption('meter')
+  await page
+    .getByLabel('グループ (任意)')
+    .fill('sphere_a,sphere\nsphere_b,sphere\nbox_a,box\nbox_b,box')
+  await page.getByLabel('検証用の割合').fill('0.5')
+  await page.getByRole('combobox', { name: '種類' }).selectOption('synthetic')
+  await page.getByLabel('データセットの名前').fill('objects')
+  await page.getByRole('button', { name: 'ファイルの組を書き出す' }).click()
+
+  await expect(page.getByText(/書き出しました/)).toBeVisible({ timeout: 30_000 })
+  await expect(page.getByText(/train 2 件, valid 2 件/)).toBeVisible()
+  await expect(page.getByText(/capture_shift と normalize_capture/)).toBeVisible()
+
+  // 同じ名前は置き換えの印が無ければ止まる
+  await page.getByRole('button', { name: 'ファイルの組を書き出す' }).click()
+  await expect(page.getByText(/objects は既にあります/)).toBeVisible()
+
+  await page
+    .getByRole('navigation', { name: '移動' })
+    .getByRole('link', { name: 'データセット', exact: true })
+    .click()
+  const card = page.locator('section', { has: page.getByText('objects', { exact: true }) })
+  await expect(card.getByText(/予測する · 点群 \(point_cloud\)/)).toBeVisible()
+  await expect(card.getByText('view_center', { exact: false })).toBeVisible()
+  await expect(card.getByText(/作った正確な正解 \(synthetic\)/)).toBeVisible()
+  // 前の書き出しも並ぶ
+  await expect(page.getByText('shapes', { exact: true })).toBeVisible()
 })

@@ -289,15 +289,91 @@ export interface ExportResult {
   hints?: ModelHints
 }
 
-export interface DatasetSummary {
+interface DatasetBase {
   name: string
   path: string
+  /** dataset.yaml の版 (読めないものは書かれた値のまま) */
+  format_version: unknown
+  created_at: string | null
+}
+
+/** 版 1 (1 件 = 1 行の表. load_dataset で読む) */
+export interface TableDataset extends DatasetBase {
+  form: 'table'
   kind: string
   task: string
   target: string | null
   splits: Record<string, number>
   features: number
-  created_at: string
+}
+
+/** 正解の出どころ (ML-EDA の target.origin) */
+export interface PairOrigin {
+  type: string
+  name?: string | null
+  settings?: Record<string, unknown>
+}
+
+/** 版 2 の項目 (入力か正解) */
+export interface ItemEntry {
+  name: string
+  kind: string
+  role: string
+  units: string | null
+  convention: Record<string, unknown> | null
+  shape: (number | null)[] | null
+  formats: string[] | null
+}
+
+/** 版 2 (入力と正解がファイルの組. load_items で読む) */
+export interface ItemsDataset extends DatasetBase {
+  form: 'items'
+  role: string
+  target: { kind: string; entries: string[]; origin: PairOrigin }
+  entries: ItemEntry[]
+  splits: Record<string, number>
+  items: number
+  /** 座標の正規化の方法 (かけた場合だけ) */
+  normalization: string | null
+  notes: string[]
+}
+
+/** 読めないデータセット (知らない版, 壊れたもの) */
+export interface UnreadableDataset extends DatasetBase {
+  form: 'unreadable'
+  /** 版 1 と 2 の他の版 */
+  unknown_version: boolean
+  error: string
+}
+
+export type DatasetSummary = TableDataset | ItemsDataset | UnreadableDataset
+
+/** ファイルの組の書き出しに共通の設定 */
+export interface PairExportBase {
+  name: string
+  overwrite: boolean
+  split: { method?: 'random' | 'group' | 'none'; valid: number; test: number; seed: number }
+  groups?: Record<string, string>
+  origin: PairOrigin
+}
+
+export interface ImageMaskExport extends PairExportBase {
+  images: string
+  masks: string
+  classes?: Record<string, string>
+  mask_suffix: string
+}
+
+export interface CaptureCloudExport extends PairExportBase {
+  captures: string
+  clouds: string
+  cloud_units: string
+}
+
+export interface PairExportResult {
+  path: string
+  info: Record<string, unknown>
+  notes: string[]
 }
 
 /** 多視点の撮影の 1 件 (各枚と上から見たカメラの配置) */
