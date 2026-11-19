@@ -111,6 +111,42 @@ def without_drop(recipe: dict[str, Any]) -> dict[str, Any]:
     return changed
 
 
+def to_version1(path: Path) -> None:
+    """
+    保存した版 2 の問題の設定を, 版 1 の形に書き直す関数
+
+    版 1 は受け持ちの項目を ml の直下に, 指標を evaluation に持つ
+
+    Parameters
+    ----------
+    path: Path
+        problem.yaml を持つディレクトリ
+
+    Returns
+    ----------
+    None
+    """
+    # 受け持ちの 1 つ目を ml の直下へ (版 2 で足した型の答えは除く)
+    file = path / "problem.yaml"
+    problem = yaml.safe_load(file.read_text(encoding="utf-8"))
+    part = problem["ml"].pop("parts")[0]
+    for key in ("role", "unit", "output", "method"):
+        part.pop(key, None)
+    target = part.pop("target")
+    problem["evaluation"] = {
+        **(problem.get("evaluation") or {}), **part.pop("evaluation"),
+    }
+    problem["ml"].update(
+        part, target=target["column"], predict=part.pop("what"),
+        row=part.pop("item")
+    )
+    problem["format_version"] = 1
+    file.write_text(
+        yaml.safe_dump(problem, allow_unicode=True, sort_keys=False),
+        encoding="utf-8"
+    )
+
+
 def test_start_from_problem(client: TestClient, tmp_path: Path) -> None:
     """
     問題の設定から始めると, データと決めた状態のレシピが入ることを
@@ -188,7 +224,10 @@ def test_check_and_write(client: TestClient, tmp_path: Path) -> None:
             step["lags"] = [1]
     checked = client.post(f"{url}/check", json={"recipe": recipe}).json()
     assert [c["column"] for c in checked["choices"]] == ["customers"]
-    assert any(c["id"] == "ml.available_lag" for c in checked["conflicts"])
+    assert any(
+        c["id"] == f"{ml_quest.PART}.available_lag"
+        for c in checked["conflicts"]
+    )
     assert ml_quest.load_problem(path)["data"].get("recipe") is None
 
     # 選ばずに書き戻すと誤り. 落とすと選ぶと, 両方のレシピに入る
@@ -331,3 +370,102 @@ def test_review_cases(client: TestClient, tmp_path: Path) -> None:
     (path / "problem.yaml").write_text(yaml.safe_dump(recipe), "utf-8")
     replaced = client.post(f"{url}/check", json={"recipe": recipe})
     assert replaced.status_code == 422
+
+
+def test_version1_file(client: TestClient, tmp_path: Path) -> None:
+    """
+    版 1 の問題の設定から始め, 書き戻すと版 2 で保存することを確かめる
+    関数
+
+    Parameters
+    ----------
+    client: TestClient
+        クライアント
+    tmp_path: Path
+        一時ディレクトリ
+
+    Returns
+    ----------
+    None
+    """
+    # 版 1 のファイルも, 読んだ後に版 2 に移して始める
+    path = write_problem(tmp_path)
+    to_version1(path)
+    assert yaml.safe_load(
+        (path / "problem.yaml").read_text(encoding="utf-8")
+    )["format_version"] == 1
+    response = client.post("/api/problems/start", json={"path": str(path)})
+    assert response.status_code == 201
+    source = response.json()["source"]
+    assert source["target"] == "sales"
+    recipe = client.get(f"/api/sources/{source['id']}/recipe").json()
+    assert recipe["split"]["method"] == "time"
+
+    # 食い違いの場所は版 2 の名前. 書き戻すと版 2 のファイルになる
+    url = f"/api/sources/{source['id']}/problem"
+    changed = without_drop(recipe)
+    checked = client.post(f"{url}/check", json={"recipe": changed}).json()
+    assert [c["column"] for c in checked["choices"]] == ["customers"]
+    written = client.post(f"{url}/write", json={
+        "recipe": changed, "choices": {"customers": "drop"},
+        "version": current(path),
+    })
+    assert written.status_code == 200
+    raw = yaml.safe_load((path / "problem.yaml").read_text(encoding="utf-8"))
+    assert raw["format_version"] == 2
+    assert raw["ml"]["parts"][0]["target"]["column"] == "sales"
+    saved = ml_quest.load_problem(path)
+    assert ml_quest.get_value(saved, "ml.target") == "sales"
+    assert saved["data"]["recipe"]["target"] == "sales"
+
+
+def test_not_column_role(client: TestClient, tmp_path: Path) -> None:
+    """
+    列の予測でない受け持ちの問題の設定は, 始めるのと書き戻しで理由を
+    返すことを確かめる関数
+
+    Parameters
+    ----------
+    client: TestClient
+        クライアント
+    tmp_path: Path
+        一時ディレクトリ
+
+    Returns
+    ----------
+    None
+    """
+    # 列の予測から始めてから, 正解の種類を点群に変える
+    path = write_problem(tmp_path)
+    source = client.post(
+        "/api/problems/start", json={"path": str(path)}
+    ).json()["source"]
+    problem = ml_quest.answer(
+        ml_quest.load_problem(path), f"{ml_quest.PART}.target.kind",
+        "point_cloud"
+    )
+    ml_quest.save_problem(problem, path)
+
+    # 始めるのも, 確かめと書き戻しも 422 で, 受け持ちと正解の種類を出す
+    response = client.post("/api/problems/start", json={"path": str(path)})
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    assert "predict" in detail and "point_cloud" in detail
+    assert "データを追加" in detail
+    url = f"/api/sources/{source['id']}/problem"
+    recipe = client.get(f"/api/sources/{source['id']}/recipe").json()
+    checked = client.post(f"{url}/check", json={"recipe": recipe})
+    assert checked.status_code == 422
+    assert "point_cloud" in checked.json()["detail"]
+    assert client.post(f"{url}/write", json={
+        "recipe": recipe, "version": current(path)
+    }).status_code == 422
+
+    # 受け持ちが作るでも同じ
+    problem = ml_quest.answer(
+        ml_quest.load_problem(path), f"{ml_quest.PART}.role", "generate"
+    )
+    ml_quest.save_problem(problem, path)
+    response = client.post("/api/problems/start", json={"path": str(path)})
+    assert response.status_code == 422
+    assert "generate" in response.json()["detail"]
