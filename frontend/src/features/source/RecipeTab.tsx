@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import clsx from 'clsx'
 import { ArrowDown, ArrowUp, Plus, Save, Sparkles, Trash2, Upload, Wand2 } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
 import { useRecipeDraft } from '../../lib/drafts'
 import { useDebounced } from '../../lib/useDebounced'
@@ -19,6 +19,14 @@ import type {
 import { Button, Card, ErrorBox, Spinner } from '../../components/ui'
 import { defaultDatasetName, formatNumber, TASK_LABELS } from '../../lib/format'
 import { findDecisions, withAutoItems } from '../../lib/decisions'
+import {
+  canKeepUnlabeled,
+  fitUnlabeled,
+  splitLabel,
+  untargetedDraft,
+  usageSnippet,
+  withUnlabeled,
+} from '../../lib/recipe'
 import { autoRecipe, suggestSteps } from '../../lib/suggest'
 import { useDecided } from '../../lib/useDecided'
 import { DecisionsCard } from './DecisionsCard'
@@ -288,12 +296,27 @@ export function RecipeTab({
   // 目的の列は上の指定に合わせる
   const [draft, setDraft] = useRecipeDraft(sourceId)
   const base = draft ?? saved.data ?? null
-  // タスクを決めていない場合は, 分析で推定したタスク (分類か回帰) にする
+  // 目的の列が無いのに正解の欠けた行を残す指定があれば, 編集中のレシピから消す
+  // (目的の列を外すときにも消す. ここは別の経路で外れた場合のため)
+  useEffect(() => {
+    if (target) return
+    const next = untargetedDraft(draft, saved.data ?? null)
+    if (next) setDraft(next)
+  }, [target, draft, saved.data, setDraft])
+  // タスクを決めていない場合は, 分析で推定したタスク (分類か回帰) にする.
+  // 目的の列が無ければ, 上で消すまでの間も正解の欠けた行を残す指定を外して試す
   const guessed = profile.target?.task ?? 'none'
   const recipe = useMemo(
     () =>
       base
-        ? { ...base, target, task: base.task === 'none' && target && !draft ? guessed : base.task }
+        ? fitUnlabeled(
+            {
+              ...base,
+              target,
+              task: base.task === 'none' && target && !draft ? guessed : base.task,
+            },
+            target,
+          )
         : null,
     [base, target, guessed, draft],
   )
@@ -501,6 +524,35 @@ export function RecipeTab({
                     <option value={recipe.split.column}>{recipe.split.column}</option>
                   )}
                 </select>
+              </>
+            )}
+            {/* 正解の欠けた行は目的の列がある場合だけ選ぶ (ML-EDA の split.unlabeled) */}
+            {target && (
+              <>
+                <label htmlFor="split-unlabeled" className="text-ink-3">
+                  正解の欠けた行
+                </label>
+                <select
+                  id="split-unlabeled"
+                  aria-describedby="split-unlabeled-help"
+                  value={recipe.split.unlabeled === 'keep' ? 'keep' : 'drop'}
+                  disabled={
+                    !canKeepUnlabeled(recipe, profile.columns[target], profile.overview.sampled)
+                  }
+                  onChange={(event) => update(withUnlabeled(recipe, event.target.value === 'keep'))}
+                  className="h-8 rounded border border-line bg-surface px-2 disabled:opacity-60"
+                >
+                  <option value="drop">落とす</option>
+                  <option value="keep">unlabeled の分割に残す</option>
+                </select>
+                <p id="split-unlabeled-help" className="col-span-2 text-xs text-ink-3">
+                  {profile.columns[target] &&
+                    `目的の列の欠けた行: ${formatNumber(profile.columns[target].missing)} 行${
+                      profile.overview.sampled ? ' (間引いて分析した行で)' : ''
+                    }. `}
+                  半教師あり学習や異常の検知のように, 正解の無い行も学習に使う場合は残します. train,
+                  valid, test の中身は変わらず, 残した行には学習用で当てはめた前処理をかけます.
+                </p>
               </>
             )}
           </div>
@@ -764,17 +816,11 @@ export function RecipeTab({
               {exporter.data.hints && <ModelHintsView hints={exporter.data.hints} />}
               <p className="text-xs text-ink-3">ML-Found の学習スクリプトでの使い方:</p>
               <pre className="overflow-auto rounded bg-surface-2 p-2 text-xs">
-                {`from ml_eda import load_dataset
-from torch.utils.data import DataLoader, TensorDataset
-
-dataset = load_dataset("${exporter.data.path}")
-train_loader = DataLoader(TensorDataset(*dataset.tensors("train")), batch_size=64, shuffle=True)
-valid_loader = DataLoader(TensorDataset(*dataset.tensors("valid")), batch_size=64)
-${
-  media
-    ? '# 入力の形: dataset.info["splits"]["train"]["shape"][1:], クラスの数: len(dataset.info["classes"])'
-    : '# 入力の次元: len(dataset.features), クラスの数: len(dataset.info["classes"])'
-}`}
+                {usageSnippet(
+                  exporter.data.path,
+                  (exporter.data.info.splits as Record<string, unknown> | undefined) ?? {},
+                  media,
+                )}
               </pre>
             </div>
           )}
@@ -831,7 +877,7 @@ ${
                   <div>
                     分割:{' '}
                     {Object.entries(result.splits)
-                      .map(([split, count]) => `${split} ${formatNumber(count)} 行`)
+                      .map(([split, count]) => `${splitLabel(split)} ${formatNumber(count)} 行`)
                       .join(', ')}
                   </div>
                   <div>学習に使う列: {result.features?.length ?? 0}</div>

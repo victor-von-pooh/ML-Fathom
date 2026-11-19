@@ -4,6 +4,7 @@ import { Database } from 'lucide-react'
 import { api } from '../../api/client'
 import { Card, EmptyState, ErrorBox, PageHeader, Spinner } from '../../components/ui'
 import { formatNumber, KIND_LABELS, TASK_LABELS } from '../../lib/format'
+import { splitLabel } from '../../lib/recipe'
 
 /** 書き出した学習用のデータセットの一覧 */
 export function DatasetsPage() {
@@ -36,7 +37,7 @@ export function DatasetsPage() {
               <dt className="text-ink-3">分割</dt>
               <dd>
                 {Object.entries(item.splits)
-                  .map(([split, rows]) => `${split} ${formatNumber(rows)}`)
+                  .map(([split, rows]) => `${splitLabel(split)} ${formatNumber(rows)}`)
                   .join(', ')}
               </dd>
               <dt className="text-ink-3">場所</dt>

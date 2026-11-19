@@ -243,7 +243,15 @@ export interface Recipe {
   task: string
   steps: RecipeStep[]
   item_steps?: RecipeStep[]
-  split: { method: string; valid?: number; test?: number; seed?: number; column?: string }
+  split: {
+    method: string
+    valid?: number
+    test?: number
+    seed?: number
+    column?: string
+    /** 目的の列の欠けた行を落とすか, unlabeled の分割に残すか (無ければ落とす) */
+    unlabeled?: 'drop' | 'keep'
+  }
 }
 
 export interface FrameView {
