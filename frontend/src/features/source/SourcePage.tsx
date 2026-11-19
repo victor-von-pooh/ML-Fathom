@@ -141,8 +141,12 @@ export function SourcePage() {
         {tab === 'data' && <DataTab sourceId={id} />}
         {data && tab === 'recipe' && source.kind === 'capture' && (
           <p className="rounded-xl border border-line bg-surface p-4 text-sm text-ink-2">
-            多視点の撮影は, 今は読み込みと分析だけです. 前処理と書き出しは, 多視点の学習の正解
-            (何を正解の形にするか) が決まってから足します.
+            多視点の撮影は, ここでは前処理と書き出しをしません.
+            撮影ごとの正解の点群と組にして書き出す場合は,{' '}
+            <Link to="/datasets/export?form=capture_clouds" className="text-accent-text underline">
+              ファイルの組を書き出す
+            </Link>{' '}
+            を使います.
           </p>
         )}
         {data && tab === 'recipe' && info.data && source.kind !== 'capture' && (

@@ -3,7 +3,7 @@ import threading
 import time
 from collections import OrderedDict
 from pathlib import Path
-from typing import Any, Literal, Optional
+from typing import Annotated, Any, Literal, Optional
 
 import ml_eda
 import numpy as np
@@ -14,6 +14,7 @@ from ml_eda.pipeline import frame_view
 from ml_eda.profile import to_json
 from pydantic import BaseModel, Field
 
+from ml_fathom.datasets import dataset_summary
 from ml_fathom.items import (
     capture_layer,
     item_response,
@@ -38,6 +39,10 @@ CACHE_SIZE = 8
 
 # 表の中身として一度に返す行の上限
 MAX_ROWS = 500
+
+# データセットの書き出しを 1 つずつにする鍵 (同じ名前の一時ディレクトリを
+# 2 つの書き出しが同時に使わないように)
+EXPORT_LOCK = threading.Lock()
 
 
 class Cache:
@@ -137,6 +142,46 @@ class ExportRequest(BaseModel):
     recipe: dict[str, Any]
     name: str
     overwrite: bool = False
+
+
+class PairSplit(BaseModel):
+    # 分割のしかた (省略でグループがあれば group)
+    method: Optional[Literal["random", "group", "none"]] = None
+    valid: Annotated[float, Field(ge=0, lt=1)] = 0.2
+    test: Annotated[float, Field(ge=0, lt=1)] = 0.0
+    seed: int = 0
+
+
+class PairOrigin(BaseModel):
+    # 正解の出どころの種類 (確かめは ML-EDA)
+    type: str = "unknown"
+    name: Optional[str] = None
+    settings: dict[str, Any] = Field(default_factory=dict)
+
+
+class PairExport(BaseModel):
+    name: str
+    overwrite: bool = False
+    split: PairSplit = PairSplit()
+    groups: Optional[dict[str, str]] = Field(
+        None, description="件の id からグループ"
+    )
+    origin: PairOrigin = PairOrigin()
+
+
+class ImageMaskExport(PairExport):
+    images: str = Field(description="画像のディレクトリ")
+    masks: str = Field(description="領域のディレクトリ")
+    classes: Optional[dict[str, str]] = Field(
+        None, description="領域の値から名前"
+    )
+    mask_suffix: str = ""
+
+
+class CaptureCloudExport(PairExport):
+    captures: str = Field(description="撮影のディレクトリ")
+    clouds: str = Field(description="点群のディレクトリ")
+    cloud_units: str = "meter"
 
 
 def get_store(request: Request) -> SourceStore:
@@ -1067,10 +1112,11 @@ def export(
     data = load_source(find_source(request, source_id))
     try:
         target = store.dataset_dir(body.name)
-        info = ml_eda.export_dataset(
-            data, body.recipe, target, name=body.name,
-            overwrite=body.overwrite
-        )
+        with EXPORT_LOCK:
+            info = ml_eda.export_dataset(
+                data, body.recipe, target, name=body.name,
+                overwrite=body.overwrite
+            )
     except FileExistsError as error:
         raise HTTPException(409, f"{body.name} は既にあります") from error
     except (ValueError, KeyError, TypeError, AttributeError) as error:
@@ -1142,6 +1188,9 @@ def list_datasets(request: Request) -> list[dict[str, Any]]:
     """
     書き出したデータセットの一覧を返す関数
 
+    版 1 は load_dataset, 版 2 は load_items で読み分け, 読めないもの
+    (知らない版など) も理由を付けて並べる
+
     Parameters
     ----------
     request: Request
@@ -1150,30 +1199,229 @@ def list_datasets(request: Request) -> list[dict[str, Any]]:
     Returns
     ----------
     datasets: list[dict[str, Any]]
-        名前, 場所, 種類, タスク, 分割の件数, 作った時刻
+        名前, 場所, 版, 形 (table, items, unreadable), 作った時刻と,
+        形ごとの中身 (新しい順. 時刻の無いものは後ろ)
     """
-    # datasets の下の dataset.yaml を読む
+    # datasets の下の dataset.yaml を版で読み分ける
     root = get_store(request).home / "datasets"
     datasets = []
     if root.is_dir():
         for child in sorted(root.iterdir()):
-            try:
-                info = ml_eda.load_dataset(child).info
-                splits = {
-                    k: v.get("rows") for k, v in info["splits"].items()
-                }
-            except (OSError, ValueError, KeyError, TypeError,
-                    AttributeError):
-                continue
-            datasets.append({
-                "name": child.name, "path": str(child),
-                "kind": info.get("kind"), "task": info.get("task"),
-                "target": info.get("target"),
-                "splits": splits,
-                "features": len(info.get("features", [])),
-                "created_at": info.get("created_at"),
-            })
-    datasets.sort(key=lambda item: str(item["created_at"]), reverse=True)
+            summary = dataset_summary(child) if child.is_dir() else None
+            if summary is not None:
+                datasets.append(summary)
+    datasets.sort(key=created_of, reverse=True)
 
     return datasets
 
+
+def created_of(summary: dict[str, Any]) -> str:
+    """
+    一覧の 1 件の作った時刻を, 並べ替えの鍵にする関数
+
+    Parameters
+    ----------
+    summary: dict[str, Any]
+        一覧の 1 件
+
+    Returns
+    ----------
+    key: str
+        作った時刻の文字 (無ければ空)
+    """
+    # 時刻の無いもの (読めないもの) は後ろ
+    key = str(summary.get("created_at") or "")
+
+    return key
+
+
+def pair_options(body: PairExport) -> dict[str, Any]:
+    """
+    ファイルの組の書き出しに共通の引数を作る関数
+
+    Parameters
+    ----------
+    body: PairExport
+        書き出しの要求
+
+    Returns
+    ----------
+    options: dict[str, Any]
+        split, groups, origin, name, overwrite
+    """
+    # 分割のしかたは, 選んだ場合だけ method を渡す (既定はグループの有無で)
+    split: dict[str, Any] = {
+        "valid": body.split.valid, "test": body.split.test,
+        "seed": body.split.seed,
+    }
+    if body.split.method:
+        split["method"] = body.split.method
+    options = {
+        "split": split, "groups": body.groups or None,
+        "origin": body.origin.model_dump(), "name": body.name,
+        "overwrite": body.overwrite,
+    }
+
+    return options
+
+
+def pair_result(target: Path, info: dict[str, Any]) -> dict[str, Any]:
+    """
+    ファイルの組の書き出しの結果を, 画面に返す形にする関数
+
+    Parameters
+    ----------
+    target: Path
+        書き出した場所
+    info: dict[str, Any]
+        dataset.yaml の中身
+
+    Returns
+    ----------
+    result: dict[str, Any]
+        場所, dataset.yaml の中身, 注意
+    """
+    # 注意は画面で並べるので取り出す
+    result = {
+        "path": str(target), "info": to_json(info),
+        "notes": [str(note) for note in info.get("notes") or []],
+    }
+
+    return result
+
+
+def exists_error(
+    body: PairExport, error: FileExistsError
+) -> HTTPException:
+    """
+    書き出す場所が既にある場合の 409 を作る関数
+
+    Parameters
+    ----------
+    body: PairExport
+        書き出しの要求
+    error: FileExistsError
+        ML-EDA の誤り (置き換えの指定が無いか, データセットでない場所)
+
+    Returns
+    ----------
+    result: HTTPException
+        409 (置き換えを指定した場合は ML-EDA の理由)
+    """
+    # 置き換えを指定していなければ名前で, していればデータセットでない場所
+    detail = str(error) if body.overwrite else f"{body.name} は既にあります"
+    result = HTTPException(409, detail)
+
+    return result
+
+
+def export_message(error: Exception) -> str:
+    """
+    書き出しの誤りを画面に出す文にする関数
+
+    Parameters
+    ----------
+    error: Exception
+        書き出しの誤り
+
+    Returns
+    ----------
+    message: str
+        ML-EDA の誤りの文 (想定していない誤りは種類を添える)
+    """
+    # 入力の誤り (ValueError) はそのまま, 他は壊れたファイルなどとして
+    if isinstance(error, ValueError):
+        message = str(error)
+    else:
+        message = f"書き出せませんでした ({type(error).__name__}): {error}"
+
+    return message
+
+
+@router.post("/datasets/image_masks")
+def export_image_masks(
+    request: Request, body: ImageMaskExport
+) -> dict[str, Any]:
+    """
+    画像と領域の対を, 版 2 のデータセットに書き出す関数
+
+    Parameters
+    ----------
+    request: Request
+        リクエスト
+    body: ImageMaskExport
+        画像と領域のディレクトリ, 値の名前, 領域の名前の終わり, 分割,
+        グループ, 正解の出どころ, 名前, 置き換えるか
+
+    Returns
+    ----------
+    result: dict[str, Any]
+        書き出した場所, dataset.yaml の中身, 注意
+
+    Raises
+    ----------
+    HTTPException
+        名前と組の誤りは 422, 既にある場合は 409
+    """
+    # 置き場の datasets の下に書き出す
+    store = get_store(request)
+    try:
+        target = store.dataset_dir(body.name)
+        with EXPORT_LOCK:
+            info = ml_eda.export_image_masks(
+                Path(body.images).expanduser(),
+                Path(body.masks).expanduser(), target,
+                classes=body.classes or None,
+                mask_suffix=body.mask_suffix, **pair_options(body)
+            )
+    except FileExistsError as error:
+        raise exists_error(body, error) from error
+    except Exception as error:  # noqa: BLE001 (壊れたファイルも理由を返す)
+        raise HTTPException(422, export_message(error)) from error
+    result = pair_result(target, info)
+
+    return result
+
+
+@router.post("/datasets/capture_clouds")
+def export_capture_clouds(
+    request: Request, body: CaptureCloudExport
+) -> dict[str, Any]:
+    """
+    多視点の撮影と正解の点群の対を, 版 2 のデータセットに書き出す関数
+
+    Parameters
+    ----------
+    request: Request
+        リクエスト
+    body: CaptureCloudExport
+        撮影と点群のディレクトリ, 点群の単位, 分割, グループ, 正解の
+        出どころ, 名前, 置き換えるか
+
+    Returns
+    ----------
+    result: dict[str, Any]
+        書き出した場所, dataset.yaml の中身, 注意
+
+    Raises
+    ----------
+    HTTPException
+        名前と組の誤りは 422, 既にある場合は 409
+    """
+    # 置き場の datasets の下に書き出す
+    store = get_store(request)
+    try:
+        target = store.dataset_dir(body.name)
+        with EXPORT_LOCK:
+            info = ml_eda.export_capture_clouds(
+                Path(body.captures).expanduser(),
+                Path(body.clouds).expanduser(), target,
+                cloud_units=body.cloud_units, **pair_options(body)
+            )
+    except FileExistsError as error:
+        raise exists_error(body, error) from error
+    except Exception as error:  # noqa: BLE001 (壊れたファイルも理由を返す)
+        raise HTTPException(422, export_message(error)) from error
+    result = pair_result(target, info)
+
+    return result
