@@ -101,13 +101,48 @@ export function originNote(origin: PairOrigin | null | undefined): string | null
   return `正解は${name}の出力です. 測れるのは${name}との一致で, モデルは${name}を超えられません.`
 }
 
-/** 座標の決まりを 1 行の文にする (`鍵=値` の並び) */
+/** 深度から点に戻すための決まりの鍵 (撮影の convention. 座標の決まりとは別の行に出す) */
+const DEPTH_KEYS = ['depth', 'pixel_center']
+
+/** 深度の測り方の日本語の説明 (ML-EDA の convention.depth) */
+export const DEPTH_LABELS: Record<string, string> = {
+  z: 'カメラの前の軸に沿った距離',
+  ray: '光線に沿った距離',
+}
+
+/** 座標の決まりを 1 行の文にする (`鍵=値` の並び. 深度の測り方と画素の中心は除く) */
 export function conventionText(convention: Record<string, unknown> | null | undefined): string {
   if (!convention) return '—'
   return Object.entries(convention)
-    .filter(([, value]) => value !== null && value !== undefined)
+    .filter(([key, value]) => value !== null && value !== undefined && !DEPTH_KEYS.includes(key))
     .map(([key, value]) => `${key}=${typeof value === 'string' ? value : JSON.stringify(value)}`)
     .join(', ')
+}
+
+/**
+ * 撮影の深度の測り方と画素の中心を 1 行の文にする. 撮影の他は null.
+ * 欄の無い撮影は, 前の ML-EDA で書き出したもの (書き出し直すと入る)
+ */
+export function depthConventionText(
+  kind: string,
+  convention: Record<string, unknown> | null | undefined,
+): string | null {
+  if (kind !== 'capture') return null
+  const depth = convention?.depth
+  const center = convention?.pixel_center
+  if ((depth === null || depth === undefined) && (center === null || center === undefined)) {
+    return '深度の測り方と画素の中心: 書かれていません (書き出し直すと入ります)'
+  }
+  const parts = []
+  if (typeof depth === 'string') {
+    const label = DEPTH_LABELS[depth]
+    parts.push(`深度 ${depth}${label ? ` (${label})` : ''}`)
+  }
+  if (typeof center === 'number') {
+    parts.push(`画素の中心 +${center} (行 r, 列 c の画素は (c + ${center}, r + ${center}))`)
+  }
+  const text = parts.length > 0 ? parts.join(' · ') : null
+  return text
 }
 
 /**
@@ -131,7 +166,7 @@ export function itemsSnippet(
     'test' in splits ? 'test = dataset.split("test")' : null,
     'paths = dataset.split("train", read=False)[0]   # 配列の代わりに場所',
     normalized
-      ? '# 推論のときは capture_shift と normalize_capture で同じ正規化をかけ, 出力から shift を引いて元の座標に戻す'
+      ? '# 推論のときは normalize_capture で同じ正規化をかけて read_capture で読み, 出力から shift を引いて元の座標に戻す'
       : null,
   ]
   const snippet = lines.filter((line) => line !== null).join('\n')
