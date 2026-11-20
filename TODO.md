@@ -17,7 +17,11 @@
 
 ## 優先度 低
 
-無し
+### ML-EDA と ML-Quest の公開されていない名前を使わない
+- 何を: ML-EDA の `pipeline.frame_view`, `profile.to_json` と ML-Quest の `check.is_column_part` を使う所を, 公開の関数に置き換える. 要る関数は持ち主に公開してもらう
+- なぜ: 画面は自分の組のライブラリの公開の口だけを使う決まりのため
+- 終わりの条件: 公開されていない名前の import が無い
+- つながり: ML-EDA, ML-Quest
 
 ## 条件待ち
 
