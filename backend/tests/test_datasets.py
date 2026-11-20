@@ -5,9 +5,12 @@ import pandas as pd
 import pytest
 import yaml
 from fastapi.testclient import TestClient
+from ml_eda import ITEM_STEPS
+from ml_eda.itemprep import ENTRY_STEPS
 from ml_eda.pipeline import ITEMS_FORMAT_VERSIONS
 from ml_eda.synthetic import write_image_masks, write_shape_captures
 
+from ml_fathom.api import PAIR_STEPS
 from ml_fathom.app import create_app
 
 # テストで使うトークン
@@ -133,9 +136,11 @@ def test_image_masks_item_steps(
         "resize", "grayscale", "rgb",
     ]
     assert image["image"][0]["required"] == ["width", "height"]
-    assert [step["op"] for step in pairs["capture_clouds"]["cloud"]] == [
-        "sample_points",
-    ]
+    assert image["image"][0]["limits"] == {"width": 4096, "height": 4096}
+    assert image["image"][1]["limits"] == {}
+    cloud = pairs["capture_clouds"]["cloud"]
+    assert [step["op"] for step in cloud] == ["sample_points"]
+    assert cloud[0]["limits"] == {"points": 1_000_000}
 
     # 大きさの混ざった見本を 16 × 20 にそろえる
     sample = write_image_masks(
@@ -155,9 +160,10 @@ def test_image_masks_item_steps(
         {"op": "resize_mask", "width": 20, "height": 16},
     ]
 
-    # 領域の手順と, ファイルに残せない手順は 422
+    # 領域の手順, ファイルに残せない手順, 上限を超えた大きさは 422
     for wrong in ({"mask": steps}, {"image": [{"op": "normalize"}]},
-                  {"image": [{"op": "resize", "width": 0, "height": 4}]}):
+                  {"image": [{"op": "resize", "width": 0, "height": 4}]},
+                  {"image": [{"op": "resize", "width": 4, "height": 4097}]}):
         response = client.post("/api/datasets/image_masks", json={
             **body, "name": "wrong", "item_steps": wrong,
         })
@@ -289,9 +295,19 @@ def test_capture_clouds_export(client: TestClient, tmp_path: Path) -> None:
     assert str(sample["captures"]) not in str(shown)
     assert entries["cloud"]["steps"] is None
 
+    # 点の数の上限を超えると, 読む前に 422
+    response = client.post("/api/datasets/capture_clouds", json={
+        **body, "name": "huge",
+        "item_steps": {"cloud": [{"op": "sample_points",
+                                  "points": 1_000_001}]},
+    })
+    assert response.status_code == 422
+    assert "1000000 以下" in response.json()["detail"]
+
     # 撮影と点群にも中身の手順をかけられる (版 3)
     steps = {
-        "capture": [{"op": "grayscale"}],
+        "capture": [{"op": "resize", "width": 32, "height": 24},
+                    {"op": "grayscale"}],
         "cloud": [{"op": "sample_points", "points": 50, "seed": 1}],
     }
     response = client.post("/api/datasets/capture_clouds", json={
@@ -303,7 +319,9 @@ def test_capture_clouds_export(client: TestClient, tmp_path: Path) -> None:
     entries = {entry["name"]: entry for entry in sampled["entries"]}
     assert sampled["format_version"] == 3
     assert entries["capture"]["steps"] == steps["capture"]
+    assert entries["capture"]["shape"][-2:] == [24, 32]
     assert entries["cloud"]["steps"] == steps["cloud"]
+    assert entries["cloud"]["shape"] == [50, 3]
 
 
 def test_list_unreadable(client: TestClient, tmp_path: Path) -> None:
@@ -387,3 +405,31 @@ def test_list_unreadable(client: TestClient, tmp_path: Path) -> None:
     v1 = next(item for item in listed.json() if item["name"] == "v1")
     assert v1["form"] == "unreadable"
     assert v1["unknown_version"] is False
+
+
+def test_pair_steps_in_entry_steps() -> None:
+    """
+    画面で選べる中身の手順 (PAIR_STEPS) が全て, ML-EDA の書き出しがその
+    項目の種類に受け付ける手順 (ENTRY_STEPS) にあることを確かめる関数
+
+    Parameters
+    ----------
+    None
+
+    Returns
+    ----------
+    None
+    """
+    # 書き出しの項目の名前から, dataset.yaml の項目の種類
+    kinds = {
+        ("image_masks", "image"): "image",
+        ("capture_clouds", "capture"): "capture",
+        ("capture_clouds", "cloud"): "point_cloud",
+    }
+    listed = {(form, entry) for form, entries in PAIR_STEPS.items()
+              for entry in entries}
+    assert listed == set(kinds)
+    for (form, entry), kind in kinds.items():
+        _, ops = PAIR_STEPS[form][entry]
+        assert set(ops) <= set(ENTRY_STEPS[kind]), (form, entry)
+        assert all(op in ITEM_STEPS for op in ops), (form, entry)

@@ -109,6 +109,8 @@ export interface ItemStepInfo extends StepInfo {
 /** ファイルの組の書き出しの項目で選べる中身の手順 (省けない引数付き) */
 export interface PairStepInfo extends ItemStepInfo {
   required: string[]
+  /** 引数の上限 (画像の辺と点の数. 上限の無い引数は無い) */
+  limits: Record<string, number>
 }
 
 /** ファイルの組の書き出しの種類から, 項目の名前から選べる中身の手順 */
@@ -461,7 +463,13 @@ export interface PairSettings {
   split: { method?: 'random' | 'group' | 'none'; valid?: number; test?: number; seed?: number }
   groups: Record<string, string> | null
   origin: Partial<PairOrigin>
-  options: { classes?: Record<string, string>; mask_suffix?: string; cloud_units?: string }
+  options: {
+    classes?: Record<string, string>
+    mask_suffix?: string
+    cloud_units?: string
+    /** 項目の名前から中身の手順の並び (手順が無ければ無い) */
+    item_steps?: Record<string, RecipeStep[]>
+  }
 }
 
 /** ファイルの組の受け持ちの問題の設定から始めたときの下書きと書き出し先 */

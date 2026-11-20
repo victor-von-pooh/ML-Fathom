@@ -22,7 +22,7 @@ import {
   Tabs,
   type TabItem,
 } from '../../components/ui'
-import { itemStepsBody, stepText, type EntryDrafts } from '../../lib/entrySteps'
+import { itemStepsBody, itemStepsDrafts, stepText, type EntryDrafts } from '../../lib/entrySteps'
 import { formatNumber } from '../../lib/format'
 import {
   classesText,
@@ -319,9 +319,12 @@ const ENTRY_LABELS: Record<keyof PairSteps, Record<string, string>> = {
   capture_clouds: { capture: '撮影', cloud: '点群' },
 }
 
-/** 項目ごとの手順の無い組み立て中の手順 */
-function emptyDrafts(form: keyof PairSteps): EntryDrafts {
-  return Object.fromEntries(Object.keys(ENTRY_LABELS[form]).map((entry) => [entry, []]))
+/**
+ * 組み立て中の手順の初め. 問題の設定から始めた場合は書き戻した手順 (下書きの
+ * options.item_steps), 他は項目ごとに空
+ */
+function initialDrafts(form: keyof PairSteps, draft: PairSettings | undefined): EntryDrafts {
+  return itemStepsDrafts(draft?.options.item_steps, Object.keys(ENTRY_LABELS[form]))
 }
 
 /** 選べる中身の手順 (ML-EDA の登録簿を項目の種類で絞ったもの) を読む */
@@ -336,13 +339,11 @@ function StepsCard({
   pairSteps,
   drafts,
   setDrafts,
-  linked,
 }: {
   form: keyof PairSteps
   pairSteps: PairSteps | undefined
   drafts: EntryDrafts
   setDrafts: (drafts: EntryDrafts) => void
-  linked: boolean
 }) {
   return (
     <Card title="中身の手順 (任意)">
@@ -371,12 +372,6 @@ function StepsCard({
         </div>
       ) : (
         <Spinner />
-      )}
-      {linked && (
-        <p className="mt-2 text-xs text-warning-text">
-          中身の手順は書き出しにかけますが, 問題の設定には書き戻しません (ML-Quest
-          の書き出しの設定に欄が無いため). 開き直すと空になります.
-        </p>
       )}
     </Card>
   )
@@ -578,7 +573,7 @@ function ImageMasksForm({ linked }: { linked?: Linked }) {
   const [suffix, setSuffix] = useState(draft?.options.mask_suffix ?? '')
   const [fields, setFields] = useState<CommonFields>(draft ? linkedFields(draft) : INITIAL)
   const pairSteps = usePairSteps()
-  const [steps, setSteps] = useState<EntryDrafts>(() => emptyDrafts('image_masks'))
+  const [steps, setSteps] = useState<EntryDrafts>(() => initialDrafts('image_masks', draft))
   const built = itemStepsBody(steps, pairSteps?.image_masks ?? {}, ENTRY_LABELS.image_masks)
   const common = commonBody(fields, !linked)
   const named = parseClasses(classes)
@@ -593,6 +588,7 @@ function ImageMasksForm({ linked }: { linked?: Linked }) {
         const options = {
           ...(named.value ? { classes: named.value } : {}),
           ...(suffix ? { mask_suffix: suffix } : {}),
+          ...(built.value ? { item_steps: built.value } : {}),
         }
         return api.exportProblemPairs({
           path: linked.pairs.path,
@@ -605,7 +601,6 @@ function ImageMasksForm({ linked }: { linked?: Linked }) {
             masks.trim(),
             options,
           ),
-          item_steps: built.value,
         })
       }
       return api.exportImageMasks({
@@ -667,13 +662,7 @@ function ImageMasksForm({ linked }: { linked?: Linked }) {
             チャンネルの整数の画像です. EXIF の向きの付いた画像は, 向きを直して保存してから渡します.
           </p>
         </Card>
-        <StepsCard
-          form="image_masks"
-          pairSteps={pairSteps}
-          drafts={steps}
-          setDrafts={setSteps}
-          linked={Boolean(linked)}
-        />
+        <StepsCard form="image_masks" pairSteps={pairSteps} drafts={steps} setDrafts={setSteps} />
         <CommonCard
           prefix="masks"
           fields={fields}
@@ -705,7 +694,7 @@ function CaptureCloudsForm({ linked }: { linked?: Linked }) {
   const [units, setUnits] = useState(draft?.options.cloud_units ?? 'meter')
   const [fields, setFields] = useState<CommonFields>(draft ? linkedFields(draft) : INITIAL)
   const pairSteps = usePairSteps()
-  const [steps, setSteps] = useState<EntryDrafts>(() => emptyDrafts('capture_clouds'))
+  const [steps, setSteps] = useState<EntryDrafts>(() => initialDrafts('capture_clouds', draft))
   const built = itemStepsBody(steps, pairSteps?.capture_clouds ?? {}, ENTRY_LABELS.capture_clouds)
   const common = commonBody(fields, !linked)
   const errors = linkedErrors([...common.errors, ...built.errors], linked)
@@ -722,9 +711,8 @@ function CaptureCloudsForm({ linked }: { linked?: Linked }) {
             common.body!,
             captures.trim(),
             clouds.trim(),
-            { cloud_units: units },
+            { cloud_units: units, ...(built.value ? { item_steps: built.value } : {}) },
           ),
-          item_steps: built.value,
         })
       }
       return api.exportCaptureClouds({
@@ -788,7 +776,6 @@ function CaptureCloudsForm({ linked }: { linked?: Linked }) {
           pairSteps={pairSteps}
           drafts={steps}
           setDrafts={setSteps}
-          linked={Boolean(linked)}
         />
         <CommonCard
           prefix="clouds"

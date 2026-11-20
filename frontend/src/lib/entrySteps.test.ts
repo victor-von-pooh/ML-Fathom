@@ -1,7 +1,7 @@
 import { expect, test } from 'vitest'
 
 import type { PairStepInfo } from '../api/types'
-import { itemStepsBody, stepsBody, stepText } from './entrySteps'
+import { itemStepsBody, itemStepsDrafts, stepsBody, stepText } from './entrySteps'
 
 const RESIZE: PairStepInfo = {
   op: 'resize',
@@ -10,6 +10,7 @@ const RESIZE: PairStepInfo = {
   description: '画像の大きさをそろえる',
   fits: false,
   required: ['width', 'height'],
+  limits: { width: 4096, height: 4096 },
 }
 const SAMPLE: PairStepInfo = {
   op: 'sample_points',
@@ -18,8 +19,9 @@ const SAMPLE: PairStepInfo = {
   description: '点の数をそろえる',
   fits: false,
   required: ['points'],
+  limits: { points: 1000000 },
 }
-const GRAY: PairStepInfo = { ...RESIZE, op: 'grayscale', params: {}, required: [] }
+const GRAY: PairStepInfo = { ...RESIZE, op: 'grayscale', params: {}, required: [], limits: {} }
 
 test('引数を整数にし, 空の任意の引数は省く', () => {
   expect(
@@ -62,6 +64,41 @@ test('省けない引数の欠け, 整数でない値, 小さすぎる値, 使�
     stepsBody([{ op: 'sample_points', values: { points: '5', seed: '0' } }], [SAMPLE], '点群')
       .errors,
   ).toEqual([])
+})
+
+test('上限を超えた大きさと点の数を誤りにし, 上限ちょうどは通す', () => {
+  const { errors } = stepsBody(
+    [
+      { op: 'resize', values: { width: '4097', height: '4096' } },
+      { op: 'sample_points', values: { points: '1000001' } },
+    ],
+    [RESIZE, SAMPLE],
+    '撮影',
+  )
+  expect(errors).toEqual([
+    '撮影の手順 1 (resize) の width は 4096 以下にしてください',
+    '撮影の手順 2 (sample_points) の points は 1000000 以下にしてください',
+  ])
+  expect(
+    stepsBody([{ op: 'sample_points', values: { points: '1000000' } }], [SAMPLE], '点群').errors,
+  ).toEqual([])
+})
+
+test('書き戻した手順を欄の値に戻し, 組み立て直すと同じ手順になる', () => {
+  const steps = {
+    capture: [{ op: 'resize', width: 32, height: 24 }],
+    cloud: [{ op: 'sample_points', points: 50, seed: 1 }],
+  }
+  const drafts = itemStepsDrafts(steps, ['capture', 'cloud'])
+  expect(drafts).toEqual({
+    capture: [{ op: 'resize', values: { width: '32', height: '24' } }],
+    cloud: [{ op: 'sample_points', values: { points: '50', seed: '1' } }],
+  })
+  const infos = { capture: [RESIZE, GRAY], cloud: [SAMPLE] }
+  const labels = { capture: '撮影', cloud: '点群' }
+  expect(itemStepsBody(drafts, infos, labels)).toEqual({ value: steps, errors: [] })
+  // 手順が無ければ項目ごとに空
+  expect(itemStepsDrafts(undefined, ['image'])).toEqual({ image: [] })
 })
 
 test('手順の無い項目は渡さず, 全て無ければ undefined (版 2 のまま)', () => {
