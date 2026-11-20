@@ -17,11 +17,14 @@
   </tr>
   <tr>
     <td><img src="docs/images/pointcloud.png" alt="点群の中身: 1 件ずつの点群を 3D で回して見る"></td>
-    <td><img src="docs/images/pairs.png" alt="ファイルの組の書き出し: 画像と領域の 2 つのディレクトリを選び, load_items で読める形に書き出す"></td>
+    <td><img src="docs/images/capture.png" alt="多視点の撮影の中身: 撮影ごとの枚数と信頼できる深度の割合, 上から見たカメラの配置と方位の最も大きい隙間"></td>
+  </tr>
+  <tr>
+    <td colspan="2" align="center"><img src="docs/images/pairs.png" width="50%" alt="ファイルの組の書き出し: 画像と領域の 2 つのディレクトリを選び, load_items で読める形に書き出す"></td>
   </tr>
 </table>
 
-画面の例は「見本のデータを入れる」で登録する見本 (顧客の解約の表, 電力の使用量の時系列, 図形の画像, 物体の点群). ファイルの組の書き出しは, ML-EDA の合成の見本 (`write_image_masks`) で作った画像と領域.
+画面の例は「見本のデータを入れる」で登録する見本 (顧客の解約の表, 電力の使用量の時系列, 図形の画像, 物体の点群). 多視点の撮影とファイルの組の書き出しは, ML-EDA の合成の見本 (`write_shape_captures` の撮影, `write_image_masks` の画像と領域).
 
 ## できること
 
