@@ -8,7 +8,7 @@ import ml_quest
 import yaml
 from fastapi import APIRouter, HTTPException, Request
 from ml_eda.profile import to_json
-from ml_quest.check import is_column_part, is_items_part
+from ml_quest import is_column_part, is_items_part
 from pydantic import BaseModel, Field
 
 from ml_fathom.api import (
