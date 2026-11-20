@@ -395,7 +395,9 @@ test('大きさの混ざった画像を中身の手順でそろえて版 3 で�
   await expect(card.getByText(/全て 6 件/)).toBeVisible()
 })
 
-test('撮影と点群の組をグループで分けて書き出し, 一覧で確かめる', async ({ page }) => {
+test('撮影と点群の組を中身の手順でそろえ, グループで分けて書き出し, 一覧で確かめる', async ({
+  page,
+}) => {
   await page.goto('/datasets/export?form=capture_clouds')
   const form = page.locator('#pairs-panel > div:not([hidden])')
   await form.getByLabel('撮影のディレクトリ', { exact: true }).fill(path.join(SHAPES, 'captures'))
@@ -406,6 +408,18 @@ test('撮影と点群の組をグループで分けて書き出し, 一覧で確
     .fill('sphere_a,sphere\nsphere_b,sphere\nbox_a,box\nbox_b,box')
   await form.getByLabel('検証用の割合').fill('0.5')
   await page.getByRole('combobox', { name: '種類' }).selectOption('synthetic')
+  // 撮影の大きさと点群の点の数を中身の手順でそろえる (上限を超えると書き出せない)
+  await form.getByLabel('撮影に足す中身の手順').selectOption('resize')
+  await form.getByRole('button', { name: '撮影に手順を足す' }).click()
+  await form.getByLabel('撮影の手順 1 の width').fill('4097')
+  await form.getByLabel('撮影の手順 1 の height').fill('24')
+  await expect(
+    form.getByText('撮影の手順 1 (resize) の width は 4096 以下にしてください'),
+  ).toBeVisible()
+  await form.getByLabel('撮影の手順 1 の width').fill('32')
+  await form.getByLabel('点群に足す中身の手順').selectOption('sample_points')
+  await form.getByRole('button', { name: '点群に手順を足す' }).click()
+  await form.getByLabel('点群の手順 1 の points').fill('50')
   await form.getByLabel('データセットの名前').fill('objects')
   await form.getByLabel('同じ名前があれば置き換える').check()
   await page.getByRole('button', { name: 'ファイルの組を書き出す' }).click()
@@ -430,6 +444,9 @@ test('撮影と点群の組をグループで分けて書き出し, 一覧で確
   await expect(card.getByText(/予測する · 点群 \(point_cloud\)/)).toBeVisible()
   await expect(card.getByText('view_center', { exact: false })).toBeVisible()
   await expect(card.getByText(/作った正確な正解 \(synthetic\)/)).toBeVisible()
+  await expect(card.getByText('版 3 · ファイルの組')).toBeVisible()
+  await expect(card.getByText('resize (width 32, height 24)', { exact: true })).toBeVisible()
+  await expect(card.getByText('sample_points (points 50)', { exact: true })).toBeVisible()
   // 深度から点に戻す決まり (合成の見本は z と +0.5)
   await expect(
     card.getByText(/深度 z \(カメラの前の軸に沿った距離\) · 画素の中心 \+0\.5/),
@@ -457,8 +474,8 @@ test('領域の問題の設定から始め, 下書きのままプロジェクト
   await expect(page.getByLabel('作った処理の名前')).toHaveValue('塗り分け')
   await expect(page.getByText(/mask_project\/outputs\/dataset$/)).toBeVisible()
 
-  // 中身の手順は書き出しにかけるが, 問題の設定には書き戻さないと添える
-  await expect(page.getByText(/問題の設定には書き戻しません/)).toBeVisible()
+  // 中身の手順も選べ, 書き出しにかけて問題の設定に書き戻す (手順が無ければ空)
+  await expect(page.getByText('手順なし (ファイルをそのまま写す)')).toBeVisible()
   await page.getByLabel('画像に足す中身の手順').selectOption('grayscale')
   await page.getByRole('button', { name: '画像に手順を足す' }).click()
 
@@ -480,10 +497,23 @@ test('領域の問題の設定から始め, 下書きのままプロジェクト
     'problem.yaml',
   )
   const reopened = await page.request.get(`/api/problems/pairs?path=${encodeURIComponent(problem)}`)
-  const draft = (await reopened.json()) as { export: { inputs: string }; notes: string[] }
+  const draft = (await reopened.json()) as {
+    export: { inputs: string; options: { item_steps?: unknown } }
+    notes: string[]
+  }
   expect(draft.export.inputs).toBe(path.join(PAIRS, 'images'))
+  expect(draft.export.options.item_steps).toEqual({ image: [{ op: 'grayscale' }] })
   expect(draft.notes).toEqual([])
-  await page.getByRole('link', { name: 'データセットの一覧へ' }).click()
+
+  // 画面を開き直すと, 中身の手順の欄も書き戻した手順で埋まる
+  await page.reload()
+  await expect(
+    page.getByRole('list', { name: '画像の中身の手順' }).getByText('grayscale', { exact: true }),
+  ).toBeVisible()
+  await page
+    .getByRole('navigation', { name: '移動' })
+    .getByRole('link', { name: 'データセット', exact: true })
+    .click()
   const card = page
     .locator('section')
     .filter({ hasText: '問題の設定 領域のプロジェクト からプロジェクトへ書き出したもの' })

@@ -59,6 +59,11 @@ PAIR_STEPS: dict[str, dict[str, tuple[str, tuple[str, ...]]]] = {
     },
 }
 
+# 中身の手順の引数の上限 (書き出しの前に確かめる. 大きすぎる値で手元の
+# 計算機の記憶を使い切らないように. 画像の辺は 4096 画素, 点の数は
+# 100 万点まで)
+STEP_LIMITS = {"width": 4096, "height": 4096, "points": 1_000_000}
+
 
 class Cache:
     def __init__(self, size: int):
@@ -392,12 +397,62 @@ def pair_steps() -> dict[str, dict[str, list[dict[str, Any]]]]:
         steps[form] = {}
         for entry, (kind, ops) in entries.items():
             steps[form][entry] = [
-                {**item, "required": list(ITEM_STEPS[item["op"]].required)}
+                {
+                    **item,
+                    "required": list(ITEM_STEPS[item["op"]].required),
+                    "limits": {
+                        name: STEP_LIMITS[name] for name in item["params"]
+                        if name in STEP_LIMITS
+                    },
+                }
                 for item in described
                 if item["kind"] == kind and item["op"] in ops
             ]
 
     return steps
+
+
+def check_step_limits(item_steps: Any) -> None:
+    """
+    中身の手順の引数が上限 (STEP_LIMITS) を超えていないことを確かめる関数
+
+    形の誤り (辞書でない, 整数でないなど) は ML-EDA が書き出すときに
+    確かめるので, ここでは数の引数の大きさだけを見る
+
+    Parameters
+    ----------
+    item_steps: Any
+        項目の名前から中身の手順の並び (無ければ None)
+
+    Returns
+    ----------
+    None
+
+    Raises
+    ----------
+    HTTPException
+        上限を超えた引数があれば 422
+    """
+    # 項目ごとの手順の数の引数
+    if not isinstance(item_steps, dict):
+        return
+    for entry, steps in item_steps.items():
+        if not isinstance(steps, list):
+            continue
+        for spec in steps:
+            if not isinstance(spec, dict):
+                continue
+            for name, highest in STEP_LIMITS.items():
+                value = spec.get(name)
+                if isinstance(value, bool) or not isinstance(
+                    value, (int, float)
+                ):
+                    continue
+                if value > highest:
+                    raise HTTPException(
+                        422, f"{entry} の手順 {spec.get('op')} の {name} は "
+                        f"{highest} 以下にしてください"
+                    )
 
 
 @router.get("/info")
@@ -1461,9 +1516,10 @@ def export_image_masks(
     Raises
     ----------
     HTTPException
-        名前と組の誤りは 422, 既にある場合は 409
+        名前と組と手順の誤りは 422, 既にある場合は 409
     """
-    # 置き場の datasets の下に書き出す
+    # 手順の引数の上限を確かめ, 置き場の datasets の下に書き出す
+    check_step_limits(body.item_steps)
     store = get_store(request)
     try:
         target = store.dataset_dir(body.name)
@@ -1506,9 +1562,10 @@ def export_capture_clouds(
     Raises
     ----------
     HTTPException
-        名前と組の誤りは 422, 既にある場合は 409
+        名前と組と手順の誤りは 422, 既にある場合は 409
     """
-    # 置き場の datasets の下に書き出す
+    # 手順の引数の上限を確かめ, 置き場の datasets の下に書き出す
+    check_step_limits(body.item_steps)
     store = get_store(request)
     try:
         target = store.dataset_dir(body.name)

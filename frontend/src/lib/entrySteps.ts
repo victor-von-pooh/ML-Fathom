@@ -44,6 +44,11 @@ export function stepsBody(
         errors.push(`${where} の ${name} は ${lowest} 以上の整数にしてください`)
         continue
       }
+      const highest: number | undefined = info.limits[name]
+      if (highest !== undefined && number > highest) {
+        errors.push(`${where} の ${name} は ${highest} 以下にしてください`)
+        continue
+      }
       step[name] = number
     }
     value.push(step)
@@ -70,6 +75,27 @@ export function itemStepsBody(
   }
   const value = Object.keys(steps).length > 0 ? steps : undefined
   return { value, errors }
+}
+
+/**
+ * 書き出しの item_steps を, 欄で組み立て中の手順にする (開き直したときに欄を埋めるため).
+ * 名前の項目は全て並べ (無ければ空), 引数は文字にする
+ */
+export function itemStepsDrafts(
+  steps: Record<string, RecipeStep[]> | undefined,
+  entries: string[],
+): EntryDrafts {
+  const drafts: EntryDrafts = {}
+  for (const entry of entries) {
+    drafts[entry] = (steps?.[entry] ?? []).map((step) => {
+      const values: Record<string, string> = {}
+      for (const [name, value] of Object.entries(step)) {
+        if (name !== 'op') values[name] = String(value)
+      }
+      return { op: step.op, values }
+    })
+  }
+  return drafts
 }
 
 /** 手順を 1 行の文にする (`resize (width 64, height 64)`) */

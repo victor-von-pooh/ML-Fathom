@@ -10,7 +10,6 @@ import type {
   PreviewResult,
   Profile,
   Recipe,
-  RecipeStep,
   Rows,
   Source,
   ItemPreview,
@@ -131,8 +130,6 @@ export const api = {
     version: string
     export: PairSettings
     overwrite: boolean
-    /** 中身の手順 (書き出しにかけ, 問題の設定には書き戻さない) */
-    item_steps?: Record<string, RecipeStep[]>
   }) => request<ProblemPairsResult>('/api/problems/pairs/export', json('POST', body)),
   checkProblem: (id: string, recipe: Recipe) =>
     request<ProblemCheck>(`/api/sources/${id}/problem/check`, json('POST', { recipe })),

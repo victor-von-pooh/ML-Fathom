@@ -266,16 +266,42 @@ def test_start_and_export(
         "/api/problems/pairs/export", json=body
     ).status_code == 200
 
-    # 中身の手順は書き出しにかけ (版 3), 問題の設定には書き戻さない
+    # 中身の手順は書き出しの設定の他の引数に入れ, 書き出しにかけ (版 3),
+    # 問題の設定にも書き戻す
     body["version"] = current(path)
-    body["item_steps"] = KIND_STEPS[kind]
+    body["export"]["options"]["item_steps"] = KIND_STEPS[kind]
     response = client.post("/api/problems/pairs/export", json=body)
     assert response.status_code == 200, response.text
     info = response.json()["info"]
     assert info["format_version"] == 3
     for name, steps in KIND_STEPS[kind].items():
         assert info["entries"][name]["steps"] == steps
-    assert "item_steps" not in str(ml_quest.load_problem(path))
+    saved = ml_quest.load_problem(path)
+    options = saved["data"]["export"]["options"]
+    assert options["item_steps"] == KIND_STEPS[kind]
+
+    # 開き直すと下書きに書き戻した手順が入り, そのまま書き出し直せる
+    again = client.get(
+        "/api/problems/pairs", params={"path": str(path)}
+    ).json()
+    assert again["export"]["options"]["item_steps"] == KIND_STEPS[kind]
+    body = export_body(path, again)
+    body["overwrite"] = True
+    response = client.post("/api/problems/pairs/export", json=body)
+    assert response.status_code == 200, response.text
+    assert response.json()["info"]["format_version"] == 3
+
+    # 手順を外すと版 2 に戻り, 問題の設定からも消える
+    body = export_body(path, client.get(
+        "/api/problems/pairs", params={"path": str(path)}
+    ).json())
+    body["overwrite"] = True
+    del body["export"]["options"]["item_steps"]
+    response = client.post("/api/problems/pairs/export", json=body)
+    assert response.status_code == 200, response.text
+    assert response.json()["info"]["format_version"] == 2
+    saved = ml_quest.load_problem(path)
+    assert "item_steps" not in saved["data"]["export"]["options"]
 
 
 def test_export_refusals(client: TestClient, tmp_path: Path) -> None:
@@ -321,6 +347,16 @@ def test_export_refusals(client: TestClient, tmp_path: Path) -> None:
     body = export_body(path, draft)
     body["export"]["targets"] = str(tmp_path / "nowhere")
     assert client.post(url, json=body).status_code == 422
+
+    # 上限を超えた手順の引数は, 書き戻しも書き出しもせずに 422
+    body = export_body(path, draft)
+    body["export"]["options"]["item_steps"] = {
+        "image": [{"op": "resize", "width": 4097, "height": 8}],
+    }
+    response = client.post(url, json=body)
+    assert response.status_code == 422
+    assert "4096 以下" in response.json()["detail"]
+    assert current(path) == before
 
     # 確かめた後に変わった問題の設定は 409
     body = export_body(path, draft)

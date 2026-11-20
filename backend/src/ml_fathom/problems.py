@@ -9,10 +9,11 @@ import yaml
 from fastapi import APIRouter, HTTPException, Request
 from ml_eda.profile import to_json
 from ml_quest import is_column_part, is_items_part
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from ml_fathom.api import (
     EXPORT_LOCK,
+    check_step_limits,
     export_message,
     find_source,
     get_store,
@@ -57,20 +58,19 @@ class ProjectExport(BaseModel):
 
 
 class PairsExport(BaseModel):
+    # 知らない欄は断る (古い画面の item_steps を黙って捨てないため)
+    model_config = ConfigDict(extra="forbid")
+
     path: str = Field(description="problem.yaml か, それを持つディレクトリ")
     version: str = Field(
         description="確かめたときの問題の設定のファイルの中身の印"
     )
     export: dict[str, Any] = Field(
         description="ML-Quest の書き出しの設定 (function, inputs, targets, "
-        "split, groups, origin, options)"
+        "split, groups, origin, options. 中身の手順は options.item_steps)"
     )
     overwrite: bool = Field(
         False, description="前に書き出したデータセットを置き換えるか"
-    )
-    item_steps: Optional[dict[str, list[dict[str, Any]]]] = Field(
-        None, description="項目の名前から中身の手順の並び (問題の設定には"
-        "書き戻さない)"
     )
 
 
@@ -516,8 +516,7 @@ def get_problem_pairs(path: str) -> dict[str, Any]:
 
 
 def pair_call(
-    settings: dict[str, Any], target: Path, overwrite: bool,
-    item_steps: Optional[dict[str, list[dict[str, Any]]]] = None
+    settings: dict[str, Any], target: Path, overwrite: bool
 ) -> dict[str, Any]:
     """
     書き出しの設定のまま, ML-EDA のファイルの組の書き出しを呼ぶ関数
@@ -525,29 +524,29 @@ def pair_call(
     Parameters
     ----------
     settings: dict[str, Any]
-        ML-Quest が決まった形にした書き出しの設定
+        ML-Quest が決まった形にした書き出しの設定 (中身の手順は
+        options.item_steps)
     target: Path
         書き出し先
     overwrite: bool
         前のデータセットを置き換えるか
-    item_steps: Optional[dict[str, list[dict[str, Any]]]] = None
-        項目の名前から中身の手順の並び (ML-Quest の書き出しの設定には
-        無いので別に渡す)
 
     Returns
     ----------
     info: dict[str, Any]
         書き出した dataset.yaml の中身
     """
-    # 関数は ML-Quest が確かめた 2 つのどちらか
+    # 関数は ML-Quest が確かめた 2 つのどちらか. 中身の手順は他の引数から
+    # 取り出して 1 度だけ渡す
     function = getattr(ml_eda, settings["function"])
+    options = dict(settings["options"])
+    item_steps = options.pop("item_steps", None)
     info: dict[str, Any] = function(
         Path(settings["inputs"]).expanduser(),
         Path(settings["targets"]).expanduser(), target,
         split=settings["split"] or None, groups=settings["groups"],
         origin=settings["origin"] or None, name=target.name,
-        overwrite=overwrite, item_steps=item_steps or None,
-        **settings["options"]
+        overwrite=overwrite, item_steps=item_steps or None, **options
     )
 
     return info
@@ -562,9 +561,8 @@ def export_problem_pairs(body: PairsExport) -> dict[str, Any]:
     Parameters
     ----------
     body: PairsExport
-        問題の設定の場所, 確かめたときの中身の印, 書き出しの設定,
-        置き換えるか, 中身の手順 (書き出しにかけ, 問題の設定には書き戻さ
-        ない)
+        問題の設定の場所, 確かめたときの中身の印, 書き出しの設定 (中身の
+        手順も含む), 置き換えるか
 
     Returns
     ----------
@@ -585,6 +583,9 @@ def export_problem_pairs(body: PairsExport) -> dict[str, Any]:
     unchanged(path, body.version)
     problem = read_problem(path)
     require_items(problem)
+    options = body.export.get("options")
+    if isinstance(options, dict):
+        check_step_limits(options.get("item_steps"))
     try:
         trial: dict[str, Any] = ml_quest.apply_recipe(problem, body.export)
     except SHAPE_ERRORS as error:
@@ -614,9 +615,7 @@ def export_problem_pairs(body: PairsExport) -> dict[str, Any]:
                     409, f"{target} には既にデータセットがあります. 置き換え"
                     "てよいかを確かめてから書き出してください"
                 )
-            info = pair_call(
-                settings, target, body.overwrite, body.item_steps
-            )
+            info = pair_call(settings, target, body.overwrite)
     except HTTPException:
         raise
     except FileExistsError as error:
