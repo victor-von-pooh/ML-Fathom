@@ -64,8 +64,8 @@ train_loader = DataLoader(TensorDataset(*dataset.tensors("train")), batch_size=6
 
 ## 文書
 
-- [操作ガイド](docs/GUIDE.md): 画面の順の手順. 見本のデータで試せる「やってみる」付き
-- [設計](docs/DESIGN.md): 役割, ML-EDA と ML-Quest との約束, 画面, API, 置き場, 問題の設定とのつなぎ方
+- [操作ガイド](docs/GUIDE.md): 画面の順の操作ガイド (見本のデータで試せる「やってみる」付き). 最後の章が「困ったとき」
+- [設計](docs/DESIGN.md): 今の設計と決まり (ML-EDA と ML-Quest との約束, 画面, API, 用語, 置き場, 安全)
 - [TODO](TODO.md): まだやっていないこと (優先度の順)
 
 ## 開発
@@ -81,7 +81,7 @@ cd frontend && pnpm e2e   # 画面の通しのテスト
 | --- | --- |
 | `backend/` | API (Python, FastAPI). ML-EDA を呼び, 登録したデータとレシピを保存する |
 | `frontend/` | 画面 (TypeScript, React, Vite, ECharts) |
-| `ML-EDA/` | submodule |
+| `ML-EDA/` | submodule (データの分析のライブラリ) |
 | `ML-Quest/` | submodule (問題の設定から始めるため) |
 | `docs/` | 操作ガイド, 設計, README の画面の例 (`images/`) |
 
