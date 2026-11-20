@@ -1,6 +1,6 @@
 import { keepPreviousData, useMutation, useQuery } from '@tanstack/react-query'
 import clsx from 'clsx'
-import { ArrowUp, File, Folder, Home } from 'lucide-react'
+import { ArrowUp, ClipboardList, File, Folder, Home } from 'lucide-react'
 import { useState } from 'react'
 
 import { api } from '../../api/client'
@@ -10,9 +10,77 @@ import { Button, ErrorBox, Spinner } from '../../components/ui'
 import { formatBytes, KIND_LABELS } from '../../lib/format'
 
 /**
+ * ML-Pathfinder の置き場にある問題の設定の一覧. 押すとその問題の設定を選ぶ.
+ * 始められないものも理由を付けて並べる
+ */
+function StoredProblems({
+  picked,
+  onPick,
+}: {
+  picked: string | null
+  onPick: (path: string) => void
+}) {
+  const problems = useQuery({ queryKey: ['problems'], queryFn: api.problems })
+  const list = problems.data
+  return (
+    <section aria-labelledby="stored-problems" className="mb-4">
+      <h3 id="stored-problems" className="mb-1 text-xs font-semibold text-ink-2">
+        ML-Pathfinder に保存した問題の設定
+      </h3>
+      {problems.isPending && <Spinner />}
+      {problems.error && <ErrorBox error={problems.error} />}
+      {list?.error && <p className="text-xs text-critical-text">{list.error}</p>}
+      {list && list.problems.length === 0 && !list.error && (
+        <p className="text-xs text-ink-3">
+          置き場 (<span className="font-mono">{list.root}</span>) に問題の設定がありません.
+          下のファイルの選び方で選べます.
+        </p>
+      )}
+      {list && list.problems.length > 0 && (
+        <ul
+          aria-label="保存した問題の設定"
+          className="max-h-48 overflow-auto rounded-lg border border-line"
+        >
+          {list.problems.map((item) => (
+            <li key={item.path}>
+              <button
+                type="button"
+                onClick={() => onPick(item.path)}
+                aria-pressed={picked === item.path}
+                className={clsx(
+                  'flex w-full items-start gap-2 px-3 py-1.5 text-left text-sm hover:bg-surface-2',
+                  picked === item.path && 'bg-accent-soft',
+                )}
+              >
+                <ClipboardList size={14} className="mt-0.5 shrink-0 text-accent" aria-hidden />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate font-medium">{item.name}</span>
+                  <span className="block truncate font-mono text-xs text-ink-3" title={item.path}>
+                    {item.path}
+                  </span>
+                  {item.reason && (
+                    <span className="block text-xs text-warning-text">{item.reason}</span>
+                  )}
+                  {item.project?.dataset && (
+                    <span className="block text-xs text-ink-2">プロジェクトあり</span>
+                  )}
+                </span>
+                <span className="shrink-0 text-xs text-ink-3">
+                  {item.updated_at?.slice(0, 16).replace('T', ' ')}
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  )
+}
+
+/**
  * ファイルかディレクトリを選び, 読み込みを確かめて登録する.
- * problem では問題の設定 (problem.yaml か, それを持つディレクトリ) を選び,
- * 決めた状態で始める
+ * problem では問題の設定 (ML-Pathfinder の置き場の一覧か, problem.yaml か
+ * それを持つディレクトリ) を選び, 決めた状態で始める
  */
 export function AddSourceDialog({
   onClose,
@@ -60,9 +128,10 @@ export function AddSourceDialog({
     <Dialog title={fromProblem ? '問題の設定から始める' : 'データを追加'} onClose={onClose}>
       {fromProblem ? (
         <p className="mb-3 text-xs text-ink-2">
-          問題の設定 (ML-Pathfinder の problem.yaml か, それを持つディレクトリ) を選びます.
-          入れたデータを登録し, 目的の列, タスク, 分割, 使わない列を決めた状態で始めます.
-          ここで変えた選び方は, 前処理のタブから問題の設定に書き戻せます.
+          ML-Pathfinder に保存した問題の設定を一覧から選ぶか, problem.yaml (か,
+          それを持つディレクトリ) をファイルから選びます. 入れたデータを登録し, 目的の列, タスク,
+          分割, 使わない列を決めた状態で始めます. ここで変えた選び方は,
+          前処理のタブから問題の設定に書き戻せます.
         </p>
       ) : (
         <p className="mb-3 text-xs text-ink-2">
@@ -71,6 +140,8 @@ export function AddSourceDialog({
           のディレクトリを選びます. 元のファイルは変えません.
         </p>
       )}
+      {fromProblem && <StoredProblems picked={picked} onPick={pick} />}
+      {fromProblem && <h3 className="mb-1 text-xs font-semibold text-ink-2">ファイルから選ぶ</h3>}
       <form
         className="mb-3 flex gap-2"
         onSubmit={(event) => {

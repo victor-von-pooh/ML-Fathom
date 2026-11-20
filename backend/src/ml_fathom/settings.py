@@ -26,3 +26,31 @@ def get_data_dir() -> Path:
         data_dir = Path.home() / ".ml-fathom"
 
     return data_dir
+
+
+# ML-Pathfinder の置き場を変える環境変数 (ML-Pathfinder と同じ)
+PATHFINDER_HOME_ENV = "ML_PATHFINDER_HOME"
+
+
+def get_problems_dir() -> Path:
+    """
+    ML-Pathfinder が問題の設定を保存するディレクトリを取得する関数
+
+    Parameters
+    ----------
+    None
+
+    Returns
+    ----------
+    problems_dir: Path
+        ML-Pathfinder の置き場の problems (無いこともある)
+    """
+    # ML-Pathfinder と同じ決め方 (環境変数か, ホームの下)
+    value = os.environ.get(PATHFINDER_HOME_ENV)
+    if value:
+        home = Path(value).expanduser().resolve()
+    else:
+        home = Path.home() / ".ml-pathfinder"
+    problems_dir = home / "problems"
+
+    return problems_dir

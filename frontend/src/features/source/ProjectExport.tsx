@@ -1,0 +1,114 @@
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { FolderOutput } from 'lucide-react'
+
+import { api, ApiError } from '../../api/client'
+import type { Recipe } from '../../api/types'
+import { Button, ErrorBox, Spinner } from '../../components/ui'
+import { ModelHintsView } from './ModelHintsView'
+
+/**
+ * 問題の設定から始めたデータを, 問題の設定に記録したプロジェクトの書き出し先
+ * (学習のスクリプトがデータセットを読む場所) へ書き出す.
+ * 前に書き出したデータセットは確かめてから置き換え, データセットでないものは
+ * 置き換えない
+ */
+export function ProjectExport({
+  sourceId,
+  recipe,
+  onExported,
+}: {
+  sourceId: string
+  recipe: Recipe
+  onExported: () => void
+}) {
+  const queryClient = useQueryClient()
+  const place = useQuery({
+    queryKey: ['project', sourceId],
+    queryFn: () => api.project(sourceId),
+    retry: false,
+  })
+  const exporter = useMutation({
+    mutationFn: (body: { recipe: Recipe; overwrite: boolean }) =>
+      api.exportProject(sourceId, body.recipe, body.overwrite),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['datasets'] })
+      void queryClient.invalidateQueries({ queryKey: ['recipe', sourceId] })
+      void queryClient.invalidateQueries({ queryKey: ['project', sourceId] })
+      onExported()
+    },
+    // 他で書き出し先が変わった (409) ら様子を読み直す
+    onError: (error) => {
+      if (error instanceof ApiError && error.status === 409) {
+        void queryClient.invalidateQueries({ queryKey: ['project', sourceId] })
+      }
+    },
+  })
+  const data = place.data
+  // 書き出した後にレシピを変えたら, 前の結果は出さない
+  const done =
+    exporter.data && JSON.stringify(exporter.variables?.recipe) === JSON.stringify(recipe)
+      ? exporter.data
+      : null
+  if (place.isPending) return <Spinner label="プロジェクトの書き出し先を調べています" />
+  // 問題の設定を読めない理由は問題の設定のカードに出るので, ここは短く
+  if (place.error) return <ErrorBox error={place.error} />
+  if (!data) return null
+
+  // 前に書き出したデータセットがあれば, 置き換えてよいかを確かめる
+  const run = () => {
+    const replace = data.state === 'dataset'
+    if (
+      replace &&
+      !window.confirm(`${data.dataset} には前に書き出したデータセットがあります. 置き換えますか?`)
+    ) {
+      return
+    }
+    exporter.mutate({ recipe, overwrite: replace })
+  }
+  return (
+    <section
+      aria-labelledby={`project-export-${sourceId}`}
+      className="mt-4 border-t border-line pt-3"
+    >
+      <h3 id={`project-export-${sourceId}`} className="text-xs font-semibold text-ink-2">
+        プロジェクトへ書き出す
+      </h3>
+      {data.dataset ? (
+        <>
+          <p className="mt-1 text-xs text-ink-3">
+            問題の設定に記録した学習のプロジェクトの, データセットを読む場所に書き出します.
+          </p>
+          <p className="mt-1 truncate font-mono text-xs" title={data.dataset}>
+            {data.dataset}
+          </p>
+          {data.state === 'dataset' && (
+            <p className="text-xs text-ink-3">
+              前に書き出したものがあります (書き出すと, 確かめてから置き換えます)
+            </p>
+          )}
+        </>
+      ) : null}
+      {data.reason && <p className="mt-1 text-xs text-warning-text">{data.reason}</p>}
+      {data.ready && (
+        <Button
+          variant="primary"
+          icon={FolderOutput}
+          className="mt-2"
+          disabled={exporter.isPending}
+          onClick={run}
+        >
+          {exporter.isPending ? '書き出し中…' : 'プロジェクトへ書き出す'}
+        </Button>
+      )}
+      {exporter.error && <ErrorBox error={exporter.error} />}
+      {done && (
+        <div className="mt-3 space-y-2 text-sm">
+          <p role="status" className="text-good-text">
+            プロジェクトへ書き出しました: {done.path}
+          </p>
+          {done.hints && <ModelHintsView hints={done.hints} />}
+        </div>
+      )}
+    </section>
+  )
+}

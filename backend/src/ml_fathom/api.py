@@ -1148,21 +1148,13 @@ def model_hints(path: Path, info: dict[str, Any]) -> dict[str, Any]:
         大きさ. 文だけ), outputs (出力の幅. 分類はクラスの数, 目的が無ければ
         None, それ以外は 1)
     """
-    # 画像などは中身の配列の形, 表は学習に使う列の数
-    train = info["splits"]["train"]
-    if "shape" in train:
-        shape = [int(size) for size in train["shape"][1:]]
-    else:
-        shape = [len(info["features"])]
-    # 目的の無いデータセット (task: none) は出力の幅を決めない
-    task = info["task"]
+    # 入力の形と型と出力の幅は ML-EDA の model_inputs (バッチの次元を除く)
+    model = ml_eda.model_inputs(path)
+    single = model["inputs"][0]
     hints: dict[str, Any] = {
-        "input_shape": shape,
-        "input_dtype": "int64" if info["kind"] == "text" else "float32",
-        "outputs": (
-            len(info["classes"]) if task == "classification"
-            else None if task == "none" else 1
-        ),
+        "input_shape": [int(size) for size in single["shape"][1:]],
+        "input_dtype": single["dtype"],
+        "outputs": model["outputs"],
     }
     # 文の語彙の大きさは, 書き出したレシピの当てはめた語彙から (読めなけれ
     # ば省く. 書き出しは済んでいるので誤りにしない)
@@ -1202,14 +1194,28 @@ def list_datasets(request: Request) -> list[dict[str, Any]]:
         名前, 場所, 版, 形 (table, items, unreadable), 作った時刻と,
         形ごとの中身 (新しい順. 時刻の無いものは後ろ)
     """
-    # datasets の下の dataset.yaml を版で読み分ける
-    root = get_store(request).home / "datasets"
-    datasets = []
+    # datasets の下と, プロジェクトへ書き出した場所の dataset.yaml を版で
+    # 読み分ける (同じ場所は 1 つ)
+    store = get_store(request)
+    root = store.home / "datasets"
+    places: list[tuple[Path, Optional[str]]] = []
     if root.is_dir():
-        for child in sorted(root.iterdir()):
-            summary = dataset_summary(child) if child.is_dir() else None
-            if summary is not None:
-                datasets.append(summary)
+        places = [(child, None) for child in sorted(root.iterdir())]
+    for source in store.read():
+        written = source.get("project_dataset")
+        if isinstance(written, str):
+            places.append((Path(written), str(source.get("name") or "")))
+    datasets = []
+    seen: set[str] = set()
+    for place, project in places:
+        key = str(place.resolve())
+        summary = dataset_summary(place) if place.is_dir() else None
+        if summary is None or key in seen:
+            continue
+        seen.add(key)
+        if project is not None:
+            summary["project"] = project
+        datasets.append(summary)
     datasets.sort(key=created_of, reverse=True)
 
     return datasets

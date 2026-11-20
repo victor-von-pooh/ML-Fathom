@@ -87,6 +87,28 @@ problem = ml_quest.attach_data(example_problem("総菜の作る量"),
 ml_quest.save_problem(problem, work / "problem")
 PY
 
+# ML-Pathfinder の置き場に保存した問題の設定 (プロジェクトを作った記録付き.
+# 書き出し先はプロジェクトの中のまだ無い場所)
+uv run python - "$WORK" <<'PY'
+import sys
+from pathlib import Path
+
+import ml_quest
+from ml_quest.examples import example_problem
+
+work = Path(sys.argv[1])
+project = work / "project"
+project.mkdir()
+problem = ml_quest.attach_data(example_problem("総菜の作る量"),
+                               work / "sozai.csv")
+problem["name"] = "総菜のプロジェクト"
+problem["project"] = {
+    "path": str(project), "dataset": str(project / "data" / "dataset"),
+    "model_spec": str(project / "models" / "model.yaml"),
+}
+ml_quest.save_problem(problem, work / "pathfinder" / "problems" / "sozai")
+PY
+
 # 多視点の撮影の見本 (中心の周りを 6 枚で一周. 画像, 生の深度, 信頼度)
 uv run python - "$WORK/captures/round" <<'PY'
 import json
@@ -150,6 +172,8 @@ shutil.copyfile(sample["masks"] / "sample_000.png",
 write_shape_captures(work / "shapes", views=4, points=300)
 PY
 
-# データの置き場も作業用のディレクトリにし, 決まったトークンで起動
-ML_FATHOM_HOME="$WORK/home" ML_FATHOM_TOKEN=e2e-token \
+# データの置き場と ML-Pathfinder の置き場も作業用のディレクトリにし,
+# 決まったトークンで起動
+ML_FATHOM_HOME="$WORK/home" ML_PATHFINDER_HOME="$WORK/pathfinder" \
+  ML_FATHOM_TOKEN=e2e-token \
   exec uv run ml-fathom --port "$PORT"
