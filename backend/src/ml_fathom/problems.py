@@ -9,7 +9,7 @@ import yaml
 from fastapi import APIRouter, HTTPException, Request
 from ml_eda.profile import to_json
 from ml_quest import is_column_part, is_items_part
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from ml_fathom.api import (
     EXPORT_LOCK,
@@ -58,6 +58,9 @@ class ProjectExport(BaseModel):
 
 
 class PairsExport(BaseModel):
+    # 知らない欄は断る (古い画面の item_steps を黙って捨てないため)
+    model_config = ConfigDict(extra="forbid")
+
     path: str = Field(description="problem.yaml か, それを持つディレクトリ")
     version: str = Field(
         description="確かめたときの問題の設定のファイルの中身の印"
