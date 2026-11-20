@@ -386,3 +386,52 @@ test('撮影と点群の組をグループで分けて書き出し, 一覧で確
     card.getByText(/深度 z \(カメラの前の軸に沿った距離\) · 画素の中心 \+0\.5/),
   ).toBeVisible()
 })
+
+test('領域の問題の設定から始め, 下書きのままプロジェクトへ書き出して書き戻す', async ({ page }) => {
+  // 一覧から選ぶと, データを登録せずにファイルの組の書き出しへ移る
+  await page.goto('/')
+  await page.getByRole('button', { name: '問題の設定から始める' }).click()
+  const stored = page.getByRole('list', { name: '保存した問題の設定' })
+  await stored.getByRole('button', { name: /領域のプロジェクト/ }).click()
+  await page.getByRole('button', { name: 'この問題の設定から始める' }).click()
+  await expect(page.getByText('問題の設定: 領域のプロジェクト')).toBeVisible()
+  await expect(page.getByRole('tab', { name: '撮影と点群' })).toHaveCount(0)
+
+  // 欄は問題の設定の下書き (入れたディレクトリ, 分割, 正解の出どころ) で埋まる
+  await expect(page.getByLabel('画像のディレクトリ', { exact: true })).toHaveValue(
+    path.join(PAIRS, 'images'),
+  )
+  await expect(page.getByLabel('領域のディレクトリ', { exact: true })).toHaveValue(
+    path.join(PAIRS, 'masks'),
+  )
+  await expect(page.getByLabel('検証用の割合')).toHaveValue('0.15')
+  await expect(page.getByLabel('作った処理の名前')).toHaveValue('塗り分け')
+  await expect(page.getByText(/mask_project\/outputs\/dataset$/)).toBeVisible()
+
+  // 書き出すとプロジェクトに入り, 問題の設定に書き戻る
+  await page.getByLabel('前に書き出したデータセットを置き換える').check()
+  await page.getByRole('button', { name: 'プロジェクトへ書き出す' }).click()
+  await expect(page.getByText(/書き出しました: .*mask_project/)).toBeVisible({ timeout: 20_000 })
+  await expect(page.getByText('問題の設定に書き戻しました.')).toBeVisible()
+  await expect(page.getByText(/orphan/)).toBeVisible()
+
+  // 開き直すと書き戻した設定で, データセットの一覧にプロジェクトとして並ぶ
+  const problem = path.resolve(
+    import.meta.dirname,
+    '.work',
+    'pathfinder',
+    'problems',
+    'masks',
+    'problem.yaml',
+  )
+  const reopened = await page.request.get(`/api/problems/pairs?path=${encodeURIComponent(problem)}`)
+  const draft = (await reopened.json()) as { export: { inputs: string }; notes: string[] }
+  expect(draft.export.inputs).toBe(path.join(PAIRS, 'images'))
+  expect(draft.notes).toEqual([])
+  await page.getByRole('link', { name: 'データセットの一覧へ' }).click()
+  const card = page
+    .locator('section')
+    .filter({ hasText: '問題の設定 領域のプロジェクト からプロジェクトへ書き出したもの' })
+  await expect(card.getByText('版 2 · ファイルの組')).toBeVisible()
+  await expect(card.getByText('プロジェクト', { exact: true }).first()).toBeVisible()
+})

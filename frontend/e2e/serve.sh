@@ -172,6 +172,37 @@ shutil.copyfile(sample["masks"] / "sample_000.png",
 write_shape_captures(work / "shapes", views=4, points=300)
 PY
 
+# ML-Pathfinder の置き場に, 正解が画像の領域の問題の設定 (上の画像と領域を
+# 入れ, プロジェクトを作った記録付き)
+uv run python - "$WORK" <<'PY'
+import sys
+from pathlib import Path
+
+import ml_quest
+from ml_quest.examples import example_problem
+
+work = Path(sys.argv[1])
+problem = example_problem("総菜の作る量")
+problem["ml"]["parts"] = [{}]
+for key in ("decision", "basis", "current"):
+    problem["action"].pop(key, None)
+answers = [("role", "predict"), ("what", "画素ごとの領域"), ("item", "1 枚"),
+           ("baseline", "今のやり方"), ("evaluation.link", "損が減る"),
+           ("unit", "pair"), ("output", "region"),
+           ("target.source", "process"), ("target.process.name", "塗り分け"),
+           ("method", "scratch"), ("target.kind", "mask"),
+           ("evaluation.metric", "iou")]
+for key, value in answers:
+    problem = ml_quest.answer(problem, f"ml.parts.0.{key}", value)
+problem = ml_quest.attach_data(problem, work / "pairs")
+problem["name"] = "領域のプロジェクト"
+project = work / "mask_project"
+project.mkdir()
+problem["project"] = {"path": str(project),
+                      "dataset": str(project / "outputs" / "dataset")}
+ml_quest.save_problem(problem, work / "pathfinder" / "problems" / "masks")
+PY
+
 # データの置き場と ML-Pathfinder の置き場も作業用のディレクトリにし,
 # 決まったトークンで起動
 ML_FATHOM_HOME="$WORK/home" ML_PATHFINDER_HOME="$WORK/pathfinder" \

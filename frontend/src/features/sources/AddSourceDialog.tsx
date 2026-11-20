@@ -2,6 +2,7 @@ import { keepPreviousData, useMutation, useQuery } from '@tanstack/react-query'
 import clsx from 'clsx'
 import { ArrowUp, ClipboardList, File, Folder, Home } from 'lucide-react'
 import { useState } from 'react'
+import { useNavigate } from 'react-router'
 
 import { api } from '../../api/client'
 import type { Source } from '../../api/types'
@@ -112,9 +113,19 @@ export function AddSourceDialog({
     queryFn: () => api.detect(picked!),
     enabled: picked !== null && !fromProblem,
   })
+  const navigate = useNavigate()
   const start = useMutation({
     mutationFn: () => api.startFromProblem(picked!),
-    onSuccess: (result) => onAdded(result.source),
+    // ファイルの組の受け持ちはデータを登録せず, 書き出しの画面へ問題の設定を付けて移る
+    onSuccess: (result) => {
+      if (result.source) {
+        onAdded(result.source)
+        return
+      }
+      const search = new URLSearchParams({ form: result.form ?? '', problem: result.problem })
+      onClose()
+      void navigate(`/datasets/export?${search.toString()}`)
+    },
   })
   const add = useMutation({
     mutationFn: () => api.createSource({ path: picked!, loader: loader || undefined }),
@@ -136,7 +147,8 @@ export function AddSourceDialog({
           ML-Pathfinder に保存した問題の設定を一覧から選ぶか, problem.yaml (か,
           それを持つディレクトリ) をファイルから選びます. 入れたデータを登録し, 目的の列, タスク,
           分割, 使わない列を決めた状態で始めます. ここで変えた選び方は,
-          前処理のタブから問題の設定に書き戻せます.
+          前処理のタブから問題の設定に書き戻せます. 正解が画像の領域か点群の問題の設定は,
+          ファイルの組の書き出しを問題の設定の値で埋めて開きます.
         </p>
       ) : (
         <p className="mb-3 text-xs text-ink-2">

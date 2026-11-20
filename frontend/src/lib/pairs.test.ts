@@ -1,13 +1,17 @@
 import { expect, test } from 'vitest'
 
 import {
+  classesText,
   conventionText,
   depthConventionText,
+  groupsText,
   itemsSnippet,
+  numberText,
   originNote,
   parseClasses,
   parseGroups,
   parseSettings,
+  settingsText,
 } from './pairs'
 
 test('値の名前を 1 行ずつ辞書にし, 空なら名前を付けない', () => {
@@ -87,4 +91,20 @@ test('load_items の使い方の例は, ある分割と正規化だけを書く'
   expect(full).toContain('valid = dataset.split("valid")')
   expect(full).toContain('test = dataset.split("test")')
   expect(full).toContain('normalize_capture で同じ正規化をかけて read_capture で読み')
+})
+
+test('書き戻した辞書を欄の文に戻し, 読み直すと同じになる', () => {
+  const groups = { a: 'site_1', b: 'site_2' }
+  expect(groupsText(groups)).toBe('a,site_1\nb,site_2')
+  expect(parseGroups(groupsText(groups)).value).toEqual(groups)
+  expect(groupsText(null)).toBe('')
+  const classes = { '0': 'background', '1': 'circle' }
+  expect(parseClasses(classesText(classes)).value).toEqual(classes)
+  expect(classesText(undefined)).toBe('')
+  expect(settingsText({})).toBe('')
+  expect(parseSettings(settingsText({ note: '細かさ 1 画素' })).value).toEqual({
+    note: '細かさ 1 画素',
+  })
+  expect(numberText(0.15, '0.2')).toBe('0.15')
+  expect(numberText(undefined, '0.2')).toBe('0.2')
 })

@@ -172,3 +172,28 @@ export function itemsSnippet(
   const snippet = lines.filter((line) => line !== null).join('\n')
   return snippet
 }
+
+/** 件の id からグループの辞書を, 欄の文 (1 行に `件の id,グループ`) にする */
+export function groupsText(groups: Record<string, string> | null | undefined): string {
+  return Object.entries(groups ?? {})
+    .map(([key, group]) => `${key},${group}`)
+    .join('\n')
+}
+
+/** 値から名前の辞書を, 欄の文 (1 行に `値: 名前`) にする */
+export function classesText(classes: Record<string, string> | null | undefined): string {
+  return Object.entries(classes ?? {})
+    .map(([value, name]) => `${value}: ${name}`)
+    .join('\n')
+}
+
+/** 正解を作った処理の設定の辞書を, 欄の文 (YAML) にする. 空なら空の文 */
+export function settingsText(settings: Record<string, unknown> | null | undefined): string {
+  if (!settings || Object.keys(settings).length === 0) return ''
+  return YAML.stringify(settings).trimEnd()
+}
+
+/** 割合と種の数を欄の文にする (無ければ既定の文) */
+export function numberText(value: number | null | undefined, fallback: string): string {
+  return typeof value === 'number' && Number.isFinite(value) ? String(value) : fallback
+}

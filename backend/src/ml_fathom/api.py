@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Annotated, Any, Literal, Optional
 
 import ml_eda
+import ml_quest
 import numpy as np
 import yaml
 from fastapi import APIRouter, HTTPException, Query, Request
@@ -23,6 +24,7 @@ from ml_fathom.items import (
     points_response,
 )
 from ml_fathom.samples import sample_target, write_samples
+from ml_fathom.settings import get_problems_dir
 from ml_fathom.store import SourceStore
 
 router = APIRouter(prefix="/api")
@@ -1175,6 +1177,41 @@ def model_hints(path: Path, info: dict[str, Any]) -> dict[str, Any]:
     return hints
 
 
+def problem_datasets() -> list[tuple[Path, str]]:
+    """
+    ML-Pathfinder の置き場の問題の設定から, プロジェクトの記録の書き出し先
+    を集める関数
+
+    Parameters
+    ----------
+    None
+
+    Returns
+    ----------
+    places: list[tuple[Path, str]]
+        書き出し先 (project.dataset) と問題の設定の名前 (読めない問題の
+        設定と, 記録の無いものは飛ばす)
+    """
+    # problems/<識別子>/problem.yaml (置き場が無いか読めなければ空)
+    places: list[tuple[Path, str]] = []
+    root = get_problems_dir()
+    try:
+        files = sorted(root.glob("*/problem.yaml")) if root.is_dir() else []
+    except OSError:
+        files = []
+    for file in files:
+        try:
+            problem = ml_quest.load_problem(file)
+        except (OSError, ValueError, TypeError, yaml.YAMLError):
+            continue
+        project = problem.get("project")
+        written = project.get("dataset") if isinstance(project, dict) else None
+        if isinstance(written, str) and Path(written).is_absolute():
+            places.append((Path(written), str(problem.get("name") or "")))
+
+    return places
+
+
 @router.get("/datasets")
 def list_datasets(request: Request) -> list[dict[str, Any]]:
     """
@@ -1192,29 +1229,37 @@ def list_datasets(request: Request) -> list[dict[str, Any]]:
     ----------
     datasets: list[dict[str, Any]]
         名前, 場所, 版, 形 (table, items, unreadable), 作った時刻と,
-        形ごとの中身 (新しい順. 時刻の無いものは後ろ)
+        形ごとの中身 (新しい順. 時刻の無いものは後ろ). プロジェクトの
+        ものは project (データか問題の設定の名前) と project_from (source
+        か problem)
     """
-    # datasets の下と, プロジェクトへ書き出した場所の dataset.yaml を版で
-    # 読み分ける (同じ場所は 1 つ)
+    # datasets の下と, プロジェクトへ書き出した場所 (登録したデータと,
+    # ML-Pathfinder の置き場の問題の設定の記録) の dataset.yaml を版で読み
+    # 分ける (同じ場所は 1 つ)
     store = get_store(request)
     root = store.home / "datasets"
-    places: list[tuple[Path, Optional[str]]] = []
+    # (場所, プロジェクトの元の名前, 元の種類 (source か problem))
+    places: list[tuple[Path, Optional[str], Optional[str]]] = []
     if root.is_dir():
-        places = [(child, None) for child in sorted(root.iterdir())]
+        places = [(child, None, None) for child in sorted(root.iterdir())]
     for source in store.read():
         written = source.get("project_dataset")
         if isinstance(written, str):
-            places.append((Path(written), str(source.get("name") or "")))
+            places.append(
+                (Path(written), str(source.get("name") or ""), "source")
+            )
+    places += [(place, name, "problem")
+               for place, name in problem_datasets()]
     datasets = []
     seen: set[str] = set()
-    for place, project in places:
+    for place, project, origin in places:
         key = str(place.resolve())
         summary = dataset_summary(place) if place.is_dir() else None
         if summary is None or key in seen:
             continue
         seen.add(key)
         if project is not None:
-            summary["project"] = project
+            summary.update(project=project, project_from=origin)
         datasets.append(summary)
     datasets.sort(key=created_of, reverse=True)
 

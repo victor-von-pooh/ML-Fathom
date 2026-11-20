@@ -69,6 +69,22 @@ function ModelNeeds({ model }: { model: ModelInputs }) {
 }
 
 /** 版 1 (1 件 = 1 行の表) */
+/** プロジェクトへ書き出したものの元 (登録したデータか問題の設定) */
+function ProjectRow({ item }: { item: DatasetSummary }) {
+  if (item.project === undefined) return null
+  const from = item.project_from === 'problem' ? '問題の設定' : 'データ'
+  return (
+    <>
+      <dt className="text-ink-3">プロジェクト</dt>
+      <dd>
+        {item.project
+          ? `${from} ${item.project} からプロジェクトへ書き出したもの`
+          : 'プロジェクトへ書き出したもの'}
+      </dd>
+    </>
+  )
+}
+
 function TableCard({ item }: { item: TableDataset }) {
   return (
     <Card
@@ -95,16 +111,7 @@ function TableCard({ item }: { item: TableDataset }) {
         <dd>
           <ModelNeeds model={item.model} />
         </dd>
-        {item.project !== undefined && (
-          <>
-            <dt className="text-ink-3">プロジェクト</dt>
-            <dd>
-              {item.project
-                ? `データ ${item.project} からプロジェクトへ書き出したもの`
-                : 'プロジェクトへ書き出したもの'}
-            </dd>
-          </>
-        )}
+        <ProjectRow item={item} />
         <Footer item={item} />
       </dl>
     </Card>
@@ -119,7 +126,12 @@ function ItemsCard({ item }: { item: ItemsDataset }) {
   return (
     <Card
       title={<span className="font-mono">{item.name}</span>}
-      actions={<Badge>版 2 · ファイルの組</Badge>}
+      actions={
+        <span className="flex gap-1">
+          {item.project !== undefined && <Badge>プロジェクト</Badge>}
+          <Badge>版 2 · ファイルの組</Badge>
+        </span>
+      }
     >
       <dl className="grid grid-cols-[7rem_1fr] gap-1 text-sm">
         <dt className="text-ink-3">受け持ちと正解</dt>
@@ -195,6 +207,7 @@ function ItemsCard({ item }: { item: ItemsDataset }) {
             </dd>
           </>
         )}
+        <ProjectRow item={item} />
         <Footer item={item} />
       </dl>
     </Card>

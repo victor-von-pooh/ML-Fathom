@@ -421,8 +421,8 @@ def test_version1_file(client: TestClient, tmp_path: Path) -> None:
 
 def test_not_column_role(client: TestClient, tmp_path: Path) -> None:
     """
-    列の予測でない受け持ちの問題の設定は, 始めるのと書き戻しで理由を
-    返すことを確かめる関数
+    列の予測でもファイルの組でもない受け持ちの問題の設定は, 始めるのと
+    書き戻しで理由を返すことを確かめる関数
 
     Parameters
     ----------
@@ -435,14 +435,17 @@ def test_not_column_role(client: TestClient, tmp_path: Path) -> None:
     ----------
     None
     """
-    # 列の予測から始めてから, 正解の種類を点群に変える
+    # 列の予測から始めてから, 正解の種類を文に変える
     path = write_problem(tmp_path)
     source = client.post(
         "/api/problems/start", json={"path": str(path)}
     ).json()["source"]
     problem = ml_quest.answer(
-        ml_quest.load_problem(path), f"{ml_quest.PART}.target.kind",
-        "point_cloud"
+        ml_quest.load_problem(path), f"{ml_quest.PART}.target.kind", "text"
+    )
+    problem = ml_quest.answer(problem, f"{ml_quest.PART}.output", "text")
+    problem = ml_quest.answer(
+        problem, f"{ml_quest.PART}.evaluation.metric", "cer"
     )
     ml_quest.save_problem(problem, path)
 
@@ -450,13 +453,13 @@ def test_not_column_role(client: TestClient, tmp_path: Path) -> None:
     response = client.post("/api/problems/start", json={"path": str(path)})
     assert response.status_code == 422
     detail = response.json()["detail"]
-    assert "predict" in detail and "point_cloud" in detail
+    assert "predict" in detail and "text" in detail
     assert "データを追加" in detail
     url = f"/api/sources/{source['id']}/problem"
     recipe = client.get(f"/api/sources/{source['id']}/recipe").json()
     checked = client.post(f"{url}/check", json={"recipe": recipe})
     assert checked.status_code == 422
-    assert "point_cloud" in checked.json()["detail"]
+    assert "text" in checked.json()["detail"]
     assert client.post(f"{url}/write", json={
         "recipe": recipe, "version": current(path)
     }).status_code == 422
