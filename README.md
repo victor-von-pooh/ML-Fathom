@@ -2,41 +2,52 @@
 
 機械学習に使うデータを, 画面の上で分析 (EDA) し, 前処理して学習用に書き出すローカルの Web アプリ.
 
-[ML-EDA](https://github.com/victor-von-pooh/ML-EDA) を使い, 表, 時系列, 画像, 文, 点群, 多視点の撮影などのデータを読み込んで, 列の型, 分布, 欠損, 関係, 学習の前に確かめた方がよいこと (気付き) を見られる. 前処理の手順を画面で組み立て, 1 段ずつ前と後を確かめて, [ML-Found](https://github.com/victor-von-pooh/ML-Found) の学習スクリプトがそのまま読み込めるデータセットに書き出す.
+「機械学習を全て GUI 上で行う」流れのうち, データの分析の段階を受け持つ. 読み込み, 分析, 前処理, 書き出しは [ML-EDA](https://github.com/victor-von-pooh/ML-EDA) が行い, 書き出したデータセットは [ML-Found](https://github.com/victor-von-pooh/ML-Found) の学習スクリプトがそのまま読める.
 
-設計の方針は [docs/DESIGN.md](docs/DESIGN.md) を参照.
+![概要と気付き: 行と列の数, 欠損, ID らしい列やリークの疑いなど, 学習の前に確かめた方がよいことの一覧](docs/images/overview.png)
 
-## 必要なもの
+<table>
+  <tr>
+    <td><img src="docs/images/recipe.png" alt="前処理と書き出し: 目的の列と分割, 手順の並び, 手順をかけた後の表と分割ごとの行数"></td>
+    <td><img src="docs/images/relations.png" alt="関係: 目的の列の分布, 目的の列との関連の強さ, 数値の列の相関のヒートマップ"></td>
+  </tr>
+  <tr>
+    <td><img src="docs/images/timeseries.png" alt="時系列: 時刻の間隔と抜け, 系列のグラフ, 自己相関と周期の候補"></td>
+    <td><img src="docs/images/images.png" alt="画像の中身: 件数, 大きさと色の形式のばらつき, 読めないファイルの数と画像の一覧"></td>
+  </tr>
+  <tr>
+    <td><img src="docs/images/pointcloud.png" alt="点群の中身: 1 件ずつの点群を 3D で回して見る"></td>
+    <td><img src="docs/images/capture.png" alt="多視点の撮影の中身: 撮影ごとの枚数と信頼できる深度の割合, 上から見たカメラの配置と方位の最も大きい隙間"></td>
+  </tr>
+  <tr>
+    <td colspan="2" align="center"><img src="docs/images/pairs.png" width="50%" alt="ファイルの組の書き出し: 画像と領域の 2 つのディレクトリを選び, load_items で読める形に書き出す"></td>
+  </tr>
+</table>
 
-- [uv](https://docs.astral.sh/uv/) (Python は uv が用意する. 3.10 以上)
-- Node.js 24 以上と [pnpm](https://pnpm.io/) 11 以上 (`corepack enable` で `package.json` の版が入る)
+画面の例は「見本のデータを入れる」で登録する見本 (顧客の解約の表, 電力の使用量の時系列, 図形の画像, 物体の点群). 多視点の撮影とファイルの組の書き出しは, ML-EDA の合成の見本 (`write_shape_captures` の撮影, `write_image_masks` の画像と領域).
 
-## 導入と起動
+## できること
+
+- **読み込む**: 表 (csv, tsv, json, jsonl, parquet, xlsx, npy), 時系列, 画像, 文, 点群 (ply, pcd, xyz など), 多視点の撮影 (`transforms.json`) を, 形式を判定した候補から選んで登録する. 元のファイルは書き換えない
+- **分析する**: 列の型, 分布, 欠損, 関係, 時系列の周期と, 学習の前に確かめた方がよいこと (気付き). 画像は並べて, 点群は 3D で回して, 撮影はカメラの配置と深度を見る
+- **前処理を組み立てる**: 気付きと列の型から手順を作り, 1 段ずつ前と後を確かめる. 自動では決めきれないこと (リークの疑いの列を落とすか, 分割の方法など) は選択肢付きで聞く
+- **書き出す**: 1 件 = 1 行のデータセット (ML-EDA の `load_dataset` で読む) と, 画像と領域, 撮影と点群のように入力と正解がファイルの組のデータセット (`load_items` で読む)
+- **問題の設定から始める**: ML-Pathfinder で決めた問題の設定 (`problem.yaml`) から, 目的の列, 分割, 使わない列を決めた状態で始め, ここで変えた選び方を書き戻す
+
+## 使い方
+
+必要なもの: [uv](https://docs.astral.sh/uv/) (Python 3.10 以上は uv が用意する), Node.js 24 以上と [pnpm](https://pnpm.io/) 11 以上 (`corepack enable` で `package.json` の版が入る).
 
 ```bash
 git clone --recursive https://github.com/victor-von-pooh/ML-Fathom.git
 cd ML-Fathom
 make setup   # submodule, Python と Node.js の依存
-make serve   # 画面をビルドして http://127.0.0.1:8767 で起動 (使う間は端末を開いたままにする. Ctrl+C で止める)
+make serve   # 画面をビルドして http://127.0.0.1:8767 で起動 (Ctrl+C で止める)
 ```
 
-起動すると `ML-Fathom を開く: http://127.0.0.1:8767/api/auth?token=...` の行が出るので, その URL をブラウザで開く (トークンは起動ごとに変わる). 毎回同じトークンにする場合は環境変数 `ML_FATHOM_TOKEN` で指定する. ポートは `make serve PORT=8800` のように変えられる.
+端末に出る `ML-Fathom を開く: http://127.0.0.1:8767/api/auth?token=...` の URL をブラウザで開く (トークンは起動ごとに変わる. 環境変数 `ML_FATHOM_TOKEN` で決められる). ポートは `make serve PORT=8800` のように変えられる. 置き場は `~/.ml-fathom/` (環境変数 `ML_FATHOM_HOME` で変えられる).
 
-## 使い方
-
-画面ごとの詳しい手順は [操作ガイド](docs/GUIDE.md) (見本のデータで試せる「やってみる」付き).
-
-1. 試すだけなら「見本のデータを入れる」で, 表, 時系列, 画像, 文, 点群の見本を登録できる. 自分のデータは「データを追加」でファイル (csv, tsv, json, jsonl, parquet, xlsx, npy, txt, ply, pcd, xyz など) かディレクトリ (クラスごとのフォルダに分けた画像, 文, 点群. `transforms.json` を持つ多視点の撮影) を選ぶ. 形式を判定した読み込みの候補から選んで「追加」
-2. データの画面の上の「目的の列」で, 予測したい列を選ぶ (分析に目的の列との関係が加わり, 前処理の分割とタスクに使う)
-3. 「概要と気付き」「列」「関係」「時系列」「中身を見る」「表の中身」でデータの特徴を見る. 画像は並べて, 点群は 3D で回して見られる. 多視点の撮影は, 上から見たカメラの配置と各枚の画像, 深度, 信頼度を見られる (前処理のタブでは書き出さない. 正解の点群との対は下の「ファイルの組を書き出す」で書き出す)
-4. 「前処理と書き出し」で手順を組み立てる. 「学習できる形にする手順を作る」で列の型から手順を作り, 「気付きから手順を足す」で気付きに合う手順を足せる. 手順の番号を押すと, その手順の前と後を見られる. 画像, 文, 点群は「学習用の配列にする手順を作る」で, 大きさや長さや点の数をそろえる手順を作る
-5. 名前を付けて「学習用に書き出す」. 置き場の `datasets/<名前>/` に書き出す
-
-**問題の設定から始める**: ML-Pathfinder で決めた問題の設定 (`problem.yaml` か, それを持つディレクトリ) を「問題の設定から始める」で選ぶと, 問題の設定に入れたデータを登録し, 目的の列, タスク, 分割, 使わない列, 決める時点で分かる過去の値を決めた状態で始まる. 「前処理と書き出し」の先頭の「問題の設定」のカードに, 編集中のレシピと問題の設定の食い違いが出る. 予測の時点で分からない列をレシピで使った場合は, 分かる列にするかレシピで落とすかを選び, 「問題の設定に書き戻す」で問題の設定に戻す
-
-置き場は `~/.ml-fathom/` (環境変数 `ML_FATHOM_HOME` で変えられる). 元のデータのファイルは書き換えない.
-
-### 書き出したデータセットで学習する
+まず「見本のデータを入れる」を押すと, 表, 時系列, 画像, 文, 点群の見本で全ての画面を試せる. 書き出したデータセットは学習のスクリプトで次のように読む.
 
 ```python
 from ml_eda import load_dataset
@@ -44,20 +55,10 @@ from torch.utils.data import DataLoader, TensorDataset
 
 dataset = load_dataset("~/.ml-fathom/datasets/<名前>")
 train_loader = DataLoader(TensorDataset(*dataset.tensors("train")), batch_size=64, shuffle=True)
-valid_loader = DataLoader(TensorDataset(*dataset.tensors("valid")), batch_size=64)
-# 入力の形: dataset.info["splits"]["train"]["shape"][1:], 分類のクラスの数: len(dataset.info["classes"])
 ```
 
-画像と領域, 多視点の撮影と点群のように入力と正解がファイルの組のデータは, 「データセット」の「ファイルの組を書き出す」で書き出し (`dataset.yaml` の版 2), `load_items` で読む.
-
-```python
-from ml_eda import load_items
-
-dataset = load_items("~/.ml-fathom/datasets/<名前>")
-item = dataset.split("train")[0]   # {"id", "split", "group", 項目の名前: 中身}
-```
-
-学習の環境に ML-EDA を入れる方法は ML-EDA の README を参照.
+- [操作ガイド](docs/GUIDE.md): 画面ごとの手順. 見本のデータで試せる「やってみる」付き
+- [設計](docs/DESIGN.md): 置き場, 画面, API, 問題の設定とのつなぎ方
 
 ## 開発
 
@@ -74,7 +75,6 @@ cd frontend && pnpm e2e   # 画面の通しのテスト
 | `frontend/` | 画面 (TypeScript, React, Vite, ECharts) |
 | `ML-EDA/` | submodule |
 | `ML-Quest/` | submodule (問題の設定から始めるため) |
-| `docs/DESIGN.md` | 設計の方針 |
 
 ## ライセンス
 
