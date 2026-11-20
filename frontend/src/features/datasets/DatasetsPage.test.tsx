@@ -16,7 +16,7 @@ const DATASETS: DatasetSummary[] = [
     form: 'items',
     name: 'objects',
     path: '/home/datasets/objects',
-    format_version: 2,
+    format_version: 3,
     created_at: '2026-11-19T10:00:00+09:00',
     role: 'predict',
     target: {
@@ -33,6 +33,7 @@ const DATASETS: DatasetSummary[] = [
         convention: { pose: 'camera_to_world', depth: 'z', pixel_center: 0.5 },
         shape: [8, 24, 32],
         formats: ['transforms.json'],
+        steps: [{ op: 'resize', width: 32, height: 24 }, { op: 'grayscale' }],
       },
       {
         name: 'cloud',
@@ -42,6 +43,7 @@ const DATASETS: DatasetSummary[] = [
         convention: { frame: 'capture' },
         shape: [null, 3],
         formats: ['ply'],
+        steps: null,
       },
     ],
     splits: { train: 3, valid: 1 },
@@ -92,10 +94,10 @@ const DATASETS: DatasetSummary[] = [
     form: 'unreadable',
     name: 'future',
     path: '/home/datasets/future',
-    format_version: 3,
+    format_version: 4,
     created_at: null,
     unknown_version: true,
-    error: 'format_version 3 は, この ML-Fathom の ML-EDA が読める版 (1, 2) ではありません',
+    error: 'format_version 4 は, この ML-Fathom の ML-EDA が読める版 (1, 2, 3) ではありません',
   },
 ]
 
@@ -110,14 +112,15 @@ function renderPage() {
   )
 }
 
-test('版 2 は項目と出どころ, 版 1 は表, 知らない版は「読めない版」として並べる', async () => {
+test('版 3 は項目と中身の手順と出どころ, 版 1 は表, 知らない版は「読めない版」として並べる', async () => {
   vi.spyOn(api, 'datasets').mockResolvedValue(DATASETS)
   renderPage()
 
-  // 版 2: 受け持ち, 正解の種類, 項目の単位と座標の決まり, 分割, 出どころの注意
+  // 版 3: 受け持ち, 正解の種類, 項目の単位と座標の決まりと中身の手順, 分割, 出どころの注意
   const objects = (await screen.findByText('objects')).closest('section')!
   const card = within(objects)
-  expect(card.getByText('版 2 · ファイルの組')).toBeInTheDocument()
+  expect(card.getByText('版 3 · ファイルの組')).toBeInTheDocument()
+  expect(card.getByText('resize (width 32, height 24) → grayscale')).toBeInTheDocument()
   expect(card.getByText(/予測する · 点群 \(point_cloud\)/)).toBeInTheDocument()
   expect(card.getByText('pose=camera_to_world')).toBeInTheDocument()
   expect(
@@ -146,5 +149,5 @@ test('版 2 は項目と出どころ, 版 1 は表, 知らない版は「読め�
   // 知らない版も消さずに理由を出す
   const future = within(screen.getByText('future').closest('section')!)
   expect(future.getByText('読めない版')).toBeInTheDocument()
-  expect(future.getByText(/読める版 \(1, 2\) ではありません/)).toBeInTheDocument()
+  expect(future.getByText(/読める版 \(1, 2, 3\) ではありません/)).toBeInTheDocument()
 })

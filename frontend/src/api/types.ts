@@ -106,10 +106,19 @@ export interface ItemStepInfo extends StepInfo {
   kind: string
 }
 
+/** ファイルの組の書き出しの項目で選べる中身の手順 (省けない引数付き) */
+export interface PairStepInfo extends ItemStepInfo {
+  required: string[]
+}
+
+/** ファイルの組の書き出しの種類から, 項目の名前から選べる中身の手順 */
+export type PairSteps = Record<'image_masks' | 'capture_clouds', Record<string, PairStepInfo[]>>
+
 export interface Info {
   loaders: LoaderInfo[]
   steps: StepInfo[]
   item_steps: ItemStepInfo[]
+  pair_steps: PairSteps
   kinds: string[]
   version: string
 }
@@ -387,9 +396,11 @@ export interface ItemEntry {
   convention: Record<string, unknown> | null
   shape: (number | null)[] | null
   formats: string[] | null
+  /** 書き出しでかけた中身の手順 (版 3 の手順をかけた項目だけ) */
+  steps: RecipeStep[] | null
 }
 
-/** 版 2 (入力と正解がファイルの組. load_items で読む) */
+/** 版 2 と版 3 (入力と正解がファイルの組. load_items で読む. 版 3 は中身の手順付き) */
 export interface ItemsDataset extends DatasetBase {
   form: 'items'
   role: string | null
@@ -405,7 +416,7 @@ export interface ItemsDataset extends DatasetBase {
 /** 読めないデータセット (知らない版, 壊れたもの) */
 export interface UnreadableDataset extends DatasetBase {
   form: 'unreadable'
-  /** 版 1 と 2 の他の版 */
+  /** 版 1, 2, 3 の他の版 */
   unknown_version: boolean
   error: string
 }
@@ -419,6 +430,8 @@ export interface PairExportBase {
   split: { method?: 'random' | 'group' | 'none'; valid: number; test: number; seed: number }
   groups?: Record<string, string>
   origin: PairOrigin
+  /** 項目の名前から中身の手順の並び (渡すと版 3 で書き出す) */
+  item_steps?: Record<string, RecipeStep[]>
 }
 
 export interface ImageMaskExport extends PairExportBase {

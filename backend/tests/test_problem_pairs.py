@@ -33,6 +33,15 @@ KIND_ANSWERS = {
 FORMS = {"mask": ("image_masks", "export_image_masks"),
          "point_cloud": ("capture_clouds", "export_capture_clouds")}
 
+# 正解の種類ごとの, 書き出しにかける中身の手順
+KIND_STEPS = {
+    "mask": {"image": [{"op": "resize", "width": 8, "height": 8}]},
+    "point_cloud": {
+        "capture": [{"op": "resize", "width": 8, "height": 8}],
+        "cloud": [{"op": "sample_points", "points": 32}],
+    },
+}
+
 
 @pytest.fixture
 def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
@@ -256,6 +265,17 @@ def test_start_and_export(
     assert client.post(
         "/api/problems/pairs/export", json=body
     ).status_code == 200
+
+    # 中身の手順は書き出しにかけ (版 3), 問題の設定には書き戻さない
+    body["version"] = current(path)
+    body["item_steps"] = KIND_STEPS[kind]
+    response = client.post("/api/problems/pairs/export", json=body)
+    assert response.status_code == 200, response.text
+    info = response.json()["info"]
+    assert info["format_version"] == 3
+    for name, steps in KIND_STEPS[kind].items():
+        assert info["entries"][name]["steps"] == steps
+    assert "item_steps" not in str(ml_quest.load_problem(path))
 
 
 def test_export_refusals(client: TestClient, tmp_path: Path) -> None:

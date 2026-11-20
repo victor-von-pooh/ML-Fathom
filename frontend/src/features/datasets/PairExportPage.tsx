@@ -8,6 +8,7 @@ import type {
   PairExportBase,
   PairExportResult,
   PairSettings,
+  PairSteps,
   ProblemPairs,
   ProblemPairsResult,
 } from '../../api/types'
@@ -21,6 +22,7 @@ import {
   Tabs,
   type TabItem,
 } from '../../components/ui'
+import { itemStepsBody, stepText, type EntryDrafts } from '../../lib/entrySteps'
 import { formatNumber } from '../../lib/format'
 import {
   classesText,
@@ -35,6 +37,7 @@ import {
   settingsText,
 } from '../../lib/pairs'
 import { splitLabel } from '../../lib/recipe'
+import { EntryStepsField } from './EntryStepsField'
 
 type FormId = 'image_masks' | 'capture_clouds'
 
@@ -310,6 +313,75 @@ function CommonCard({
   )
 }
 
+/** 書き出しの種類ごとの, 項目の呼び名 (中身の手順の欄に出す順) */
+const ENTRY_LABELS: Record<keyof PairSteps, Record<string, string>> = {
+  image_masks: { image: '画像' },
+  capture_clouds: { capture: '撮影', cloud: '点群' },
+}
+
+/** 項目ごとの手順の無い組み立て中の手順 */
+function emptyDrafts(form: keyof PairSteps): EntryDrafts {
+  return Object.fromEntries(Object.keys(ENTRY_LABELS[form]).map((entry) => [entry, []]))
+}
+
+/** 選べる中身の手順 (ML-EDA の登録簿を項目の種類で絞ったもの) を読む */
+function usePairSteps(): PairSteps | undefined {
+  const info = useQuery({ queryKey: ['info'], queryFn: api.info, staleTime: Infinity })
+  return info.data?.pair_steps
+}
+
+/** 項目ごとの中身の手順の欄 */
+function StepsCard({
+  form,
+  pairSteps,
+  drafts,
+  setDrafts,
+  linked,
+}: {
+  form: keyof PairSteps
+  pairSteps: PairSteps | undefined
+  drafts: EntryDrafts
+  setDrafts: (drafts: EntryDrafts) => void
+  linked: boolean
+}) {
+  return (
+    <Card title="中身の手順 (任意)">
+      <p className="mb-2 text-xs text-ink-3">
+        1 件ずつのファイルにかける手順 (足した順にかける). 足すと版 3 で書き出し,
+        かけた手順をデータセットに残す (推論で新しい 1 件に同じ手順をかけるため).
+        {form === 'image_masks' &&
+          ' 領域には, 画像の resize と同じ大きさの resize_mask (最も近い画素) を ML-EDA が自動でかける.'}
+      </p>
+      {pairSteps ? (
+        <div className="space-y-3">
+          {Object.entries(ENTRY_LABELS[form]).map(([entry, label]) => (
+            <div key={entry}>
+              <p className="mb-1 text-sm">
+                {label} <span className="font-mono text-xs text-ink-3">({entry})</span>
+              </p>
+              <EntryStepsField
+                id={`${form}-steps-${entry}`}
+                label={label}
+                infos={pairSteps[form][entry] ?? []}
+                drafts={drafts[entry] ?? []}
+                onChange={(next) => setDrafts({ ...drafts, [entry]: next })}
+              />
+            </div>
+          ))}
+        </div>
+      ) : (
+        <Spinner />
+      )}
+      {linked && (
+        <p className="mt-2 text-xs text-warning-text">
+          中身の手順は書き出しにかけますが, 問題の設定には書き戻しません (ML-Quest
+          の書き出しの設定に欄が無いため). 開き直すと空になります.
+        </p>
+      )}
+    </Card>
+  )
+}
+
 /** 名前, 置き換え, 書き出す押しボタンと結果 */
 function ExportCard({
   prefix,
@@ -343,8 +415,14 @@ function ExportCard({
         target?: { entries?: string[] }
         entries?: Record<string, unknown>
         normalization?: unknown
+        format_version?: number
       }
     | undefined
+  // 中身の手順をかけた項目 (版 3)
+  const applied = Object.entries(info?.entries ?? {}).flatMap(([entry, spec]) => {
+    const steps = (spec as { steps?: { op: string }[] | null }).steps
+    return steps && steps.length > 0 ? [`${entry}: ${steps.map(stepText).join(' → ')}`] : []
+  })
   const splits = info?.splits ?? {}
   return (
     <Card title="書き出し">
@@ -428,6 +506,16 @@ function ExportCard({
                 )}
               </>
             )}
+            <p>版: {info?.format_version ?? '—'}</p>
+            {applied.length > 0 && (
+              <ul className="list-disc pl-5 text-xs">
+                {applied.map((line) => (
+                  <li key={line} className="font-mono">
+                    {line}
+                  </li>
+                ))}
+              </ul>
+            )}
             <p>
               分割:{' '}
               {Object.entries(splits)
@@ -461,6 +549,7 @@ function ExportCard({
               splits,
               Object.keys(info?.entries ?? {}),
               Boolean(info?.normalization),
+              applied.length > 0,
             )}
           </pre>
           <Link to="/datasets" className="text-xs text-accent-text underline">
@@ -488,9 +577,15 @@ function ImageMasksForm({ linked }: { linked?: Linked }) {
   const [classes, setClasses] = useState(classesText(draft?.options.classes))
   const [suffix, setSuffix] = useState(draft?.options.mask_suffix ?? '')
   const [fields, setFields] = useState<CommonFields>(draft ? linkedFields(draft) : INITIAL)
+  const pairSteps = usePairSteps()
+  const [steps, setSteps] = useState<EntryDrafts>(() => emptyDrafts('image_masks'))
+  const built = itemStepsBody(steps, pairSteps?.image_masks ?? {}, ENTRY_LABELS.image_masks)
   const common = commonBody(fields, !linked)
   const named = parseClasses(classes)
-  const errors = linkedErrors([...common.errors, ...(named.error ? [named.error] : [])], linked)
+  const errors = linkedErrors(
+    [...common.errors, ...(named.error ? [named.error] : []), ...built.errors],
+    linked,
+  )
   if (!images.trim() || !masks.trim()) errors.push('画像と領域のディレクトリを選んでください')
   const exporter = useMutation({
     mutationFn: (): Promise<PairExportResult | ProblemPairsResult> => {
@@ -510,6 +605,7 @@ function ImageMasksForm({ linked }: { linked?: Linked }) {
             masks.trim(),
             options,
           ),
+          item_steps: built.value,
         })
       }
       return api.exportImageMasks({
@@ -518,6 +614,7 @@ function ImageMasksForm({ linked }: { linked?: Linked }) {
         masks: masks.trim(),
         classes: named.value ?? undefined,
         mask_suffix: suffix,
+        item_steps: built.value,
       })
     },
     onSuccess: (result) => {
@@ -527,7 +624,7 @@ function ImageMasksForm({ linked }: { linked?: Linked }) {
   })
   // 欄を変えたら前の結果と誤りを消す (古い場所や使い方を出したままにしない)
   const { reset } = exporter
-  const inputs = JSON.stringify([images, masks, classes, suffix, fields])
+  const inputs = JSON.stringify([images, masks, classes, suffix, fields, steps])
   useEffect(() => reset(), [inputs, reset])
   return (
     <div className="grid gap-4 lg:grid-cols-2">
@@ -570,6 +667,13 @@ function ImageMasksForm({ linked }: { linked?: Linked }) {
             チャンネルの整数の画像です. EXIF の向きの付いた画像は, 向きを直して保存してから渡します.
           </p>
         </Card>
+        <StepsCard
+          form="image_masks"
+          pairSteps={pairSteps}
+          drafts={steps}
+          setDrafts={setSteps}
+          linked={Boolean(linked)}
+        />
         <CommonCard
           prefix="masks"
           fields={fields}
@@ -600,8 +704,11 @@ function CaptureCloudsForm({ linked }: { linked?: Linked }) {
   const [clouds, setClouds] = useState(draft?.targets ?? '')
   const [units, setUnits] = useState(draft?.options.cloud_units ?? 'meter')
   const [fields, setFields] = useState<CommonFields>(draft ? linkedFields(draft) : INITIAL)
+  const pairSteps = usePairSteps()
+  const [steps, setSteps] = useState<EntryDrafts>(() => emptyDrafts('capture_clouds'))
+  const built = itemStepsBody(steps, pairSteps?.capture_clouds ?? {}, ENTRY_LABELS.capture_clouds)
   const common = commonBody(fields, !linked)
-  const errors = linkedErrors([...common.errors], linked)
+  const errors = linkedErrors([...common.errors, ...built.errors], linked)
   if (!captures.trim() || !clouds.trim()) errors.push('撮影と点群のディレクトリを選んでください')
   const exporter = useMutation({
     mutationFn: (): Promise<PairExportResult | ProblemPairsResult> => {
@@ -617,6 +724,7 @@ function CaptureCloudsForm({ linked }: { linked?: Linked }) {
             clouds.trim(),
             { cloud_units: units },
           ),
+          item_steps: built.value,
         })
       }
       return api.exportCaptureClouds({
@@ -624,6 +732,7 @@ function CaptureCloudsForm({ linked }: { linked?: Linked }) {
         captures: captures.trim(),
         clouds: clouds.trim(),
         cloud_units: units,
+        item_steps: built.value,
       })
     },
     onSuccess: (result) => {
@@ -633,7 +742,7 @@ function CaptureCloudsForm({ linked }: { linked?: Linked }) {
   })
   // 欄を変えたら前の結果と誤りを消す
   const { reset } = exporter
-  const inputs = JSON.stringify([captures, clouds, units, fields])
+  const inputs = JSON.stringify([captures, clouds, units, fields, steps])
   useEffect(() => reset(), [inputs, reset])
   return (
     <div className="grid gap-4 lg:grid-cols-2">
@@ -674,6 +783,13 @@ function CaptureCloudsForm({ linked }: { linked?: Linked }) {
             を残します.
           </p>
         </Card>
+        <StepsCard
+          form="capture_clouds"
+          pairSteps={pairSteps}
+          drafts={steps}
+          setDrafts={setSteps}
+          linked={Boolean(linked)}
+        />
         <CommonCard
           prefix="clouds"
           fields={fields}
@@ -744,7 +860,7 @@ function ProblemPairsView({ path }: { path: string }) {
   )
 }
 
-/** 入力と正解がファイルの組のデータセット (版 2) を書き出す画面 */
+/** 入力と正解がファイルの組のデータセット (版 2. 中身の手順を足すと版 3) を書き出す画面 */
 export function PairExportPage() {
   const [params, setParams] = useSearchParams()
   const form: FormId = params.get('form') === 'capture_clouds' ? 'capture_clouds' : 'image_masks'
@@ -765,7 +881,7 @@ export function PairExportPage() {
     <>
       <PageHeader
         title="ファイルの組を書き出す"
-        subtitle="正解が列でなくファイルのデータを, load_items で読める形 (dataset.yaml の版 2) に書き出します"
+        subtitle="正解が列でなくファイルのデータを, load_items で読める形 (dataset.yaml の版 2. 中身の手順を足すと版 3) に書き出します"
         breadcrumb={<Link to="/datasets">データセット</Link>}
       />
       <div className="mb-4">

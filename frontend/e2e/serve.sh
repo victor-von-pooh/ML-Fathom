@@ -157,7 +157,7 @@ for index in range(6):
 PY
 
 # ファイルの組の見本 (ML-EDA の合成の見本). 画像と領域 (組にならない領域を
-# 1 つ足す) と, 単純な形の撮影と正確な点群
+# 1 つ足す), 大きさの混ざった画像と領域, 単純な形の撮影と正確な点群
 uv run python - "$WORK" <<'PY'
 import shutil
 import sys
@@ -167,6 +167,7 @@ from ml_eda.synthetic import write_image_masks, write_shape_captures
 
 work = Path(sys.argv[1])
 sample = write_image_masks(work / "pairs", count=8)
+write_image_masks(work / "mixed", count=6, sizes=[(24, 32), (30, 18)])
 shutil.copyfile(sample["masks"] / "sample_000.png",
                 sample["masks"] / "orphan.png")
 write_shape_captures(work / "shapes", views=4, points=300)

@@ -11,6 +11,7 @@ import numpy as np
 import yaml
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import Response
+from ml_eda import ITEM_STEPS
 from ml_eda.pipeline import frame_view
 from ml_eda.profile import to_json
 from pydantic import BaseModel, Field
@@ -45,6 +46,18 @@ MAX_ROWS = 500
 # データセットの書き出しを 1 つずつにする鍵 (同じ名前の一時ディレクトリを
 # 2 つの書き出しが同時に使わないように)
 EXPORT_LOCK = threading.Lock()
+
+# ファイルの組の書き出しの項目ごとに, 画面で選べる中身の手順 (登録簿の
+# 種類と手順の名前). かけた後もその項目のファイルの形に収まるもので,
+# ML-EDA の書き出しが受け付けるもの. 領域は画像の resize から ML-EDA が
+# 決めるので無し
+PAIR_STEPS: dict[str, dict[str, tuple[str, tuple[str, ...]]]] = {
+    "image_masks": {"image": ("image", ("resize", "grayscale", "rgb"))},
+    "capture_clouds": {
+        "capture": ("image", ("resize", "grayscale", "rgb")),
+        "cloud": ("pointcloud", ("sample_points",)),
+    },
+}
 
 
 class Cache:
@@ -169,6 +182,9 @@ class PairExport(BaseModel):
         None, description="件の id からグループ"
     )
     origin: PairOrigin = PairOrigin()
+    item_steps: Optional[dict[str, list[dict[str, Any]]]] = Field(
+        None, description="項目の名前から中身の手順の並び"
+    )
 
 
 class ImageMaskExport(PairExport):
@@ -353,6 +369,37 @@ def source_view(source: dict[str, Any]) -> dict[str, Any]:
     return view
 
 
+def pair_steps() -> dict[str, dict[str, list[dict[str, Any]]]]:
+    """
+    ファイルの組の書き出しの項目ごとに, 選べる中身の手順を返す関数
+
+    ML-EDA の手順の登録簿を項目の種類で絞り, 省けない引数を添える
+
+    Parameters
+    ----------
+    None
+
+    Returns
+    ----------
+    steps: dict[str, dict[str, list[dict[str, Any]]]]
+        書き出し (image_masks, capture_clouds) から, 項目の名前から手順
+        (op, kind, params, description, fits, required) の並び
+    """
+    # 登録簿の順のまま, 項目の種類と名前で絞る
+    described = ml_eda.describe_item_steps()
+    steps: dict[str, dict[str, list[dict[str, Any]]]] = {}
+    for form, entries in PAIR_STEPS.items():
+        steps[form] = {}
+        for entry, (kind, ops) in entries.items():
+            steps[form][entry] = [
+                {**item, "required": list(ITEM_STEPS[item["op"]].required)}
+                for item in described
+                if item["kind"] == kind and item["op"] in ops
+            ]
+
+    return steps
+
+
 @router.get("/info")
 def get_info() -> dict[str, Any]:
     """
@@ -365,12 +412,14 @@ def get_info() -> dict[str, Any]:
     Returns
     ----------
     info: dict[str, Any]
-        loaders, steps, kinds, 版
+        loaders, steps, item_steps, pair_steps (ファイルの組の書き出しの
+        項目ごとの中身の手順), kinds, 版
     """
     info = {
         "loaders": ml_eda.describe_loaders(),
         "steps": ml_eda.describe_steps(),
         "item_steps": ml_eda.describe_item_steps(),
+        "pair_steps": pair_steps(),
         "kinds": list(ml_eda.KINDS),
         "version": ml_eda.__version__,
     }
@@ -1298,7 +1347,7 @@ def pair_options(body: PairExport) -> dict[str, Any]:
     Returns
     ----------
     options: dict[str, Any]
-        split, groups, origin, name, overwrite
+        split, groups, origin, name, overwrite, item_steps
     """
     # 分割のしかたは, 選んだ場合だけ method を渡す (既定はグループの有無で)
     split: dict[str, Any] = {
@@ -1310,7 +1359,7 @@ def pair_options(body: PairExport) -> dict[str, Any]:
     options = {
         "split": split, "groups": body.groups or None,
         "origin": body.origin.model_dump(), "name": body.name,
-        "overwrite": body.overwrite,
+        "overwrite": body.overwrite, "item_steps": body.item_steps or None,
     }
 
     return options
