@@ -36,7 +36,12 @@
 
 ## 使い方
 
-必要なもの: [uv](https://docs.astral.sh/uv/) (Python 3.10 以上は uv が用意する), Node.js 24 以上と [pnpm](https://pnpm.io/) 11 以上 (`corepack enable` で `package.json` の版が入る).
+### 必要なもの
+
+- [uv](https://docs.astral.sh/uv/) (Python は uv が用意する. 3.10 以上)
+- Node.js 24 以上と [pnpm](https://pnpm.io/) 11 以上 (`corepack enable` で `package.json` の版が入る)
+
+### 導入と起動
 
 ```bash
 git clone --recursive https://github.com/victor-von-pooh/ML-Fathom.git
@@ -57,8 +62,11 @@ dataset = load_dataset("~/.ml-fathom/datasets/<名前>")
 train_loader = DataLoader(TensorDataset(*dataset.tensors("train")), batch_size=64, shuffle=True)
 ```
 
-- [操作ガイド](docs/GUIDE.md): 画面ごとの手順. 見本のデータで試せる「やってみる」付き
-- [設計](docs/DESIGN.md): 置き場, 画面, API, 問題の設定とのつなぎ方
+## 文書
+
+- [操作ガイド](docs/GUIDE.md): 画面の順の操作ガイド (見本のデータで試せる「やってみる」付き). 最後の章が「困ったとき」
+- [設計](docs/DESIGN.md): 今の設計と決まり (ML-EDA と ML-Quest との約束, 画面, API, 用語, 置き場, 安全)
+- [TODO](TODO.md): まだやっていないこと (優先度の順)
 
 ## 開発
 
@@ -73,8 +81,9 @@ cd frontend && pnpm e2e   # 画面の通しのテスト
 | --- | --- |
 | `backend/` | API (Python, FastAPI). ML-EDA を呼び, 登録したデータとレシピを保存する |
 | `frontend/` | 画面 (TypeScript, React, Vite, ECharts) |
-| `ML-EDA/` | submodule |
+| `ML-EDA/` | submodule (データの分析のライブラリ) |
 | `ML-Quest/` | submodule (問題の設定から始めるため) |
+| `docs/` | 操作ガイド, 設計, README の画面の例 (`images/`) |
 
 ## ライセンス
 
