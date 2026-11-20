@@ -32,6 +32,7 @@ import { useDecided } from '../../lib/useDecided'
 import { DecisionsCard } from './DecisionsCard'
 import { Findings } from './Findings'
 import { ProblemCard } from './ProblemCard'
+import { ProjectExport } from './ProjectExport'
 import { ItemPreviewCard } from './ItemPreviewCard'
 import { ModelHintsView } from './ModelHintsView'
 import { TokenizerTable } from './TokenizerTable'
@@ -823,6 +824,17 @@ export function RecipeTab({
                 )}
               </pre>
             </div>
+          )}
+          {problem && (
+            <ProjectExport
+              sourceId={sourceId}
+              recipe={recipe}
+              onExported={() => {
+                // 書き出しはレシピも保存するので, 編集中の印を外す
+                setDraft(null)
+                save.reset()
+              }}
+            />
           )}
         </Card>
         <Card title="レシピ (YAML)" padded>

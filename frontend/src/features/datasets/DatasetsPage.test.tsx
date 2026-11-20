@@ -60,6 +60,33 @@ const DATASETS: DatasetSummary[] = [
     target: 'bought',
     splits: { train: 150, valid: 50 },
     features: 4,
+    model: {
+      inputs: [{ name: 'x', shape: [null, 4], dtype: 'float32' }],
+      task: 'classification',
+      target: 'bought',
+      classes: ['no', 'yes'],
+      outputs: 2,
+    },
+  },
+  {
+    form: 'table',
+    name: 'dataset',
+    path: '/work/sales/data/dataset',
+    format_version: 1,
+    created_at: '2026-11-17T10:00:00+09:00',
+    kind: 'timeseries',
+    task: 'forecasting',
+    target: 'sales',
+    splits: { train: 100, valid: 20 },
+    features: 6,
+    model: {
+      inputs: [{ name: 'x', shape: [null, 6], dtype: 'float32' }],
+      task: 'forecasting',
+      target: 'sales',
+      classes: null,
+      outputs: 1,
+    },
+    project: '総菜の作る量',
   },
   {
     form: 'unreadable',
@@ -102,10 +129,19 @@ test('版 2 は項目と出どころ, 版 1 は表, 知らない版は「読め�
   expect(card.getByText(/処理 fusion を超えられません/)).toBeInTheDocument()
   expect(card.getByText(/点群の無い撮影/)).toBeInTheDocument()
 
-  // 版 1 は今までどおり
+  // 版 1 は表と, モデルに要るもの (入力の形と型, 出す値の数)
   const people = within(screen.getByText('people').closest('section')!)
   expect(people.getByText('版 1 · 表')).toBeInTheDocument()
   expect(people.getByText('bought')).toBeInTheDocument()
+  expect(people.getByText('[バッチ, 4] float32')).toBeInTheDocument()
+  expect(people.getByText(/2 \(クラスの数\)/)).toBeInTheDocument()
+  expect(people.queryByText('プロジェクト')).not.toBeInTheDocument()
+
+  // プロジェクトへ書き出したものは印を付ける
+  const project = within(screen.getByText('dataset').closest('section')!)
+  expect(project.getAllByText('プロジェクト')).toHaveLength(2)
+  expect(project.getByText(/データ 総菜の作る量 からプロジェクトへ/)).toBeInTheDocument()
+  expect(project.getByText(/1 \(値\)/)).toBeInTheDocument()
 
   // 知らない版も消さずに理由を出す
   const future = within(screen.getByText('future').closest('section')!)

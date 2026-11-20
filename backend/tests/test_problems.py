@@ -469,3 +469,235 @@ def test_not_column_role(client: TestClient, tmp_path: Path) -> None:
     response = client.post("/api/problems/start", json={"path": str(path)})
     assert response.status_code == 422
     assert "generate" in response.json()["detail"]
+
+
+def with_project(path: Path, project: Path, dataset: Path) -> None:
+    """
+    保存した問題の設定に, ML-Quest のプロジェクトの記録を足す関数
+
+    Parameters
+    ----------
+    path: Path
+        problem.yaml を持つディレクトリ
+    project: Path
+        プロジェクトのディレクトリ
+    dataset: Path
+        学習のスクリプトがデータセットを読む場所
+
+    Returns
+    ----------
+    None
+    """
+    # make_project が書く欄と同じ名前 (project.path, dataset, model_spec)
+    problem = ml_quest.load_problem(path / "problem.yaml")
+    problem["project"] = {
+        "path": str(project), "dataset": str(dataset),
+        "model_spec": str(project / "models" / "model.yaml"),
+    }
+    ml_quest.save_problem(problem, path)
+
+
+def test_list_problems(
+    client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """
+    ML-Pathfinder の置き場の問題の設定を, 始められるかと理由を付けて
+    並べることを確かめる関数
+
+    Parameters
+    ----------
+    client: TestClient
+        クライアント
+    tmp_path: Path
+        一時ディレクトリ
+    monkeypatch: pytest.MonkeyPatch
+        環境変数を変える道具
+
+    Returns
+    ----------
+    None
+    """
+    # 置き場が無ければ空
+    home = tmp_path / "pathfinder"
+    monkeypatch.setenv("ML_PATHFINDER_HOME", str(home))
+    listed = client.get("/api/problems").json()
+    assert listed["problems"] == [] and listed["error"] is None
+    assert listed["root"] == str((home / "problems").resolve())
+
+    # データを入れたもの, 入れていないもの, 問題の設定でないもの
+    problems = home / "problems"
+    ready = write_problem(tmp_path)
+    problems.mkdir(parents=True)
+    ready.rename(problems / "ready")
+    with_project(
+        problems / "ready", tmp_path / "proj", tmp_path / "proj" / "data"
+    )
+    ml_quest.save_problem(
+        example_problem("総菜の作る量"), problems / "empty"
+    )
+    (problems / "other").mkdir()
+    (problems / "other" / "problem.yaml").write_text(
+        "format_version: 1\nsteps: []\n", encoding="utf-8"
+    )
+    (problems / "nofile").mkdir()
+    entries = {
+        Path(item["path"]).parent.name: item
+        for item in client.get("/api/problems").json()["problems"]
+    }
+    assert set(entries) == {"ready", "empty", "other"}
+    assert entries["ready"]["startable"] is True
+    assert entries["ready"]["name"] == "総菜の作る量"
+    assert entries["ready"]["project"]["dataset"] == str(
+        tmp_path / "proj" / "data"
+    )
+    assert entries["ready"]["updated_at"]
+    assert entries["empty"]["startable"] is False
+    assert "データが入っていません" in entries["empty"]["reason"]
+    assert entries["empty"]["project"] is None
+    assert entries["other"]["startable"] is False
+    assert "問題の設定のファイルではありません" in entries["other"]["reason"]
+
+    # 一覧の場所からそのまま始められる
+    response = client.post(
+        "/api/problems/start", json={"path": entries["ready"]["path"]}
+    )
+    assert response.status_code == 201
+
+
+def test_export_project(client: TestClient, tmp_path: Path) -> None:
+    """
+    問題の設定のプロジェクトの書き出し先に書き出し, 置き換えは指定した
+    場合だけ, データセットでないものは置き換えないことを確かめる関数
+
+    Parameters
+    ----------
+    client: TestClient
+        クライアント
+    tmp_path: Path
+        一時ディレクトリ
+
+    Returns
+    ----------
+    None
+    """
+    # 記録の無い問題の設定では書き出せない
+    path = write_problem(tmp_path)
+    source = client.post(
+        "/api/problems/start", json={"path": str(path)}
+    ).json()["source"]
+    url = f"/api/sources/{source['id']}"
+    recipe = client.get(f"{url}/recipe").json()
+    shown = client.get(f"{url}/project").json()
+    assert shown["dataset"] is None and shown["ready"] is False
+    assert "project.dataset" in shown["reason"]
+    assert client.post(f"{url}/export_project", json={
+        "recipe": recipe
+    }).status_code == 422
+
+    # プロジェクトの中の, まだ無い親の下に書き出す
+    project = tmp_path / "proj"
+    project.mkdir()
+    dataset = project / "data" / "dataset"
+    with_project(path, project, dataset)
+    shown = client.get(f"{url}/project").json()
+    assert shown == {
+        "project": str(project), "dataset": str(dataset),
+        "state": "missing", "ready": True, "reason": None,
+    }
+    exported = client.post(f"{url}/export_project", json={"recipe": recipe})
+    assert exported.status_code == 200
+    assert (dataset / "dataset.yaml").is_file()
+    assert exported.json()["hints"]["outputs"] == 1
+    assert client.get(f"{url}/project").json()["state"] == "dataset"
+
+    # 置き換えは指定した場合だけ
+    again = client.post(f"{url}/export_project", json={"recipe": recipe})
+    assert again.status_code == 409 and "既に" in again.json()["detail"]
+    assert client.post(f"{url}/export_project", json={
+        "recipe": recipe, "overwrite": True
+    }).status_code == 200
+
+    # 一覧にプロジェクトのものとして並び, モデルに要るものを持つ
+    listed = [
+        item for item in client.get("/api/datasets").json()
+        if item["path"] == str(dataset)
+    ]
+    assert len(listed) == 1 and listed[0]["project"] == source["name"]
+    model = listed[0]["model"]
+    assert model["task"] == "forecasting" and model["outputs"] == 1
+    assert model["inputs"][0]["shape"] == [None, listed[0]["features"]]
+
+    # データセットでないものは置き換えない
+    other = project / "data" / "other"
+    other.mkdir()
+    (other / "keep.txt").write_text("x", encoding="utf-8")
+    with_project(path, project, other)
+    shown = client.get(f"{url}/project").json()
+    assert shown["state"] == "occupied" and shown["ready"] is False
+    refused = client.post(f"{url}/export_project", json={
+        "recipe": recipe, "overwrite": True
+    })
+    assert refused.status_code == 409
+    assert (other / "keep.txt").is_file()
+
+    # シンボリックリンクの先のデータセットも置き換えない
+    link = project / "data" / "link"
+    link.symlink_to(dataset, target_is_directory=True)
+    with_project(path, project, link)
+    assert client.get(f"{url}/project").json()["state"] == "occupied"
+    assert client.post(f"{url}/export_project", json={
+        "recipe": recipe, "overwrite": True
+    }).status_code == 409
+    assert (dataset / "dataset.yaml").is_file()
+
+    # 記録に場所 (project.path) が無ければ書き出さない
+    problem = ml_quest.load_problem(path / "problem.yaml")
+    problem["project"] = {"dataset": str(dataset)}
+    ml_quest.save_problem(problem, path)
+    assert client.post(f"{url}/export_project", json={
+        "recipe": recipe, "overwrite": True
+    }).status_code == 422
+
+    # プロジェクトが無いか, プロジェクトの外の親が無ければ書き出さない
+    with_project(path, tmp_path / "gone", tmp_path / "gone" / "data")
+    assert client.post(f"{url}/export_project", json={
+        "recipe": recipe
+    }).status_code == 404
+    with_project(path, project, tmp_path / "nowhere" / "dataset")
+    assert client.post(f"{url}/export_project", json={
+        "recipe": recipe
+    }).status_code == 404
+    assert not (tmp_path / "gone").exists()
+    assert not (tmp_path / "nowhere").exists()
+
+
+def test_write_keeps_project(client: TestClient, tmp_path: Path) -> None:
+    """
+    問題の設定に書き戻しても, プロジェクトの記録が残ることを確かめる関数
+
+    Parameters
+    ----------
+    client: TestClient
+        クライアント
+    tmp_path: Path
+        一時ディレクトリ
+
+    Returns
+    ----------
+    None
+    """
+    # 記録を足してから始め, そのまま書き戻す
+    path = write_problem(tmp_path)
+    with_project(path, tmp_path / "proj", tmp_path / "proj" / "data")
+    source = client.post(
+        "/api/problems/start", json={"path": str(path)}
+    ).json()["source"]
+    url = f"/api/sources/{source['id']}/problem"
+    recipe = client.get(f"/api/sources/{source['id']}/recipe").json()
+    checked = client.post(f"{url}/check", json={"recipe": recipe}).json()
+    written = client.post(f"{url}/write", json={
+        "recipe": recipe, "version": checked["version"]
+    })
+    assert written.status_code == 200
+    saved = yaml.safe_load((path / "problem.yaml").read_text("utf-8"))
+    assert saved["project"]["dataset"] == str(tmp_path / "proj" / "data")

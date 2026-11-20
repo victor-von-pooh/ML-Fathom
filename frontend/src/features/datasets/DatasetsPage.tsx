@@ -3,7 +3,13 @@ import { AlertTriangle, Database, Upload } from 'lucide-react'
 import { Link } from 'react-router'
 
 import { api } from '../../api/client'
-import type { ItemsDataset, TableDataset, UnreadableDataset, DatasetSummary } from '../../api/types'
+import type {
+  ItemsDataset,
+  ModelInputs,
+  TableDataset,
+  UnreadableDataset,
+  DatasetSummary,
+} from '../../api/types'
 import { Card, EmptyState, ErrorBox, PageHeader, Spinner } from '../../components/ui'
 import { formatNumber, KIND_LABELS, TASK_LABELS } from '../../lib/format'
 import {
@@ -37,10 +43,43 @@ function Footer({ item }: { item: DatasetSummary }) {
   )
 }
 
+/** 出す値の数の説明 (分類はクラスの数, 他は値の数) */
+function outputsText(model: ModelInputs): string {
+  if (model.outputs === null) return 'なし (タスクを決めていません)'
+  if (model.task === 'classification') return `${model.outputs} (クラスの数)`
+  return `${model.outputs} (値)`
+}
+
+/** モデルに要るもの (ML-EDA の model_inputs). モデルの入力と最後の層の出す数に合わせる */
+function ModelNeeds({ model }: { model: ModelInputs }) {
+  return (
+    <ul className="space-y-0.5 text-xs">
+      {model.inputs.map((input) => (
+        <li key={input.name}>
+          入力 <span className="font-mono">{input.name}</span>:{' '}
+          <span className="font-mono">
+            [{input.shape.map((size) => (size === null ? 'バッチ' : String(size))).join(', ')}]{' '}
+            {input.dtype}
+          </span>
+        </li>
+      ))}
+      <li>出す値: {outputsText(model)}</li>
+    </ul>
+  )
+}
+
 /** 版 1 (1 件 = 1 行の表) */
 function TableCard({ item }: { item: TableDataset }) {
   return (
-    <Card title={<span className="font-mono">{item.name}</span>} actions={<Badge>版 1 · 表</Badge>}>
+    <Card
+      title={<span className="font-mono">{item.name}</span>}
+      actions={
+        <span className="flex gap-1">
+          {item.project !== undefined && <Badge>プロジェクト</Badge>}
+          <Badge>版 1 · 表</Badge>
+        </span>
+      }
+    >
       <dl className="grid grid-cols-[7rem_1fr] gap-1 text-sm">
         <dt className="text-ink-3">種類とタスク</dt>
         <dd>
@@ -52,6 +91,20 @@ function TableCard({ item }: { item: TableDataset }) {
         <dd>{item.features}</dd>
         <dt className="text-ink-3">分割</dt>
         <dd>{splitText(item.splits, '')}</dd>
+        <dt className="text-ink-3">モデルに要るもの</dt>
+        <dd>
+          <ModelNeeds model={item.model} />
+        </dd>
+        {item.project !== undefined && (
+          <>
+            <dt className="text-ink-3">プロジェクト</dt>
+            <dd>
+              {item.project
+                ? `データ ${item.project} からプロジェクトへ書き出したもの`
+                : 'プロジェクトへ書き出したもの'}
+            </dd>
+          </>
+        )}
         <Footer item={item} />
       </dl>
     </Card>

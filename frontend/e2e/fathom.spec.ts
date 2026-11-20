@@ -199,6 +199,64 @@ test('問題の設定から始め, 分からない列を使うと選んで書き
   await expect(page.getByText('customers をレシピで落とした')).toBeVisible()
 })
 
+test('保存した問題の設定を一覧から開き, プロジェクトへ書き出して一覧で確かめる', async ({
+  page,
+}) => {
+  // 置き換えの確かめは既定で受ける (やり直しで前の書き出しが残っていても進めるように)
+  page.on('dialog', (dialog) => void dialog.accept())
+  const exported = () =>
+    page.waitForResponse(
+      (response) =>
+        response.url().endsWith('/export_project') && response.request().method() === 'POST',
+    )
+
+  // ML-Pathfinder の置き場の問題の設定を一覧から選んで始める
+  await page.goto('/')
+  await page.getByRole('button', { name: '問題の設定から始める' }).click()
+  const stored = page.getByRole('list', { name: '保存した問題の設定' })
+  await stored.getByRole('button', { name: /総菜のプロジェクト/ }).click()
+  await page.getByRole('button', { name: 'この問題の設定から始める' }).click()
+  await expect(page.getByRole('heading', { name: '総菜のプロジェクト' })).toBeVisible()
+
+  // 記録した書き出し先へ書き出すと, モデルを組むときの数が出る
+  await page.getByRole('tab', { name: '前処理と書き出し' }).click()
+  const button = page.getByRole('button', { name: 'プロジェクトへ書き出す' })
+  await expect(button).toBeVisible({ timeout: 20_000 })
+  await expect(page.getByText(/project\/data\/dataset$/)).toBeVisible()
+  const first = exported()
+  await button.click()
+  expect((await first).ok()).toBe(true)
+  await expect(page.getByText(/プロジェクトへ書き出しました/)).toBeVisible({ timeout: 20_000 })
+  await expect(page.getByText('前に書き出したものがあります', { exact: false })).toBeVisible()
+
+  // 2 回目は置き換えてよいかを確かめる (断ると送らない)
+  page.removeAllListeners('dialog')
+  const messages: string[] = []
+  const requests: string[] = []
+  page.on('request', (request) => {
+    if (request.url().endsWith('/export_project')) requests.push(request.url())
+  })
+  page.once('dialog', (dialog) => {
+    messages.push(dialog.message())
+    void dialog.dismiss()
+  })
+  await button.click()
+  await expect.poll(() => messages.length).toBe(1)
+  expect(messages[0]).toContain('置き換えますか')
+  expect(requests).toHaveLength(0)
+  page.once('dialog', (dialog) => void dialog.accept())
+  const second = exported()
+  await button.click()
+  expect((await second).ok()).toBe(true)
+
+  // データセットの一覧にプロジェクトのものとして並び, モデルに要るものが出る
+  await page.getByRole('link', { name: 'データセット' }).click()
+  const card = page.locator('section').filter({ hasText: 'データ 総菜のプロジェクト から' })
+  await expect(card.getByText('プロジェクト', { exact: true }).first()).toBeVisible()
+  await expect(card.getByText(/\[バッチ, \d+\] float32/)).toBeVisible()
+  await expect(card.getByText(/1 \(値\)/)).toBeVisible()
+})
+
 test('多視点の撮影を登録し, カメラの配置と各枚の深度を見る', async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'データを追加' }).first().click()

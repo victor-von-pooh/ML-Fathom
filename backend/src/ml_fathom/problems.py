@@ -1,15 +1,25 @@
+import datetime as dt
 import hashlib
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, Optional
 
 import ml_eda
 import ml_quest
 import yaml
 from fastapi import APIRouter, HTTPException, Request
+from ml_eda.profile import to_json
 from ml_quest.check import is_column_part
 from pydantic import BaseModel, Field
 
-from ml_fathom.api import find_source, get_store, load_source, source_view
+from ml_fathom.api import (
+    EXPORT_LOCK,
+    find_source,
+    get_store,
+    load_source,
+    model_hints,
+    source_view,
+)
+from ml_fathom.settings import get_problems_dir
 
 router = APIRouter(prefix="/api")
 
@@ -29,6 +39,13 @@ class ProblemStart(BaseModel):
 
 class ProblemCheck(BaseModel):
     recipe: dict[str, Any]
+
+
+class ProjectExport(BaseModel):
+    recipe: dict[str, Any]
+    overwrite: bool = Field(
+        False, description="前に書き出したデータセットを置き換えるか"
+    )
 
 
 class ProblemWrite(BaseModel):
@@ -467,5 +484,361 @@ def write_problem(
         ) from error
     get_store(request).write_recipe(source_id, recipe)
     result = {"changes": changes, "recipe": recipe, "path": str(path)}
+
+    return result
+
+
+def project_record(problem: dict[str, Any]) -> Optional[dict[str, str]]:
+    """
+    問題の設定から, ML-Quest がプロジェクトを作ったときの記録を取り出す
+    関数
+
+    Parameters
+    ----------
+    problem: dict[str, Any]
+        問題の設定
+
+    Returns
+    ----------
+    record: Optional[dict[str, str]]
+        path, dataset, model_spec のうち書いてあるもの (無ければ None)
+    """
+    # 文字で書いた欄だけ (プロジェクトを作っていなければ記録は無い)
+    found = problem.get("project")
+    record: Optional[dict[str, str]] = None
+    if isinstance(found, dict):
+        record = {
+            key: found[key] for key in ("path", "dataset", "model_spec")
+            if isinstance(found.get(key), str) and found[key]
+        } or None
+
+    return record
+
+
+def modified_at(path: Path) -> Optional[str]:
+    """
+    ファイルの更新時刻を ISO 8601 の文字にする関数
+
+    Parameters
+    ----------
+    path: Path
+        ファイル
+
+    Returns
+    ----------
+    stamp: Optional[str]
+        手元の時刻帯の更新時刻 (読めなければ None)
+    """
+    # 一覧の並べ替えと表示の時刻
+    try:
+        moment = dt.datetime.fromtimestamp(path.stat().st_mtime)
+    except OSError:
+        stamp = None
+        return stamp
+    stamp = moment.astimezone().isoformat(timespec="seconds")
+
+    return stamp
+
+
+def problem_entry(path: Path) -> dict[str, Any]:
+    """
+    ML-Pathfinder の置き場の問題の設定を, 一覧の 1 件にする関数
+
+    Parameters
+    ----------
+    path: Path
+        problem.yaml
+
+    Returns
+    ----------
+    entry: dict[str, Any]
+        場所, 名前, 作った時刻, 更新時刻, 始められるか, 始められない理由,
+        プロジェクトの記録
+    """
+    # 読めないものも理由を付けて並べる (名前はディレクトリの名前)
+    entry: dict[str, Any] = {
+        "path": str(path), "name": path.parent.name, "created_at": None,
+        "updated_at": modified_at(path), "startable": False,
+        "reason": None, "project": None,
+    }
+    try:
+        problem = read_problem(path)
+    except HTTPException as error:
+        entry["reason"] = str(error.detail)
+        return entry
+    entry.update(
+        name=problem["name"], created_at=str(problem["created_at"]),
+        project=project_record(problem)
+    )
+
+    # 始めるときと同じ確かめ (列の予測で, データを入れてあること)
+    try:
+        require_column(problem)
+        load = ml_quest.recipe_from(problem)["load"]
+    except HTTPException as error:
+        entry["reason"] = str(error.detail)
+        return entry
+    except SHAPE_ERRORS as error:
+        entry["reason"] = f"問題の設定を渡せません: {error}"
+        return entry
+    if load is None:
+        entry["reason"] = (
+            "データが入っていません (ML-Pathfinder の「手元のデータは」で"
+            "入れてください)"
+        )
+    else:
+        entry["startable"] = True
+
+    return entry
+
+
+def updated_of(entry: dict[str, Any]) -> str:
+    """
+    一覧の 1 件の更新時刻を, 並べ替えの鍵にする関数
+
+    Parameters
+    ----------
+    entry: dict[str, Any]
+        一覧の 1 件
+
+    Returns
+    ----------
+    key: str
+        更新時刻の文字 (無ければ空)
+    """
+    # 時刻の無いものは後ろ
+    key = str(entry.get("updated_at") or "")
+
+    return key
+
+
+@router.get("/problems")
+def list_problems() -> dict[str, Any]:
+    """
+    ML-Pathfinder の置き場にある問題の設定の一覧を返す関数
+
+    Parameters
+    ----------
+    None
+
+    Returns
+    ----------
+    result: dict[str, Any]
+        root (置き場の problems), problems (更新の新しい順の 1 件の並び),
+        error (置き場を読めない場合の理由)
+    """
+    # problems/<識別子>/problem.yaml (置き場が無ければ空)
+    root = get_problems_dir()
+    files: list[Path] = []
+    error = None
+    try:
+        if root.is_dir():
+            files = [
+                child / "problem.yaml" for child in sorted(root.iterdir())
+                if (child / "problem.yaml").is_file()
+            ]
+    except OSError as reason:
+        error = f"{root} を読めません: {reason}"
+    problems = [problem_entry(file) for file in files]
+    problems.sort(key=updated_of, reverse=True)
+    result = {"root": str(root), "problems": problems, "error": error}
+
+    return result
+
+
+def place_state(path: Path) -> str:
+    """
+    書き出し先の今の様子を返す関数
+
+    Parameters
+    ----------
+    path: Path
+        書き出し先
+
+    Returns
+    ----------
+    state: str
+        missing (無い), dataset (前に書き出したデータセット), occupied
+        (データセットでないディレクトリかファイル, シンボリックリンク)
+    """
+    # 置き換えてよいのは dataset.yaml を持つディレクトリだけ (リンクの先は
+    # 書き換えない)
+    if path.is_symlink():
+        state = "occupied"
+    elif not path.exists():
+        state = "missing"
+    elif path.is_dir() and (path / "dataset.yaml").is_file():
+        state = "dataset"
+    else:
+        state = "occupied"
+
+    return state
+
+
+def export_place(record: Optional[dict[str, str]]) -> Path:
+    """
+    プロジェクトの記録から, 書き出し先を決めて確かめる関数
+
+    Parameters
+    ----------
+    record: Optional[dict[str, str]]
+        問題の設定のプロジェクトの記録
+
+    Returns
+    ----------
+    target: Path
+        書き出し先 (project.dataset)
+
+    Raises
+    ----------
+    HTTPException
+        記録 (dataset と path) が無いか絶対パスでない場合は 422,
+        プロジェクトか, プロジェクトの外の親のディレクトリが無い場合は 404
+    """
+    # 記録の書き出し先 (学習のスクリプトがデータセットを読む場所)
+    text = (record or {}).get("dataset")
+    if not text:
+        raise HTTPException(
+            422, "この問題の設定にはプロジェクトの記録 (project.dataset) が"
+            "ありません. ML-Pathfinder でプロジェクトを作ると書き出せます"
+        )
+    project = (record or {}).get("path")
+    if not project:
+        raise HTTPException(
+            422, "この問題の設定のプロジェクトの記録に場所 (project.path) "
+            "がありません. ML-Pathfinder でプロジェクトを作り直してください"
+        )
+    target = Path(text)
+    root = Path(project)
+    if not target.is_absolute() or not root.is_absolute():
+        raise HTTPException(
+            422, "プロジェクトの記録 (project.path, project.dataset) が"
+            "絶対パスではありません"
+        )
+
+    # プロジェクトがあること. 親はプロジェクトの中なら作り, 外なら既にある
+    # ものだけ (消したか動かしたプロジェクトの場所に作らないように)
+    if not root.is_dir():
+        raise HTTPException(
+            404, f"プロジェクト {project} がありません. 消したか動かした"
+            "場合は, ML-Pathfinder でプロジェクトを作り直してください"
+        )
+    inside = target.resolve().is_relative_to(root.resolve())
+    if not inside and not target.parent.is_dir():
+        raise HTTPException(404, f"{target.parent} がありません")
+
+    return target
+
+
+@router.get("/sources/{source_id}/project")
+def get_project(request: Request, source_id: str) -> dict[str, Any]:
+    """
+    始めた問題の設定のプロジェクトの書き出し先と, その様子を返す関数
+
+    Parameters
+    ----------
+    request: Request
+        リクエスト
+    source_id: str
+        データの ID
+
+    Returns
+    ----------
+    result: dict[str, Any]
+        project (プロジェクトの場所), dataset (書き出し先), state (missing,
+        dataset, occupied. 書き出し先が無ければ None), ready (書き出せるか),
+        reason (書き出せない理由)
+    """
+    # 記録と書き出し先の様子 (書き出せない理由も画面に出す)
+    _, _, problem = linked_problem(request, source_id)
+    record = project_record(problem)
+    result: dict[str, Any] = {
+        "project": (record or {}).get("path"),
+        "dataset": (record or {}).get("dataset"),
+        "state": None, "ready": False, "reason": None,
+    }
+    try:
+        target = export_place(record)
+    except HTTPException as error:
+        result["reason"] = str(error.detail)
+        return result
+    state = place_state(target)
+    result["state"] = state
+    if state == "occupied":
+        result["reason"] = (
+            f"{target} はデータセットではないので置き換えません"
+        )
+    else:
+        result["ready"] = True
+
+    return result
+
+
+@router.post("/sources/{source_id}/export_project")
+def export_project(
+    request: Request, source_id: str, body: ProjectExport
+) -> dict[str, Any]:
+    """
+    レシピで前処理して, 問題の設定のプロジェクトの書き出し先に書き出す関数
+
+    Parameters
+    ----------
+    request: Request
+        リクエスト
+    source_id: str
+        データの ID
+    body: ProjectExport
+        レシピ, 前に書き出したデータセットを置き換えるか
+
+    Returns
+    ----------
+    result: dict[str, Any]
+        書き出した場所と dataset.yaml の中身と, モデルを組むときの数
+
+    Raises
+    ----------
+    HTTPException
+        記録が無いか前処理の失敗は 422, プロジェクトが無ければ 404,
+        データセットでないものがあるか, 置き換えを指定せずにデータセット
+        がある場合は 409
+    """
+    # 書き出し先と, 置き換えてよいか (確かめと書き出しの間に変わらない
+    # ように, 書き出しと同じ鍵の中で確かめる)
+    source, _, problem = linked_problem(request, source_id)
+    record = project_record(problem)
+    data = load_source(source)
+    try:
+        with EXPORT_LOCK:
+            target = export_place(record)
+            state = place_state(target)
+            if state == "occupied":
+                raise HTTPException(
+                    409, f"{target} はデータセットではないので置き換えません"
+                )
+            if state == "dataset" and not body.overwrite:
+                raise HTTPException(
+                    409, f"{target} には既にデータセットがあります. 置き換え"
+                    "てよいかを確かめてから書き出してください"
+                )
+            info = ml_eda.export_dataset(
+                data, body.recipe, target, name=target.name,
+                overwrite=body.overwrite
+            )
+    except FileExistsError as error:
+        raise HTTPException(409, str(error)) from error
+    except (ValueError, KeyError, TypeError, AttributeError) as error:
+        raise HTTPException(422, str(error)) from error
+    except OSError as error:
+        raise HTTPException(
+            422, f"{target} に書き出せません: {error}"
+        ) from error
+    # 書き出してレシピを保存し, 書き出した場所を覚える (一覧に並べるため)
+    store = get_store(request)
+    store.write_recipe(source_id, ml_eda.load_recipe(body.recipe))
+    store.update(source_id, {"project_dataset": str(target)})
+    result = {
+        "path": str(target), "info": to_json(info),
+        "hints": model_hints(target, info),
+    }
 
     return result

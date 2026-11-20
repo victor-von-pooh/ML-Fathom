@@ -12,6 +12,47 @@ export interface Source {
   exists: boolean
   /** 問題の設定から始めた場合の problem.yaml の場所 */
   problem?: string | null
+  /** プロジェクトへ書き出した場所 */
+  project_dataset?: string | null
+}
+
+/** ML-Quest がプロジェクトを作ったときの記録 (問題の設定の project) */
+export interface ProjectRecord {
+  path?: string
+  dataset?: string
+  model_spec?: string
+}
+
+/** ML-Pathfinder の置き場の問題の設定の 1 件 */
+export interface StoredProblem {
+  path: string
+  name: string
+  created_at: string | null
+  updated_at: string | null
+  /** 始められるか (列の予測で, データを入れてある) */
+  startable: boolean
+  /** 始められない理由 */
+  reason: string | null
+  project: ProjectRecord | null
+}
+
+/** ML-Pathfinder の置き場の問題の設定の一覧 */
+export interface ProblemList {
+  /** 置き場の problems の場所 */
+  root: string
+  problems: StoredProblem[]
+  /** 置き場を読めない場合の理由 */
+  error: string | null
+}
+
+/** 始めた問題の設定のプロジェクトの書き出し先と, その場所の様子 */
+export interface ProjectPlace {
+  project: string | null
+  dataset: string | null
+  /** missing は無い, dataset は前に書き出したもの, occupied はデータセットでないもの */
+  state: 'missing' | 'dataset' | 'occupied' | null
+  ready: boolean
+  reason: string | null
 }
 
 /** 問題の設定の確かめ (ML-Quest の check の形) */
@@ -283,6 +324,23 @@ export interface ModelHints {
   vocabulary?: number
 }
 
+/** モデルの入力の 1 つ (ML-EDA の model_inputs. 形の null はバッチの次元) */
+export interface ModelInput {
+  name: string
+  shape: (number | null)[]
+  dtype: string
+}
+
+/** データセットからモデルに要るもの (ML-EDA の model_inputs) */
+export interface ModelInputs {
+  inputs: ModelInput[]
+  task: string | null
+  target: string | null
+  classes: unknown[] | null
+  /** 1 件に出す値の数 (分類はクラスの数, 回帰と時系列の予測は 1) */
+  outputs: number | null
+}
+
 export interface ExportResult {
   path: string
   info: Record<string, unknown>
@@ -295,6 +353,8 @@ interface DatasetBase {
   /** dataset.yaml の版 (読めないものは書かれた値のまま) */
   format_version: unknown
   created_at: string | null
+  /** プロジェクトへ書き出したもの (書き出したデータの名前. 空のこともある) */
+  project?: string
 }
 
 /** 版 1 (1 件 = 1 行の表. load_dataset で読む) */
@@ -305,6 +365,8 @@ export interface TableDataset extends DatasetBase {
   target: string | null
   splits: Record<string, number>
   features: number
+  /** モデルに要るもの */
+  model: ModelInputs
 }
 
 /** 正解の出どころ (ML-EDA の target.origin) */

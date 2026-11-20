@@ -15,7 +15,9 @@ import type {
   ItemPreview,
   PointsItem,
   ProblemCheck,
+  ProblemList,
   ProblemWritten,
+  ProjectPlace,
 } from './types'
 
 /** API がエラーを返したときの例外 */
@@ -111,6 +113,10 @@ export const api = {
     request<PairExportResult>('/api/datasets/image_masks', json('POST', body)),
   exportCaptureClouds: (body: CaptureCloudExport) =>
     request<PairExportResult>('/api/datasets/capture_clouds', json('POST', body)),
+  problems: () => request<ProblemList>('/api/problems'),
+  project: (id: string) => request<ProjectPlace>(`/api/sources/${id}/project`),
+  exportProject: (id: string, recipe: Recipe, overwrite: boolean) =>
+    request<ExportResult>(`/api/sources/${id}/export_project`, json('POST', { recipe, overwrite })),
   startFromProblem: (path: string) =>
     request<{ source: Source; notes: string[] }>('/api/problems/start', json('POST', { path })),
   checkProblem: (id: string, recipe: Recipe) =>
