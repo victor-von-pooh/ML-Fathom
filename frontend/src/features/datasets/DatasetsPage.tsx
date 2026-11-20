@@ -11,6 +11,7 @@ import type {
   DatasetSummary,
 } from '../../api/types'
 import { Card, EmptyState, ErrorBox, PageHeader, Spinner } from '../../components/ui'
+import { stepText } from '../../lib/entrySteps'
 import { formatNumber, KIND_LABELS, TASK_LABELS } from '../../lib/format'
 import {
   conventionText,
@@ -118,18 +119,19 @@ function TableCard({ item }: { item: TableDataset }) {
   )
 }
 
-/** 版 2 (入力と正解がファイルの組) */
+/** 版 2 と版 3 (入力と正解がファイルの組. 版 3 は項目ごとの中身の手順を持つ) */
 function ItemsCard({ item }: { item: ItemsDataset }) {
   const origin = item.target.origin
   const note = originNote(origin)
   const settings = origin.settings ?? {}
+  const stepped = item.entries.some((entry) => entry.steps && entry.steps.length > 0)
   return (
     <Card
       title={<span className="font-mono">{item.name}</span>}
       actions={
         <span className="flex gap-1">
           {item.project !== undefined && <Badge>プロジェクト</Badge>}
-          <Badge>版 2 · ファイルの組</Badge>
+          <Badge>{`版 ${String(item.format_version)} · ファイルの組`}</Badge>
         </span>
       }
     >
@@ -149,7 +151,8 @@ function ItemsCard({ item }: { item: ItemsDataset }) {
                 <th className="pr-2 font-normal">名前</th>
                 <th className="pr-2 font-normal">種類</th>
                 <th className="pr-2 font-normal">単位</th>
-                <th className="font-normal">座標の決まり</th>
+                <th className={stepped ? 'pr-2 font-normal' : 'font-normal'}>座標の決まり</th>
+                {stepped && <th className="font-normal">中身の手順</th>}
               </tr>
             </thead>
             <tbody>
@@ -163,7 +166,7 @@ function ItemsCard({ item }: { item: ItemsDataset }) {
                   </td>
                   <td className="pr-2">{entry.kind}</td>
                   <td className="pr-2">{entry.units ?? '—'}</td>
-                  <td className="break-all">
+                  <td className={stepped ? 'break-all pr-2' : 'break-all'}>
                     <span className="font-mono">{conventionText(entry.convention)}</span>
                     {depthConventionText(entry.kind, entry.convention) && (
                       <div className="text-ink-2">
@@ -171,6 +174,13 @@ function ItemsCard({ item }: { item: ItemsDataset }) {
                       </div>
                     )}
                   </td>
+                  {stepped && (
+                    <td className="font-mono break-all">
+                      {entry.steps && entry.steps.length > 0
+                        ? entry.steps.map(stepText).join(' → ')
+                        : '—'}
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -250,7 +260,7 @@ export function DatasetsPage() {
     <>
       <PageHeader
         title="書き出したデータセット"
-        subtitle="表は load_dataset, ファイルの組 (版 2) は load_items で ML-EDA から読み込めます"
+        subtitle="表は load_dataset, ファイルの組 (版 2, 3) は load_items で ML-EDA から読み込めます"
         actions={
           <Link
             to="/datasets/export"

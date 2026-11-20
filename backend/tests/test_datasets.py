@@ -5,6 +5,7 @@ import pandas as pd
 import pytest
 import yaml
 from fastapi.testclient import TestClient
+from ml_eda.pipeline import ITEMS_FORMAT_VERSIONS
 from ml_eda.synthetic import write_image_masks, write_shape_captures
 
 from ml_fathom.app import create_app
@@ -104,6 +105,72 @@ def test_image_masks_export_and_list(
     assert item["items"] == 10
     assert sum(item["splits"].values()) == 10
     assert item["normalization"] is None
+
+
+def test_image_masks_item_steps(
+    client: TestClient, tmp_path: Path
+) -> None:
+    """
+    大きさの混ざった画像に中身の手順をかけて版 3 で書き出し, 一覧で手順を
+    出すことを確かめる関数
+
+    Parameters
+    ----------
+    client: TestClient
+        クライアント
+    tmp_path: Path
+        pytest が用意する一時ディレクトリ
+
+    Returns
+    ----------
+    None
+    """
+    # 画面で選べる手順は, 画像は resize, grayscale, rgb だけ (領域は無し)
+    pairs = client.get("/api/info").json()["pair_steps"]
+    image = pairs["image_masks"]
+    assert list(image) == ["image"]
+    assert [step["op"] for step in image["image"]] == [
+        "resize", "grayscale", "rgb",
+    ]
+    assert image["image"][0]["required"] == ["width", "height"]
+    assert [step["op"] for step in pairs["capture_clouds"]["cloud"]] == [
+        "sample_points",
+    ]
+
+    # 大きさの混ざった見本を 16 × 20 にそろえる
+    sample = write_image_masks(
+        tmp_path / "mixed", count=6, sizes=[(24, 32), (30, 18)]
+    )
+    steps = [{"op": "resize", "width": 20, "height": 16}]
+    body = {
+        "images": str(sample["images"]), "masks": str(sample["masks"]),
+        "name": "resized", "item_steps": {"image": steps},
+    }
+    response = client.post("/api/datasets/image_masks", json=body)
+    assert response.status_code == 200, response.text
+    info = response.json()["info"]
+    assert info["format_version"] == 3
+    assert info["entries"]["image"]["steps"] == steps
+    assert info["entries"]["mask"]["steps"] == [
+        {"op": "resize_mask", "width": 20, "height": 16},
+    ]
+
+    # 領域の手順と, ファイルに残せない手順は 422
+    for wrong in ({"mask": steps}, {"image": [{"op": "normalize"}]},
+                  {"image": [{"op": "resize", "width": 0, "height": 4}]}):
+        response = client.post("/api/datasets/image_masks", json={
+            **body, "name": "wrong", "item_steps": wrong,
+        })
+        assert response.status_code == 422, wrong
+
+    # 一覧は版 3 をファイルの組として読み, 項目ごとの手順を出す
+    item = client.get("/api/datasets").json()[0]
+    assert item["form"] == "items"
+    assert item["format_version"] == 3
+    entries = {entry["name"]: entry for entry in item["entries"]}
+    assert entries["image"]["steps"] == steps
+    assert entries["image"]["shape"][:2] == [16, 20]
+    assert entries["mask"]["steps"][0]["op"] == "resize_mask"
 
 
 def test_image_masks_errors(client: TestClient, tmp_path: Path) -> None:
@@ -220,6 +287,23 @@ def test_capture_clouds_export(client: TestClient, tmp_path: Path) -> None:
     assert convention["pixel_center"] == 0.5
     shown = {key: value for key, value in item.items() if key != "path"}
     assert str(sample["captures"]) not in str(shown)
+    assert entries["cloud"]["steps"] is None
+
+    # 撮影と点群にも中身の手順をかけられる (版 3)
+    steps = {
+        "capture": [{"op": "grayscale"}],
+        "cloud": [{"op": "sample_points", "points": 50, "seed": 1}],
+    }
+    response = client.post("/api/datasets/capture_clouds", json={
+        **body, "name": "sampled", "item_steps": steps,
+    })
+    assert response.status_code == 200, response.text
+    sampled = next(item for item in client.get("/api/datasets").json()
+                   if item["name"] == "sampled")
+    entries = {entry["name"]: entry for entry in sampled["entries"]}
+    assert sampled["format_version"] == 3
+    assert entries["capture"]["steps"] == steps["capture"]
+    assert entries["cloud"]["steps"] == steps["cloud"]
 
 
 def test_list_unreadable(client: TestClient, tmp_path: Path) -> None:
@@ -255,7 +339,10 @@ def test_list_unreadable(client: TestClient, tmp_path: Path) -> None:
     root = tmp_path / "home" / "datasets"
     (root / "future").mkdir()
     (root / "future" / "dataset.yaml").write_text(
-        yaml.safe_dump({"format_version": 3, "name": "future"}),
+        yaml.safe_dump({
+            "format_version": max(ITEMS_FORMAT_VERSIONS) + 1,
+            "name": "future",
+        }),
         encoding="utf-8"
     )
     (root / "broken").mkdir()
@@ -287,7 +374,8 @@ def test_list_unreadable(client: TestClient, tmp_path: Path) -> None:
     assert datasets["v1"]["splits"] == {"train": 30, "valid": 10}
     assert datasets["future"]["form"] == "unreadable"
     assert datasets["future"]["unknown_version"] is True
-    assert "format_version 3" in datasets["future"]["error"]
+    future = max(ITEMS_FORMAT_VERSIONS) + 1
+    assert f"format_version {future}" in datasets["future"]["error"]
     assert datasets["broken"]["form"] == "unreadable"
     assert datasets["broken"]["unknown_version"] is False
     assert "entries" in datasets["broken"]["error"]

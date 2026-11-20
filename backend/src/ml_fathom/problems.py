@@ -68,6 +68,10 @@ class PairsExport(BaseModel):
     overwrite: bool = Field(
         False, description="前に書き出したデータセットを置き換えるか"
     )
+    item_steps: Optional[dict[str, list[dict[str, Any]]]] = Field(
+        None, description="項目の名前から中身の手順の並び (問題の設定には"
+        "書き戻さない)"
+    )
 
 
 class ProblemWrite(BaseModel):
@@ -512,7 +516,8 @@ def get_problem_pairs(path: str) -> dict[str, Any]:
 
 
 def pair_call(
-    settings: dict[str, Any], target: Path, overwrite: bool
+    settings: dict[str, Any], target: Path, overwrite: bool,
+    item_steps: Optional[dict[str, list[dict[str, Any]]]] = None
 ) -> dict[str, Any]:
     """
     書き出しの設定のまま, ML-EDA のファイルの組の書き出しを呼ぶ関数
@@ -525,6 +530,9 @@ def pair_call(
         書き出し先
     overwrite: bool
         前のデータセットを置き換えるか
+    item_steps: Optional[dict[str, list[dict[str, Any]]]] = None
+        項目の名前から中身の手順の並び (ML-Quest の書き出しの設定には
+        無いので別に渡す)
 
     Returns
     ----------
@@ -538,7 +546,8 @@ def pair_call(
         Path(settings["targets"]).expanduser(), target,
         split=settings["split"] or None, groups=settings["groups"],
         origin=settings["origin"] or None, name=target.name,
-        overwrite=overwrite, **settings["options"]
+        overwrite=overwrite, item_steps=item_steps or None,
+        **settings["options"]
     )
 
     return info
@@ -554,7 +563,8 @@ def export_problem_pairs(body: PairsExport) -> dict[str, Any]:
     ----------
     body: PairsExport
         問題の設定の場所, 確かめたときの中身の印, 書き出しの設定,
-        置き換えるか
+        置き換えるか, 中身の手順 (書き出しにかけ, 問題の設定には書き戻さ
+        ない)
 
     Returns
     ----------
@@ -604,7 +614,9 @@ def export_problem_pairs(body: PairsExport) -> dict[str, Any]:
                     409, f"{target} には既にデータセットがあります. 置き換え"
                     "てよいかを確かめてから書き出してください"
                 )
-            info = pair_call(settings, target, body.overwrite)
+            info = pair_call(
+                settings, target, body.overwrite, body.item_steps
+            )
     except HTTPException:
         raise
     except FileExistsError as error:

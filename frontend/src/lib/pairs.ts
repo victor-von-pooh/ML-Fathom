@@ -1,4 +1,4 @@
-// 入力と正解がファイルの組のデータセット (ML-EDA の dataset.yaml の版 2) の書き出しと表示
+// 入力と正解がファイルの組のデータセット (ML-EDA の dataset.yaml の版 2 と版 3) の書き出しと表示
 import YAML from 'yaml'
 
 import type { PairOrigin } from '../api/types'
@@ -146,14 +146,16 @@ export function depthConventionText(
 }
 
 /**
- * 書き出した版 2 のデータセットを読む例 (load_items).
- * 検証用とテスト用の行は, その分割がある場合だけ. 正規化をかけたものは推論の注意を足す
+ * 書き出した版 2, 版 3 のデータセットを読む例 (load_items).
+ * 検証用とテスト用の行は, その分割がある場合だけ. 正規化をかけたものと,
+ * 中身の手順をかけたもの (版 3) は推論の注意を足す
  */
 export function itemsSnippet(
   path: string,
   splits: Record<string, unknown>,
   entries: string[],
   normalized: boolean,
+  stepped = false,
 ): string {
   const keys = ['id', 'split', 'group', ...entries].map((key) => `"${key}"`).join(', ')
   const lines = [
@@ -167,6 +169,9 @@ export function itemsSnippet(
     'paths = dataset.split("train", read=False)[0]   # 配列の代わりに場所',
     normalized
       ? '# 推論のときは normalize_capture で同じ正規化をかけて read_capture で読み, 出力から shift を引いて元の座標に戻す'
+      : null,
+    stepped
+      ? '# 推論のときは transform_entry(dataset, 項目の名前, 中身) で書き出しと同じ中身の手順をかける (撮影は normalize_capture の steps に項目の steps を渡す)'
       : null,
   ]
   const snippet = lines.filter((line) => line !== null).join('\n')

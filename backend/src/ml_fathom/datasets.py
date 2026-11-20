@@ -4,11 +4,13 @@ from typing import Any, Optional
 
 import ml_eda
 import yaml
-from ml_eda.pipeline import DATASET_FORMAT_VERSION, ITEMS_FORMAT_VERSION
+from ml_eda.pipeline import DATASET_FORMAT_VERSION, ITEMS_FORMAT_VERSIONS
 from ml_eda.profile import to_json
 
-# 一覧に出す項目の欄
-ENTRY_FIELDS = ("kind", "role", "units", "convention", "shape", "formats")
+# 一覧に出す項目の欄 (steps は版 3 でかけた中身の手順. 版 2 は無し)
+ENTRY_FIELDS = (
+    "kind", "role", "units", "convention", "shape", "formats", "steps"
+)
 
 
 def table_summary(path: Path) -> dict[str, Any]:
@@ -44,7 +46,8 @@ def table_summary(path: Path) -> dict[str, Any]:
 
 def items_summary(path: Path) -> dict[str, Any]:
     """
-    版 2 (入力と正解がファイルの組) のデータセットを一覧の 1 件にする関数
+    版 2 と版 3 (入力と正解がファイルの組) のデータセットを一覧の 1 件に
+    する関数
 
     Parameters
     ----------
@@ -55,7 +58,7 @@ def items_summary(path: Path) -> dict[str, Any]:
     ----------
     summary: dict[str, Any]
         受け持ち, 正解 (種類, 項目, 出どころ), 項目ごとの種類と単位と
-        座標の決まり, 分割ごとの件数, 全ての件数, 正規化, 注意
+        座標の決まりと中身の手順, 分割ごとの件数, 全ての件数, 正規化, 注意
     """
     # load_items で読めることを確かめる (表と項目の列も)
     dataset = ml_eda.load_items(path)
@@ -95,8 +98,9 @@ def dataset_summary(path: Path) -> Optional[dict[str, Any]]:
     """
     書き出したデータセットを, 版で読み分けて一覧の 1 件にする関数
 
-    ML-EDA の load_dataset は版 2 で, load_items は版 1 で止まるので,
-    format_version を見てから読む方を選ぶ. 読めないものも理由を付けて返す
+    ML-EDA の load_dataset はファイルの組の版で, load_items は版 1 で止まる
+    ので, format_version を見てから読む方を選ぶ. 読めないものも理由を付けて
+    返す
 
     Parameters
     ----------
@@ -144,7 +148,7 @@ def dataset_summary(path: Path) -> Optional[dict[str, Any]]:
     )
 
     # 版は整数だけ (1.0 や true は ML-EDA も読まない)
-    known = (DATASET_FORMAT_VERSION, ITEMS_FORMAT_VERSION)
+    known = (DATASET_FORMAT_VERSION, *ITEMS_FORMAT_VERSIONS)
     if type(version) is not int or version not in known:
         summary.update(
             form="unreadable", unknown_version=True,
@@ -155,7 +159,7 @@ def dataset_summary(path: Path) -> Optional[dict[str, Any]]:
         )
         return summary
     try:
-        if version == ITEMS_FORMAT_VERSION:
+        if version in ITEMS_FORMAT_VERSIONS:
             summary.update(items_summary(path))
         else:
             summary.update(table_summary(path))

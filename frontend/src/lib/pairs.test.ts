@@ -91,6 +91,10 @@ test('load_items の使い方の例は, ある分割と正規化だけを書く'
   expect(full).toContain('valid = dataset.split("valid")')
   expect(full).toContain('test = dataset.split("test")')
   expect(full).toContain('normalize_capture で同じ正規化をかけて read_capture で読み')
+  expect(full).not.toContain('transform_entry')
+  // 中身の手順をかけたもの (版 3) は, 推論で同じ手順をかける関数を添える
+  const stepped = itemsSnippet('/d/resized', { train: {} }, ['image', 'mask'], false, true)
+  expect(stepped).toContain('transform_entry(dataset, 項目の名前, 中身)')
 })
 
 test('書き戻した辞書を欄の文に戻し, 読み直すと同じになる', () => {

@@ -346,6 +346,55 @@ test('画像と領域の組を版 2 で書き出し, 注意と使い方を見て
   await expect(card.getByText(/全て 8 件/)).toBeVisible()
 })
 
+// e2e/serve.sh が大きさの混ざった画像と領域を作った場所
+const MIXED = path.resolve(import.meta.dirname, '.work', 'mixed')
+
+test('大きさの混ざった画像を中身の手順でそろえて版 3 で書き出し, 一覧で手順を見る', async ({
+  page,
+}) => {
+  await page.goto('/datasets/export')
+  const form = page.locator('#pairs-panel > div:not([hidden])')
+  await form.getByLabel('画像のディレクトリ', { exact: true }).fill(path.join(MIXED, 'images'))
+  await form.getByLabel('領域のディレクトリ', { exact: true }).fill(path.join(MIXED, 'masks'))
+  await form.getByLabel('データセットの名前').fill('resized')
+  await form.getByLabel('同じ名前があれば置き換える').check()
+
+  // 画像に選べる手順は resize, grayscale, rgb だけで, 領域の欄は無い
+  const adding = form.getByLabel('画像に足す中身の手順')
+  await expect(adding.locator('option')).toHaveText([
+    '足す手順を選ぶ…',
+    /^resize — /,
+    /^grayscale — /,
+    /^rgb — /,
+  ])
+  await expect(form.getByLabel('領域に足す中身の手順')).toHaveCount(0)
+
+  // resize を足すと, 大きさを入れるまで書き出せない
+  await adding.selectOption('resize')
+  await form.getByRole('button', { name: '画像に手順を足す' }).click()
+  const button = page.getByRole('button', { name: 'ファイルの組を書き出す' })
+  await expect(button).toBeDisabled()
+  await expect(form.getByText('画像の手順 1 (resize) の width を入れてください')).toBeVisible()
+  await form.getByLabel('画像の手順 1 の width').fill('20')
+  await form.getByLabel('画像の手順 1 の height').fill('16')
+  await button.click()
+
+  // 版 3 で書き出し, 領域には同じ大きさの resize_mask がかかる
+  await expect(page.getByText(/書き出しました/)).toBeVisible({ timeout: 20_000 })
+  await expect(page.getByText('版: 3')).toBeVisible()
+  await expect(page.getByText('image: resize (width 20, height 16)')).toBeVisible()
+  await expect(page.getByText('mask: resize_mask (width 20, height 16)')).toBeVisible()
+  await expect(page.getByText(/transform_entry\(dataset, 項目の名前, 中身\)/)).toBeVisible()
+
+  // 一覧に版 3 として並び, 項目ごとの手順が出る
+  await page.getByRole('link', { name: 'データセットの一覧へ' }).click()
+  const card = page.locator('section', { has: page.getByText('resized', { exact: true }) })
+  await expect(card.getByText('版 3 · ファイルの組')).toBeVisible()
+  await expect(card.getByText('resize (width 20, height 16)', { exact: true })).toBeVisible()
+  await expect(card.getByText('resize_mask (width 20, height 16)', { exact: true })).toBeVisible()
+  await expect(card.getByText(/全て 6 件/)).toBeVisible()
+})
+
 test('撮影と点群の組をグループで分けて書き出し, 一覧で確かめる', async ({ page }) => {
   await page.goto('/datasets/export?form=capture_clouds')
   const form = page.locator('#pairs-panel > div:not([hidden])')
@@ -408,12 +457,18 @@ test('領域の問題の設定から始め, 下書きのままプロジェクト
   await expect(page.getByLabel('作った処理の名前')).toHaveValue('塗り分け')
   await expect(page.getByText(/mask_project\/outputs\/dataset$/)).toBeVisible()
 
+  // 中身の手順は書き出しにかけるが, 問題の設定には書き戻さないと添える
+  await expect(page.getByText(/問題の設定には書き戻しません/)).toBeVisible()
+  await page.getByLabel('画像に足す中身の手順').selectOption('grayscale')
+  await page.getByRole('button', { name: '画像に手順を足す' }).click()
+
   // 書き出すとプロジェクトに入り, 問題の設定に書き戻る
   await page.getByLabel('前に書き出したデータセットを置き換える').check()
   await page.getByRole('button', { name: 'プロジェクトへ書き出す' }).click()
   await expect(page.getByText(/書き出しました: .*mask_project/)).toBeVisible({ timeout: 20_000 })
   await expect(page.getByText('問題の設定に書き戻しました.')).toBeVisible()
   await expect(page.getByText(/orphan/)).toBeVisible()
+  await expect(page.getByText('image: grayscale')).toBeVisible()
 
   // 開き直すと書き戻した設定で, データセットの一覧にプロジェクトとして並ぶ
   const problem = path.resolve(
@@ -432,6 +487,6 @@ test('領域の問題の設定から始め, 下書きのままプロジェクト
   const card = page
     .locator('section')
     .filter({ hasText: '問題の設定 領域のプロジェクト からプロジェクトへ書き出したもの' })
-  await expect(card.getByText('版 2 · ファイルの組')).toBeVisible()
+  await expect(card.getByText('版 3 · ファイルの組')).toBeVisible()
   await expect(card.getByText('プロジェクト', { exact: true }).first()).toBeVisible()
 })
