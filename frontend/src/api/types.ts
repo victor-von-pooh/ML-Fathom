@@ -353,6 +353,8 @@ interface DatasetBase {
   /** dataset.yaml の版 (読めないものは書かれた値のまま) */
   format_version: unknown
   created_at: string | null
+  /** プロジェクトへ書き出したもの (書き出したデータの名前. 空のこともある) */
+  project?: string
 }
 
 /** 版 1 (1 件 = 1 行の表. load_dataset で読む) */
@@ -365,8 +367,6 @@ export interface TableDataset extends DatasetBase {
   features: number
   /** モデルに要るもの */
   model: ModelInputs
-  /** プロジェクトへ書き出したもの (書き出したデータの名前) */
-  project?: string
 }
 
 /** 正解の出どころ (ML-EDA の target.origin) */

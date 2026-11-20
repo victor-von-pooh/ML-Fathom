@@ -46,9 +46,12 @@ function StoredProblems({
               <button
                 type="button"
                 onClick={() => onPick(item.path)}
+                // 始められないものは理由を出して選べなくする
+                disabled={!item.startable}
                 aria-pressed={picked === item.path}
+                aria-describedby={item.reason ? `reason-${item.path}` : undefined}
                 className={clsx(
-                  'flex w-full items-start gap-2 px-3 py-1.5 text-left text-sm hover:bg-surface-2',
+                  'flex w-full items-start gap-2 px-3 py-1.5 text-left text-sm hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-70',
                   picked === item.path && 'bg-accent-soft',
                 )}
               >
@@ -59,7 +62,9 @@ function StoredProblems({
                     {item.path}
                   </span>
                   {item.reason && (
-                    <span className="block text-xs text-warning-text">{item.reason}</span>
+                    <span id={`reason-${item.path}`} className="block text-xs text-warning-text">
+                      {item.reason}
+                    </span>
                   )}
                   {item.project?.dataset && (
                     <span className="block text-xs text-ink-2">プロジェクトあり</span>

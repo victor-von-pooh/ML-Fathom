@@ -529,7 +529,7 @@ def modified_at(path: Path) -> Optional[str]:
     stamp: Optional[str]
         手元の時刻帯の更新時刻 (読めなければ None)
     """
-    # 一覧の並べ替えと表示に使う
+    # 一覧の並べ替えと表示の時刻
     try:
         moment = dt.datetime.fromtimestamp(path.stat().st_mtime)
     except OSError:
@@ -659,10 +659,13 @@ def place_state(path: Path) -> str:
     ----------
     state: str
         missing (無い), dataset (前に書き出したデータセット), occupied
-        (データセットでないディレクトリかファイル)
+        (データセットでないディレクトリかファイル, シンボリックリンク)
     """
-    # 置き換えてよいのは dataset.yaml を持つディレクトリだけ
-    if not path.exists() and not path.is_symlink():
+    # 置き換えてよいのは dataset.yaml を持つディレクトリだけ (リンクの先は
+    # 書き換えない)
+    if path.is_symlink():
+        state = "occupied"
+    elif not path.exists():
         state = "missing"
     elif path.is_dir() and (path / "dataset.yaml").is_file():
         state = "dataset"
@@ -689,8 +692,8 @@ def export_place(record: Optional[dict[str, str]]) -> Path:
     Raises
     ----------
     HTTPException
-        記録が無いか絶対パスでない場合は 422, プロジェクトか, プロジェクト
-        の外の親のディレクトリが無い場合は 404
+        記録 (dataset と path) が無いか絶対パスでない場合は 422,
+        プロジェクトか, プロジェクトの外の親のディレクトリが無い場合は 404
     """
     # 記録の書き出し先 (学習のスクリプトがデータセットを読む場所)
     text = (record or {}).get("dataset")
@@ -699,24 +702,28 @@ def export_place(record: Optional[dict[str, str]]) -> Path:
             422, "この問題の設定にはプロジェクトの記録 (project.dataset) が"
             "ありません. ML-Pathfinder でプロジェクトを作ると書き出せます"
         )
-    target = Path(text)
-    if not target.is_absolute():
+    project = (record or {}).get("path")
+    if not project:
         raise HTTPException(
-            422, f"プロジェクトの書き出し先 {text} が絶対パスではありません"
+            422, "この問題の設定のプロジェクトの記録に場所 (project.path) "
+            "がありません. ML-Pathfinder でプロジェクトを作り直してください"
+        )
+    target = Path(text)
+    root = Path(project)
+    if not target.is_absolute() or not root.is_absolute():
+        raise HTTPException(
+            422, "プロジェクトの記録 (project.path, project.dataset) が"
+            "絶対パスではありません"
         )
 
     # プロジェクトがあること. 親はプロジェクトの中なら作り, 外なら既にある
     # ものだけ (消したか動かしたプロジェクトの場所に作らないように)
-    project = (record or {}).get("path")
-    inside = False
-    if project:
-        root = Path(project)
-        if not root.is_dir():
-            raise HTTPException(
-                404, f"プロジェクト {project} がありません. 消したか動かした"
-                "場合は, ML-Pathfinder でプロジェクトを作り直してください"
-            )
-        inside = target.resolve().is_relative_to(root.resolve())
+    if not root.is_dir():
+        raise HTTPException(
+            404, f"プロジェクト {project} がありません. 消したか動かした"
+            "場合は, ML-Pathfinder でプロジェクトを作り直してください"
+        )
+    inside = target.resolve().is_relative_to(root.resolve())
     if not inside and not target.parent.is_dir():
         raise HTTPException(404, f"{target.parent} がありません")
 
@@ -795,24 +802,24 @@ def export_project(
         データセットでないものがあるか, 置き換えを指定せずにデータセット
         がある場合は 409
     """
-    # 書き出し先と, 置き換えてよいか
+    # 書き出し先と, 置き換えてよいか (確かめと書き出しの間に変わらない
+    # ように, 書き出しと同じ鍵の中で確かめる)
     source, _, problem = linked_problem(request, source_id)
-    target = export_place(project_record(problem))
-    state = place_state(target)
-    if state == "occupied":
-        raise HTTPException(
-            409, f"{target} はデータセットではないので置き換えません"
-        )
-    if state == "dataset" and not body.overwrite:
-        raise HTTPException(
-            409, f"{target} には既にデータセットがあります. 置き換えてよい"
-            "かを確かめてから書き出してください"
-        )
-
-    # 書き出してレシピを保存し, 書き出した場所を覚える (一覧に並べるため)
+    record = project_record(problem)
     data = load_source(source)
     try:
         with EXPORT_LOCK:
+            target = export_place(record)
+            state = place_state(target)
+            if state == "occupied":
+                raise HTTPException(
+                    409, f"{target} はデータセットではないので置き換えません"
+                )
+            if state == "dataset" and not body.overwrite:
+                raise HTTPException(
+                    409, f"{target} には既にデータセットがあります. 置き換え"
+                    "てよいかを確かめてから書き出してください"
+                )
             info = ml_eda.export_dataset(
                 data, body.recipe, target, name=target.name,
                 overwrite=body.overwrite
@@ -825,6 +832,7 @@ def export_project(
         raise HTTPException(
             422, f"{target} に書き出せません: {error}"
         ) from error
+    # 書き出してレシピを保存し, 書き出した場所を覚える (一覧に並べるため)
     store = get_store(request)
     store.write_recipe(source_id, ml_eda.load_recipe(body.recipe))
     store.update(source_id, {"project_dataset": str(target)})

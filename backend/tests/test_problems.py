@@ -640,6 +640,24 @@ def test_export_project(client: TestClient, tmp_path: Path) -> None:
     assert refused.status_code == 409
     assert (other / "keep.txt").is_file()
 
+    # シンボリックリンクの先のデータセットも置き換えない
+    link = project / "data" / "link"
+    link.symlink_to(dataset, target_is_directory=True)
+    with_project(path, project, link)
+    assert client.get(f"{url}/project").json()["state"] == "occupied"
+    assert client.post(f"{url}/export_project", json={
+        "recipe": recipe, "overwrite": True
+    }).status_code == 409
+    assert (dataset / "dataset.yaml").is_file()
+
+    # 記録に場所 (project.path) が無ければ書き出さない
+    problem = ml_quest.load_problem(path / "problem.yaml")
+    problem["project"] = {"dataset": str(dataset)}
+    ml_quest.save_problem(problem, path)
+    assert client.post(f"{url}/export_project", json={
+        "recipe": recipe, "overwrite": True
+    }).status_code == 422
+
     # プロジェクトが無いか, プロジェクトの外の親が無ければ書き出さない
     with_project(path, tmp_path / "gone", tmp_path / "gone" / "data")
     assert client.post(f"{url}/export_project", json={

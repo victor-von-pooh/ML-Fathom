@@ -140,7 +140,7 @@ test('版 2 は項目と出どころ, 版 1 は表, 知らない版は「読め�
   // プロジェクトへ書き出したものは印を付ける
   const project = within(screen.getByText('dataset').closest('section')!)
   expect(project.getAllByText('プロジェクト')).toHaveLength(2)
-  expect(project.getByText(/総菜の作る量 の問題の設定のプロジェクト/)).toBeInTheDocument()
+  expect(project.getByText(/データ 総菜の作る量 からプロジェクトへ/)).toBeInTheDocument()
   expect(project.getByText(/1 \(値\)/)).toBeInTheDocument()
 
   // 知らない版も消さずに理由を出す

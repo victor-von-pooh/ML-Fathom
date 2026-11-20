@@ -98,7 +98,11 @@ function TableCard({ item }: { item: TableDataset }) {
         {item.project !== undefined && (
           <>
             <dt className="text-ink-3">プロジェクト</dt>
-            <dd>{item.project} の問題の設定のプロジェクトへ書き出したもの</dd>
+            <dd>
+              {item.project
+                ? `データ ${item.project} からプロジェクトへ書き出したもの`
+                : 'プロジェクトへ書き出したもの'}
+            </dd>
           </>
         )}
         <Footer item={item} />

@@ -30,7 +30,9 @@ export function ProjectExport({
   const exporter = useMutation({
     mutationFn: (body: { recipe: Recipe; overwrite: boolean }) =>
       api.exportProject(sourceId, body.recipe, body.overwrite),
-    onSuccess: () => {
+    onSuccess: (_, body) => {
+      // 書き出しはレシピも保存するので, 読み直しを待たずに保存したものにする
+      queryClient.setQueryData(['recipe', sourceId], body.recipe)
       void queryClient.invalidateQueries({ queryKey: ['datasets'] })
       void queryClient.invalidateQueries({ queryKey: ['recipe', sourceId] })
       void queryClient.invalidateQueries({ queryKey: ['project', sourceId] })
@@ -44,11 +46,10 @@ export function ProjectExport({
     },
   })
   const data = place.data
-  // 書き出した後にレシピを変えたら, 前の結果は出さない
-  const done =
-    exporter.data && JSON.stringify(exporter.variables?.recipe) === JSON.stringify(recipe)
-      ? exporter.data
-      : null
+  // 書き出した後にレシピを変えたら, 前の結果と誤りは出さない
+  const same = JSON.stringify(exporter.variables?.recipe) === JSON.stringify(recipe)
+  const done = exporter.data && same ? exporter.data : null
+  const failed = exporter.error && same ? exporter.error : null
   if (place.isPending) return <Spinner label="プロジェクトの書き出し先を調べています" />
   // 問題の設定を読めない理由は問題の設定のカードに出るので, ここは短く
   if (place.error) return <ErrorBox error={place.error} />
@@ -94,13 +95,14 @@ export function ProjectExport({
           variant="primary"
           icon={FolderOutput}
           className="mt-2"
-          disabled={exporter.isPending}
+          // 書き出し先の様子を読み直す間は押せない (古い様子で置き換えを決めないように)
+          disabled={exporter.isPending || place.isFetching}
           onClick={run}
         >
           {exporter.isPending ? '書き出し中…' : 'プロジェクトへ書き出す'}
         </Button>
       )}
-      {exporter.error && <ErrorBox error={exporter.error} />}
+      {failed && <ErrorBox error={failed} />}
       {done && (
         <div className="mt-3 space-y-2 text-sm">
           <p role="status" className="text-good-text">
