@@ -8,15 +8,17 @@ import ml_quest
 import yaml
 from fastapi import APIRouter, HTTPException, Request
 from ml_eda.profile import to_json
-from ml_quest.check import is_column_part
+from ml_quest import is_column_part, is_items_part
 from pydantic import BaseModel, Field
 
 from ml_fathom.api import (
     EXPORT_LOCK,
+    export_message,
     find_source,
     get_store,
     load_source,
     model_hints,
+    pair_result,
     source_view,
 )
 from ml_fathom.settings import get_problems_dir
@@ -32,6 +34,12 @@ SHAPE_ERRORS = (ValueError, TypeError, AttributeError, KeyError)
 # 問題の設定のファイルの拡張子
 SUFFIXES = (".yaml", ".yml")
 
+# ML-Quest の書き出しの関数の名前から, ファイルの組の書き出しの画面の欄
+PAIR_FORMS = {
+    "export_image_masks": "image_masks",
+    "export_capture_clouds": "capture_clouds",
+}
+
 
 class ProblemStart(BaseModel):
     path: str = Field(description="problem.yaml か, それを持つディレクトリ")
@@ -43,6 +51,20 @@ class ProblemCheck(BaseModel):
 
 class ProjectExport(BaseModel):
     recipe: dict[str, Any]
+    overwrite: bool = Field(
+        False, description="前に書き出したデータセットを置き換えるか"
+    )
+
+
+class PairsExport(BaseModel):
+    path: str = Field(description="problem.yaml か, それを持つディレクトリ")
+    version: str = Field(
+        description="確かめたときの問題の設定のファイルの中身の印"
+    )
+    export: dict[str, Any] = Field(
+        description="ML-Quest の書き出しの設定 (function, inputs, targets, "
+        "split, groups, origin, options)"
+    )
     overwrite: bool = Field(
         False, description="前に書き出したデータセットを置き換えるか"
     )
@@ -137,7 +159,8 @@ def require_column(problem: dict[str, Any]) -> None:
     受け持ちが列の予測 (予測するで, 正解が表の列) でなければ止める関数
 
     ML-Quest の版 2 の問題の設定は, 受け持ち (作る, 並べるなど) と正解の
-    種類 (領域, 点群など) を持つ. レシピの下書きと書き戻しは列の予測だけ
+    種類 (領域, 点群など) を持つ. 登録したデータのレシピの下書きと書き戻し
+    は列の予測だけ (ファイルの組の受け持ちは require_items)
 
     Parameters
     ----------
@@ -163,9 +186,40 @@ def require_column(problem: dict[str, Any]) -> None:
         422,
         f"この問題の設定の受け持ちは {role} (正解の種類 {kind}) です. "
         "問題の設定から始めることと書き戻しは, 今は予測する (predict) で"
-        "正解が表の列 (column) の場合だけです. データは「データを追加」"
-        "から入れて分析できます"
+        "正解が表の列 (column), 画像の領域 (mask), 点群 (point_cloud) の"
+        "場合だけです. データは「データを追加」から入れて分析できます"
     )
+
+
+def require_items(problem: dict[str, Any]) -> None:
+    """
+    受け持ちがファイルの組 (予測するで, 正解が画像の領域か点群) でなければ
+    止める関数
+
+    Parameters
+    ----------
+    problem: dict[str, Any]
+        問題の設定 (版 2)
+
+    Returns
+    ----------
+    None
+
+    Raises
+    ----------
+    HTTPException
+        列の予測なら 422 (データの画面から始める), 他は require_column と
+        同じ 422
+    """
+    # 列の予測は登録したデータで始める
+    if is_items_part(problem):
+        return
+    if is_column_part(problem):
+        raise HTTPException(
+            422, "この問題の設定は列の予測です. データの画面の「問題の設定"
+            "から始める」で始めてください"
+        )
+    require_column(problem)
 
 
 def linked_problem(
@@ -316,16 +370,27 @@ def start_from_problem(
     Returns
     ----------
     started: dict[str, Any]
-        source (登録したデータ), notes (知らせの文の並び)
+        source (登録したデータ. ファイルの組の受け持ちでは None),
+        problem (problem.yaml の場所), form (ファイルの組の書き出しの画面の
+        欄. 列の予測では None), notes (知らせの文の並び)
 
     Raises
     ----------
     HTTPException
         問題の設定かデータが無ければ 404, 渡せないか読めなければ 422
     """
-    # 渡せる問題の設定と, 入れたデータ
+    # 渡せる問題の設定と, 入れたデータ. ファイルの組の受け持ちは登録せず,
+    # 書き出しの画面へ
     path = problem_file(body.path)
     problem = read_problem(path)
+    if is_items_part(problem):
+        draft = pairs_draft(problem)
+        started: dict[str, Any] = {
+            "source": None, "problem": str(path),
+            "form": PAIR_FORMS[draft["export"]["function"]],
+            "notes": draft["notes"],
+        }
+        return started
     require_column(problem)
     try:
         start = ml_quest.recipe_from(problem)
@@ -369,9 +434,202 @@ def start_from_problem(
         "problem_created": str(problem["created_at"]),
     }) or source
     store.write_recipe(source["id"], recipe)
-    started = {"source": source_view(source), "notes": start["notes"]}
+    started = {"source": source_view(source), "problem": str(path),
+               "form": None, "notes": start["notes"]}
 
     return started
+
+
+def pairs_draft(problem: dict[str, Any]) -> dict[str, Any]:
+    """
+    ファイルの組の受け持ちの問題の設定から, 書き出しの設定の下書きを返す
+    関数
+
+    Parameters
+    ----------
+    problem: dict[str, Any]
+        問題の設定
+
+    Returns
+    ----------
+    start: dict[str, Any]
+        ML-Quest の recipe_from の結果 (export と notes)
+
+    Raises
+    ----------
+    HTTPException
+        渡せない問題の設定は 422
+    """
+    # 渡せること (確かめに誤りが無いこと) も ML-Quest で
+    try:
+        start: dict[str, Any] = ml_quest.recipe_from(problem)
+    except SHAPE_ERRORS as error:
+        raise HTTPException(
+            422, f"問題の設定を渡せません: {error}"
+        ) from error
+
+    return start
+
+
+@router.get("/problems/pairs")
+def get_problem_pairs(path: str) -> dict[str, Any]:
+    """
+    ファイルの組の受け持ちの問題の設定の, 書き出しの設定の下書きと書き出し
+    先を返す関数
+
+    Parameters
+    ----------
+    path: str
+        problem.yaml か, それを持つディレクトリ
+
+    Returns
+    ----------
+    result: dict[str, Any]
+        name, path, version (書き出すときに送り返す中身の印), form (画面の
+        欄), export (書き出しの設定. 書き戻した設定があればそれ), notes,
+        project (書き出し先とその様子. get_project と同じ形)
+
+    Raises
+    ----------
+    HTTPException
+        無ければ 404, 読めないか渡せないかファイルの組の受け持ちでなければ
+        422
+    """
+    # 中身の印は読む前に (読んだ後に変わっても書き出しで気付く)
+    found = problem_file(path)
+    version = version_of(found)
+    problem = read_problem(found)
+    require_items(problem)
+    draft = pairs_draft(problem)
+    result = {
+        "name": problem.get("name"), "path": str(found), "version": version,
+        "form": PAIR_FORMS[draft["export"]["function"]],
+        "export": draft["export"], "notes": draft["notes"],
+        "project": project_place(project_record(problem)),
+    }
+
+    return result
+
+
+def pair_call(
+    settings: dict[str, Any], target: Path, overwrite: bool
+) -> dict[str, Any]:
+    """
+    書き出しの設定のまま, ML-EDA のファイルの組の書き出しを呼ぶ関数
+
+    Parameters
+    ----------
+    settings: dict[str, Any]
+        ML-Quest が決まった形にした書き出しの設定
+    target: Path
+        書き出し先
+    overwrite: bool
+        前のデータセットを置き換えるか
+
+    Returns
+    ----------
+    info: dict[str, Any]
+        書き出した dataset.yaml の中身
+    """
+    # 関数は ML-Quest が確かめた 2 つのどちらか
+    function = getattr(ml_eda, settings["function"])
+    info: dict[str, Any] = function(
+        Path(settings["inputs"]).expanduser(),
+        Path(settings["targets"]).expanduser(), target,
+        split=settings["split"] or None, groups=settings["groups"],
+        origin=settings["origin"] or None, name=target.name,
+        overwrite=overwrite, **settings["options"]
+    )
+
+    return info
+
+
+@router.post("/problems/pairs/export")
+def export_problem_pairs(body: PairsExport) -> dict[str, Any]:
+    """
+    ファイルの組を問題の設定のプロジェクトの書き出し先に書き出し, 書き出し
+    の設定を問題の設定に書き戻す関数
+
+    Parameters
+    ----------
+    body: PairsExport
+        問題の設定の場所, 確かめたときの中身の印, 書き出しの設定,
+        置き換えるか
+
+    Returns
+    ----------
+    result: dict[str, Any]
+        書き出した場所, dataset.yaml の中身, 注意 (pair_result と同じ) と,
+        changes (書き戻した点), conflicts (注意の食い違い), version (書き
+        戻した後の中身の印)
+
+    Raises
+    ----------
+    HTTPException
+        設定の形の誤り, ディレクトリが無い, 書き出しの誤りは 422,
+        プロジェクトが無ければ 404, 問題の設定が変わった, 食い違いの誤り,
+        置き換えられない書き出し先は 409
+    """
+    # 確かめたときから変わっていない問題の設定に, 試しに書き戻す
+    path = problem_file(body.path)
+    unchanged(path, body.version)
+    problem = read_problem(path)
+    require_items(problem)
+    try:
+        trial: dict[str, Any] = ml_quest.apply_recipe(problem, body.export)
+    except SHAPE_ERRORS as error:
+        raise HTTPException(422, str(error)) from error
+    errors = [item["message"] for item in trial["conflicts"]
+              if item["level"] == "error"]
+    if errors:
+        raise HTTPException(409, " / ".join(errors))
+    updated = trial["problem"]
+    settings = ml_quest.get_value(updated, "data.export")
+    if not settings["inputs"] or not settings["targets"]:
+        raise HTTPException(
+            422, "入力と正解のディレクトリを選んでください"
+        )
+
+    # 書き出し先と, 置き換えてよいか (書き出しと同じ鍵の中で)
+    try:
+        with EXPORT_LOCK:
+            target = export_place(project_record(problem))
+            state = place_state(target)
+            if state == "occupied":
+                raise HTTPException(
+                    409, f"{target} はデータセットではないので置き換えません"
+                )
+            if state == "dataset" and not body.overwrite:
+                raise HTTPException(
+                    409, f"{target} には既にデータセットがあります. 置き換え"
+                    "てよいかを確かめてから書き出してください"
+                )
+            info = pair_call(settings, target, body.overwrite)
+    except HTTPException:
+        raise
+    except FileExistsError as error:
+        raise HTTPException(409, str(error)) from error
+    except Exception as error:  # noqa: BLE001 (壊れたファイルも理由を返す)
+        raise HTTPException(422, export_message(error)) from error
+
+    # 保存の直前にも変わっていないこと (変わっていれば書き戻さない)
+    if version_of(path) != body.version:
+        raise HTTPException(
+            409, f"{target} に書き出しましたが, 問題の設定が他で変わったので"
+            "書き戻していません. 開き直して書き出し直してください"
+        )
+    try:
+        ml_quest.save_problem(updated, path)
+    except OSError as error:
+        raise HTTPException(
+            422, f"問題の設定を保存できません: {error}"
+        ) from error
+    result = {
+        **pair_result(target, info), "changes": trial["changes"],
+        "conflicts": trial["conflicts"], "version": version_of(path),
+    }
+
+    return result
 
 
 @router.post("/sources/{source_id}/problem/check")
@@ -571,9 +829,11 @@ def problem_entry(path: Path) -> dict[str, Any]:
         project=project_record(problem)
     )
 
-    # 始めるときと同じ確かめ (列の予測で, データを入れてあること)
+    # 始めるときと同じ確かめ (列の予測はデータを入れてあること.
+    # ファイルの組の受け持ちはディレクトリを画面で選べる)
     try:
-        require_column(problem)
+        if not is_items_part(problem):
+            require_column(problem)
         load = ml_quest.recipe_from(problem)["load"]
     except HTTPException as error:
         entry["reason"] = str(error.detail)
@@ -581,7 +841,9 @@ def problem_entry(path: Path) -> dict[str, Any]:
     except SHAPE_ERRORS as error:
         entry["reason"] = f"問題の設定を渡せません: {error}"
         return entry
-    if load is None:
+    if is_items_part(problem):
+        entry["startable"] = True
+    elif load is None:
         entry["reason"] = (
             "データが入っていません (ML-Pathfinder の「手元のデータは」で"
             "入れてください)"
@@ -749,9 +1011,29 @@ def get_project(request: Request, source_id: str) -> dict[str, Any]:
         dataset, occupied. 書き出し先が無ければ None), ready (書き出せるか),
         reason (書き出せない理由)
     """
-    # 記録と書き出し先の様子 (書き出せない理由も画面に出す)
+    # 記録と書き出し先の様子
     _, _, problem = linked_problem(request, source_id)
-    record = project_record(problem)
+    result = project_place(project_record(problem))
+
+    return result
+
+
+def project_place(record: Optional[dict[str, str]]) -> dict[str, Any]:
+    """
+    プロジェクトの記録から, 書き出し先とその様子を返す関数
+
+    Parameters
+    ----------
+    record: Optional[dict[str, str]]
+        問題の設定のプロジェクトの記録
+
+    Returns
+    ----------
+    result: dict[str, Any]
+        project, dataset, state (missing, dataset, occupied. 書き出し先が
+        無ければ None), ready (書き出せるか), reason (書き出せない理由)
+    """
+    # 書き出せない理由も画面に出す
     result: dict[str, Any] = {
         "project": (record or {}).get("path"),
         "dataset": (record or {}).get("dataset"),

@@ -16,7 +16,11 @@ import type {
   PointsItem,
   ProblemCheck,
   ProblemList,
+  ProblemPairs,
+  ProblemPairsResult,
+  ProblemStarted,
   ProblemWritten,
+  PairSettings,
   ProjectPlace,
 } from './types'
 
@@ -118,7 +122,15 @@ export const api = {
   exportProject: (id: string, recipe: Recipe, overwrite: boolean) =>
     request<ExportResult>(`/api/sources/${id}/export_project`, json('POST', { recipe, overwrite })),
   startFromProblem: (path: string) =>
-    request<{ source: Source; notes: string[] }>('/api/problems/start', json('POST', { path })),
+    request<ProblemStarted>('/api/problems/start', json('POST', { path })),
+  problemPairs: (path: string) =>
+    request<ProblemPairs>(`/api/problems/pairs?path=${encodeURIComponent(path)}`),
+  exportProblemPairs: (body: {
+    path: string
+    version: string
+    export: PairSettings
+    overwrite: boolean
+  }) => request<ProblemPairsResult>('/api/problems/pairs/export', json('POST', body)),
   checkProblem: (id: string, recipe: Recipe) =>
     request<ProblemCheck>(`/api/sources/${id}/problem/check`, json('POST', { recipe })),
   writeProblem: (

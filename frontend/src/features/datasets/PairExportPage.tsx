@@ -1,20 +1,38 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Upload } from 'lucide-react'
 import { useEffect, useState, type ReactNode } from 'react'
 import { Link, useSearchParams } from 'react-router'
 
 import { api, ApiError } from '../../api/client'
-import type { PairExportBase, PairExportResult } from '../../api/types'
+import type {
+  PairExportBase,
+  PairExportResult,
+  PairSettings,
+  ProblemPairs,
+  ProblemPairsResult,
+} from '../../api/types'
 import { FolderField } from '../../components/FolderField'
-import { Button, Card, ErrorBox, PageHeader, Tabs, type TabItem } from '../../components/ui'
+import {
+  Button,
+  Card,
+  ErrorBox,
+  PageHeader,
+  Spinner,
+  Tabs,
+  type TabItem,
+} from '../../components/ui'
 import { formatNumber } from '../../lib/format'
 import {
+  classesText,
+  groupsText,
   itemsSnippet,
+  numberText,
   ORIGIN_LABELS,
   originNote,
   parseClasses,
   parseGroups,
   parseSettings,
+  settingsText,
 } from '../../lib/pairs'
 import { splitLabel } from '../../lib/recipe'
 
@@ -59,6 +77,52 @@ const INITIAL: CommonFields = {
   originSettings: '',
 }
 
+/**
+ * 問題の設定から始めた場合の, 書き出しの設定の下書きと書き出し先.
+ * 名前の代わりにプロジェクトの書き出し先へ書き出し, 設定を問題の設定に書き戻す
+ */
+interface Linked {
+  pairs: ProblemPairs
+  /** 書き出すときに送り返す中身の印 (書き戻すたびに変わる) */
+  version: string
+  onWritten: (result: ProblemPairsResult) => void
+}
+
+/** 書き出しの設定の下書きから, 共通の欄の値を作る (名前は使わない) */
+function linkedFields(settings: PairSettings): CommonFields {
+  const split = settings.split
+  return {
+    ...INITIAL,
+    method: split.method ?? '',
+    valid: numberText(split.valid, INITIAL.valid),
+    test: numberText(split.test, INITIAL.test),
+    seed: numberText(split.seed, INITIAL.seed),
+    groups: groupsText(settings.groups),
+    originType: settings.origin.type ?? INITIAL.originType,
+    originName: settings.origin.name ?? '',
+    originSettings: settingsText(settings.origin.settings),
+  }
+}
+
+/** 共通の欄の要求と書き出しごとの値を, 問題の設定に書き戻す設定にする */
+function linkedSettings(
+  name: PairSettings['function'],
+  body: PairExportBase,
+  inputs: string,
+  targets: string,
+  options: PairSettings['options'],
+): PairSettings {
+  return {
+    function: name,
+    inputs,
+    targets,
+    split: body.split,
+    groups: body.groups ?? null,
+    origin: body.origin,
+    options,
+  }
+}
+
 /** 割合の欄を数にする (0 以上 1 未満. 誤りは null) */
 function ratio(text: string): number | null {
   const value = Number(text)
@@ -68,9 +132,13 @@ function ratio(text: string): number | null {
 /**
  * 共通の欄を書き出しの要求にする. 誤りがあれば理由の並び
  */
-function commonBody(fields: CommonFields): { body: PairExportBase | null; errors: string[] } {
+function commonBody(
+  fields: CommonFields,
+  named = true,
+): { body: PairExportBase | null; errors: string[] } {
   const errors: string[] = []
-  if (!fields.name.trim()) errors.push('データセットの名前を入れてください')
+  // 問題の設定から始めた場合は名前の代わりにプロジェクトの書き出し先
+  if (named && !fields.name.trim()) errors.push('データセットの名前を入れてください')
   // 分けない場合は割合の欄を使わない (止めた欄の誤りで書き出せなくならないように)
   const none = fields.method === 'none'
   const valid = none ? 0 : ratio(fields.valid)
@@ -250,6 +318,7 @@ function ExportCard({
   errors,
   onExport,
   mutation,
+  linked,
 }: {
   prefix: string
   fields: CommonFields
@@ -259,10 +328,15 @@ function ExportCard({
   mutation: {
     isPending: boolean
     error: Error | null
-    data: PairExportResult | undefined
+    data: PairExportResult | ProblemPairsResult | undefined
   }
+  linked?: Linked
 }) {
   const result = mutation.data
+  const written = result && 'changes' in result ? result : null
+  const project = linked?.pairs.project
+  const replace = linked ? '前に書き出したデータセットを置き換える' : '同じ名前があれば置き換える'
+  const label = linked ? 'プロジェクトへ書き出す' : 'ファイルの組を書き出す'
   const info = result?.info as
     | {
         splits?: Record<string, { items?: number } | undefined>
@@ -275,14 +349,27 @@ function ExportCard({
   return (
     <Card title="書き出し">
       <div className="grid grid-cols-[9rem_1fr] items-center gap-2 text-sm">
-        <Row id={`${prefix}-name`} label="データセットの名前">
-          <input
-            id={`${prefix}-name`}
-            value={fields.name}
-            onChange={(event) => setFields({ ...fields, name: event.target.value })}
-            className={inputClass}
-          />
-        </Row>
+        {linked ? (
+          <>
+            <span className="text-ink-3">書き出し先</span>
+            <span className="break-all font-mono text-xs">{project?.dataset ?? '—'}</span>
+            {project?.state === 'dataset' && (
+              <>
+                <span />
+                <span className="text-xs text-ink-2">前に書き出したデータセットがあります.</span>
+              </>
+            )}
+          </>
+        ) : (
+          <Row id={`${prefix}-name`} label="データセットの名前">
+            <input
+              id={`${prefix}-name`}
+              value={fields.name}
+              onChange={(event) => setFields({ ...fields, name: event.target.value })}
+              className={inputClass}
+            />
+          </Row>
+        )}
         <span />
         <label className="flex items-center gap-1 text-xs">
           <input
@@ -290,7 +377,7 @@ function ExportCard({
             checked={fields.overwrite}
             onChange={(event) => setFields({ ...fields, overwrite: event.target.checked })}
           />
-          同じ名前があれば置き換える
+          {replace}
         </label>
       </div>
       {errors.length > 0 && (
@@ -308,16 +395,14 @@ function ExportCard({
         aria-describedby={errors.length > 0 ? `${prefix}-reasons` : undefined}
         onClick={onExport}
       >
-        {mutation.isPending ? '書き出し中…' : 'ファイルの組を書き出す'}
+        {mutation.isPending ? '書き出し中…' : label}
       </Button>
       {mutation.error && (
         <ErrorBox error={mutation.error}>
           {mutation.error instanceof ApiError &&
             mutation.error.status === 409 &&
             !fields.overwrite && (
-              <p className="mt-1 text-xs">
-                置き換える場合は「同じ名前があれば置き換える」に印を付けてください.
-              </p>
+              <p className="mt-1 text-xs">置き換える場合は「{replace}」に印を付けてください.</p>
             )}
         </ErrorBox>
       )}
@@ -326,6 +411,23 @@ function ExportCard({
         {result && (
           <>
             <p className="text-good-text">書き出しました: {result.path}</p>
+            {written && (
+              <>
+                <p className="text-good-text">問題の設定に書き戻しました.</p>
+                <ul className="list-disc pl-5 text-xs">
+                  {written.changes.map((change) => (
+                    <li key={change}>{change}</li>
+                  ))}
+                </ul>
+                {written.conflicts.length > 0 && (
+                  <ul className="list-disc pl-5 text-xs text-warning-text">
+                    {written.conflicts.map((item) => (
+                      <li key={item.message}>{item.message}</li>
+                    ))}
+                  </ul>
+                )}
+              </>
+            )}
             <p>
               分割:{' '}
               {Object.entries(splits)
@@ -370,28 +472,58 @@ function ExportCard({
   )
 }
 
+/** 問題の設定から始めた場合に, 書き出せない理由 (プロジェクトの記録が無いなど) を足す */
+function linkedErrors(errors: string[], linked: Linked | undefined): string[] {
+  const project = linked?.pairs.project
+  if (project && !project.ready) errors.push(project.reason ?? '書き出し先がありません')
+  return errors
+}
+
 /** 画像と領域の対の書き出し */
-function ImageMasksForm() {
+function ImageMasksForm({ linked }: { linked?: Linked }) {
   const client = useQueryClient()
-  const [images, setImages] = useState('')
-  const [masks, setMasks] = useState('')
-  const [classes, setClasses] = useState('')
-  const [suffix, setSuffix] = useState('')
-  const [fields, setFields] = useState<CommonFields>(INITIAL)
-  const common = commonBody(fields)
+  const draft = linked?.pairs.export
+  const [images, setImages] = useState(draft?.inputs ?? '')
+  const [masks, setMasks] = useState(draft?.targets ?? '')
+  const [classes, setClasses] = useState(classesText(draft?.options.classes))
+  const [suffix, setSuffix] = useState(draft?.options.mask_suffix ?? '')
+  const [fields, setFields] = useState<CommonFields>(draft ? linkedFields(draft) : INITIAL)
+  const common = commonBody(fields, !linked)
   const named = parseClasses(classes)
-  const errors = [...common.errors, ...(named.error ? [named.error] : [])]
+  const errors = linkedErrors([...common.errors, ...(named.error ? [named.error] : [])], linked)
   if (!images.trim() || !masks.trim()) errors.push('画像と領域のディレクトリを選んでください')
   const exporter = useMutation({
-    mutationFn: () =>
-      api.exportImageMasks({
+    mutationFn: (): Promise<PairExportResult | ProblemPairsResult> => {
+      if (linked) {
+        const options = {
+          ...(named.value ? { classes: named.value } : {}),
+          ...(suffix ? { mask_suffix: suffix } : {}),
+        }
+        return api.exportProblemPairs({
+          path: linked.pairs.path,
+          version: linked.version,
+          overwrite: fields.overwrite,
+          export: linkedSettings(
+            'export_image_masks',
+            common.body!,
+            images.trim(),
+            masks.trim(),
+            options,
+          ),
+        })
+      }
+      return api.exportImageMasks({
         ...common.body!,
         images: images.trim(),
         masks: masks.trim(),
         classes: named.value ?? undefined,
         mask_suffix: suffix,
-      }),
-    onSuccess: () => client.invalidateQueries({ queryKey: ['datasets'] }),
+      })
+    },
+    onSuccess: (result) => {
+      if ('changes' in result) linked?.onWritten(result)
+      return client.invalidateQueries({ queryKey: ['datasets'] })
+    },
   })
   // 欄を変えたら前の結果と誤りを消す (古い場所や使い方を出したままにしない)
   const { reset } = exporter
@@ -453,6 +585,7 @@ function ImageMasksForm() {
           errors={errors}
           onExport={() => exporter.mutate()}
           mutation={exporter}
+          linked={linked}
         />
       </div>
     </div>
@@ -460,24 +593,43 @@ function ImageMasksForm() {
 }
 
 /** 多視点の撮影と正解の点群の対の書き出し */
-function CaptureCloudsForm() {
+function CaptureCloudsForm({ linked }: { linked?: Linked }) {
   const client = useQueryClient()
-  const [captures, setCaptures] = useState('')
-  const [clouds, setClouds] = useState('')
-  const [units, setUnits] = useState('meter')
-  const [fields, setFields] = useState<CommonFields>(INITIAL)
-  const common = commonBody(fields)
-  const errors = [...common.errors]
+  const draft = linked?.pairs.export
+  const [captures, setCaptures] = useState(draft?.inputs ?? '')
+  const [clouds, setClouds] = useState(draft?.targets ?? '')
+  const [units, setUnits] = useState(draft?.options.cloud_units ?? 'meter')
+  const [fields, setFields] = useState<CommonFields>(draft ? linkedFields(draft) : INITIAL)
+  const common = commonBody(fields, !linked)
+  const errors = linkedErrors([...common.errors], linked)
   if (!captures.trim() || !clouds.trim()) errors.push('撮影と点群のディレクトリを選んでください')
   const exporter = useMutation({
-    mutationFn: () =>
-      api.exportCaptureClouds({
+    mutationFn: (): Promise<PairExportResult | ProblemPairsResult> => {
+      if (linked) {
+        return api.exportProblemPairs({
+          path: linked.pairs.path,
+          version: linked.version,
+          overwrite: fields.overwrite,
+          export: linkedSettings(
+            'export_capture_clouds',
+            common.body!,
+            captures.trim(),
+            clouds.trim(),
+            { cloud_units: units },
+          ),
+        })
+      }
+      return api.exportCaptureClouds({
         ...common.body!,
         captures: captures.trim(),
         clouds: clouds.trim(),
         cloud_units: units,
-      }),
-    onSuccess: () => client.invalidateQueries({ queryKey: ['datasets'] }),
+      })
+    },
+    onSuccess: (result) => {
+      if ('changes' in result) linked?.onWritten(result)
+      return client.invalidateQueries({ queryKey: ['datasets'] })
+    },
   })
   // 欄を変えたら前の結果と誤りを消す
   const { reset } = exporter
@@ -537,9 +689,58 @@ function CaptureCloudsForm() {
           errors={errors}
           onExport={() => exporter.mutate()}
           mutation={exporter}
+          linked={linked}
         />
       </div>
     </div>
+  )
+}
+
+/**
+ * 問題の設定から始めた書き出し. 問題の設定を読み直し, 正解の種類の欄だけを下書きで埋めて出す
+ */
+function ProblemPairsView({ path }: { path: string }) {
+  const client = useQueryClient()
+  const pairs = useQuery({
+    queryKey: ['problem-pairs', path],
+    queryFn: () => api.problemPairs(path),
+    // 欄は開いたときの下書きで埋めるので, 書き出しの後だけ読み直す
+    refetchOnWindowFocus: false,
+  })
+  const [version, setVersion] = useState<string | null>(null)
+  if (pairs.isPending) return <Spinner />
+  if (pairs.error) return <ErrorBox error={pairs.error} />
+  const data = pairs.data
+  const linked: Linked = {
+    pairs: data,
+    version: version ?? data.version,
+    onWritten: (result) => {
+      setVersion(result.version)
+      void client.invalidateQueries({ queryKey: ['problem-pairs', path] })
+    },
+  }
+  return (
+    <>
+      <Card title={`問題の設定: ${data.name ?? ''}`} className="mb-4">
+        <p className="break-all font-mono text-xs text-ink-3">{data.path}</p>
+        <p className="mt-2 text-sm text-ink-2">
+          問題の設定の値で欄を埋めました. 書き出すと, プロジェクトの書き出し先に書き出し,
+          欄の値を問題の設定に書き戻します.
+        </p>
+        {data.notes.length > 0 && (
+          <ul className="mt-2 list-disc pl-5 text-xs text-warning-text">
+            {data.notes.map((note) => (
+              <li key={note}>{note}</li>
+            ))}
+          </ul>
+        )}
+      </Card>
+      {data.form === 'image_masks' ? (
+        <ImageMasksForm linked={linked} />
+      ) : (
+        <CaptureCloudsForm linked={linked} />
+      )}
+    </>
   )
 }
 
@@ -547,6 +748,19 @@ function CaptureCloudsForm() {
 export function PairExportPage() {
   const [params, setParams] = useSearchParams()
   const form: FormId = params.get('form') === 'capture_clouds' ? 'capture_clouds' : 'image_masks'
+  const problem = params.get('problem')
+  if (problem) {
+    return (
+      <>
+        <PageHeader
+          title="ファイルの組を書き出す"
+          subtitle="問題の設定から始めた書き出し. ML-Quest の下書きで埋め, 書き出した設定を問題の設定に書き戻します"
+          breadcrumb={<Link to="/datasets">データセット</Link>}
+        />
+        <ProblemPairsView key={problem} path={problem} />
+      </>
+    )
+  }
   return (
     <>
       <PageHeader

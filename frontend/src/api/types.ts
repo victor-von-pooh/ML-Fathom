@@ -353,8 +353,10 @@ interface DatasetBase {
   /** dataset.yaml の版 (読めないものは書かれた値のまま) */
   format_version: unknown
   created_at: string | null
-  /** プロジェクトへ書き出したもの (書き出したデータの名前. 空のこともある) */
+  /** プロジェクトへ書き出したもの (書き出したデータか問題の設定の名前. 空のこともある) */
   project?: string
+  /** project の元 (登録したデータか, ML-Pathfinder の置き場の問題の設定) */
+  project_from?: 'source' | 'problem'
 }
 
 /** 版 1 (1 件 = 1 行の表. load_dataset で読む) */
@@ -435,6 +437,44 @@ export interface CaptureCloudExport extends PairExportBase {
 export interface PairExportResult {
   path: string
   info: Record<string, unknown>
+  notes: string[]
+}
+
+/** ML-Quest のファイルの組の書き出しの設定 (問題の設定の data.export) */
+export interface PairSettings {
+  function: 'export_image_masks' | 'export_capture_clouds'
+  inputs: string | null
+  targets: string | null
+  split: { method?: 'random' | 'group' | 'none'; valid?: number; test?: number; seed?: number }
+  groups: Record<string, string> | null
+  origin: Partial<PairOrigin>
+  options: { classes?: Record<string, string>; mask_suffix?: string; cloud_units?: string }
+}
+
+/** ファイルの組の受け持ちの問題の設定から始めたときの下書きと書き出し先 */
+export interface ProblemPairs {
+  name: string | null
+  path: string
+  /** 書き出すときに送り返す, 問題の設定のファイルの中身の印 */
+  version: string
+  form: 'image_masks' | 'capture_clouds'
+  export: PairSettings
+  notes: string[]
+  project: ProjectPlace
+}
+
+/** 問題の設定のプロジェクトへ書き出して書き戻した結果 */
+export interface ProblemPairsResult extends PairExportResult {
+  changes: string[]
+  conflicts: ProblemFinding[]
+  version: string
+}
+
+/** 問題の設定から始めた結果 (ファイルの組の受け持ちは source が null で form を持つ) */
+export interface ProblemStarted {
+  source: Source | null
+  problem: string
+  form: 'image_masks' | 'capture_clouds' | null
   notes: string[]
 }
 
