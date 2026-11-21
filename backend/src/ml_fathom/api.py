@@ -1161,9 +1161,10 @@ def item_preview(
     data = load_source(find_source(request, source_id))
     try:
         result = ml_eda.preview_items(data, body.recipe, body.count)
+        # 当てはめた最後の vocabulary (書き出しと model_inputs と同じ)
         vocabulary = next(
             (
-                spec.get("state") for spec in result["steps"]
+                spec.get("state") for spec in reversed(result["steps"])
                 if spec.get("op") == "vocabulary"
             ),
             None,

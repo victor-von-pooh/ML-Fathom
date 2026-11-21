@@ -91,6 +91,25 @@ const DATASETS: DatasetSummary[] = [
     project: '総菜の作る量',
   },
   {
+    form: 'table',
+    name: 'reviews',
+    path: '/home/datasets/reviews',
+    format_version: 1,
+    created_at: '2026-11-17T11:00:00+09:00',
+    kind: 'text',
+    task: 'classification',
+    target: 'label',
+    splits: { train: 40, valid: 10 },
+    features: 0,
+    model: {
+      inputs: [{ name: 'x', shape: [null, 16], dtype: 'int64', vocabulary: 321 }],
+      task: 'classification',
+      target: 'label',
+      classes: ['bad', 'good'],
+      outputs: 2,
+    },
+  },
+  {
     form: 'unreadable',
     name: 'future',
     path: '/home/datasets/future',
@@ -138,6 +157,12 @@ test('版 3 は項目と中身の手順と出どころ, 版 1 は表, 知らな�
   expect(people.getByText('bought')).toBeInTheDocument()
   expect(people.getByText('[バッチ, 4] float32')).toBeInTheDocument()
   expect(people.getByText(/2 \(クラスの数\)/)).toBeInTheDocument()
+  expect(people.queryByText(/語彙の大きさ/)).not.toBeInTheDocument()
+
+  // 文のデータセットは語彙の大きさも
+  const reviews = within(screen.getByText('reviews').closest('section')!)
+  expect(reviews.getByText('[バッチ, 16] int64')).toBeInTheDocument()
+  expect(reviews.getByText(/語彙の大きさ 321/)).toBeInTheDocument()
   expect(people.queryByText('プロジェクト')).not.toBeInTheDocument()
 
   // プロジェクトへ書き出したものは印を付ける
