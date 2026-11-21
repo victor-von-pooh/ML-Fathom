@@ -340,6 +340,8 @@ export interface ModelInput {
   name: string
   shape: (number | null)[]
   dtype: string
+  /** 文の語の番号の入力の語彙の大きさ (埋め込みの数. 文でなければ無い) */
+  vocabulary?: number
 }
 
 /** データセットからモデルに要るもの (ML-EDA の model_inputs) */

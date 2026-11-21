@@ -1161,9 +1161,10 @@ def item_preview(
     data = load_source(find_source(request, source_id))
     try:
         result = ml_eda.preview_items(data, body.recipe, body.count)
+        # 当てはめた最後の vocabulary (書き出しと model_inputs と同じ)
         vocabulary = next(
             (
-                spec.get("state") for spec in result["steps"]
+                spec.get("state") for spec in reversed(result["steps"])
                 if spec.get("op") == "vocabulary"
             ),
             None,
@@ -1262,21 +1263,10 @@ def model_hints(path: Path, info: dict[str, Any]) -> dict[str, Any]:
         "input_dtype": single["dtype"],
         "outputs": model["outputs"],
     }
-    # 文の語彙の大きさは, 書き出したレシピの当てはめた語彙から (読めなけれ
-    # ば省く. 書き出しは済んでいるので誤りにしない)
-    if info["kind"] == "text":
-        try:
-            recipe = yaml.safe_load(
-                (path / "recipe.yaml").read_text(encoding="utf-8")
-            )
-            hints["vocabulary"] = next(
-                len(step["state"]["vocabulary"])
-                for step in recipe.get("item_steps") or []
-                if step["op"] == "vocabulary"
-            )
-        except (OSError, yaml.YAMLError, KeyError, StopIteration,
-                AttributeError, TypeError):
-            pass
+    # 文の語彙の大きさも ML-EDA の model_inputs から (書き出したレシピの最後
+    # の vocabulary. 文でなければ無い)
+    if single.get("vocabulary") is not None:
+        hints["vocabulary"] = single["vocabulary"]
 
     return hints
 

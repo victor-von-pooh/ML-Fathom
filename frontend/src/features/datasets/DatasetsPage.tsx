@@ -62,6 +62,7 @@ function ModelNeeds({ model }: { model: ModelInputs }) {
             [{input.shape.map((size) => (size === null ? 'バッチ' : String(size))).join(', ')}]{' '}
             {input.dtype}
           </span>
+          {input.vocabulary !== undefined && <>, 語彙の大きさ {input.vocabulary}</>}
         </li>
       ))}
       <li>出す値: {outputsText(model)}</li>
