@@ -176,8 +176,8 @@ export const ITEM_KINDS = ['image', 'text', 'pointcloud', 'audio']
  *
  * 画像は最も多い大きさにそろえ (色の形式が混ざれば RGB に), 正規化する.
  * 文は分析が比べて勧めた区切り方 (無ければ語の数の多めの値を長さ) の語彙で番号にする. 点群は点の数の中央値
- * (1024 まで) にそろえて正規化する. 音声は最も多いチャンネルの数と標本化の周波数, 長さの中央値 (30 秒まで)
- * にそろえる
+ * (1024 まで) にそろえて正規化する. 音声は最も多い標本化の周波数とチャンネルの数, 長さの中央値 (0.01 秒に
+ * 丸め, 30 秒まで) にそろえる
  */
 export function autoItemSteps(kind: string, profile: Profile): RecipeStep[] {
   if (kind === 'image') {
@@ -221,12 +221,12 @@ export function autoItemSteps(kind: string, profile: Profile): RecipeStep[] {
   }
   if (kind === 'audio') {
     // そろっていても足す (推論で読む新しい音声も同じ形にするため. 画像の resize と同じ).
-    // チャンネルを先にそろえる (周波数を変える計算が少なくなる)
+    // 順は ML-EDA の設計の順 (周波数, チャンネル, 長さ)
     const steps: RecipeStep[] = []
-    const channels = mostCommon(profile.items?.channels)
     const rate = mostCommon(profile.items?.sample_rates)
-    if (channels) steps.push({ op: 'mix_channels', channels })
+    const channels = mostCommon(profile.items?.channels)
     if (rate) steps.push({ op: 'resample', rate })
+    if (channels) steps.push({ op: 'mix_channels', channels })
     const median = profile.items?.duration?.median
     if (median !== undefined && median > 0) {
       // 長い録音は配列が大きくなりすぎないように切る

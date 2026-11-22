@@ -65,6 +65,7 @@ test('音声は選んだ 1 件の前と後を, 再生の部品と波形で並べ
   expect(screen.getByRole('img', { name: /#2 の手順の後の波形/ })).toBeInTheDocument()
   expect(screen.getByText(/16,000 Hz · 2 チャンネル/)).toBeInTheDocument()
   expect(screen.getByText('後 (形 (1, 8000))')).toBeInTheDocument()
+  expect(screen.getByText(/先頭の 5 秒まで/)).toBeInTheDocument()
   const sources = () =>
     Array.from(container.querySelectorAll('audio')).map((item) => item.getAttribute('src'))
   expect(sources()).toEqual(['data:audio/wav;base64,AAA', 'data:audio/wav;base64,BBB'])

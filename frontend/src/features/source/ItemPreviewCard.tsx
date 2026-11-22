@@ -153,6 +153,7 @@ function AudioPair({ items }: { items: ItemPreviewItem[] }) {
   return (
     <div className="space-y-2">
       <ItemSelect items={items} at={at} onChange={setAt} />
+      <p className="text-xs text-ink-3">前と後とも, 再生と波形は先頭の 5 秒まで.</p>
       <div className="grid gap-3 md:grid-cols-2">
         {(['before', 'after'] as const).map((side) => (
           <div key={side}>

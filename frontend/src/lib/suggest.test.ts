@@ -95,7 +95,7 @@ describe('autoItemSteps', () => {
     expect(cloud[0]).toEqual({ op: 'sample_points', points: 512 })
   })
 
-  it('音声は最も多いチャンネルと周波数, 長さの中央値 (30 秒まで) にそろえる', () => {
+  it('音声は最も多い周波数とチャンネル, 長さの中央値 (30 秒まで) にそろえる', () => {
     const steps = autoItemSteps(
       'audio',
       profile({
@@ -110,8 +110,8 @@ describe('autoItemSteps', () => {
       }),
     )
     expect(steps).toEqual([
-      { op: 'mix_channels', channels: 2 },
       { op: 'resample', rate: 22050 },
+      { op: 'mix_channels', channels: 2 },
       { op: 'fix_length', seconds: 1.23 },
     ])
     // 長い録音は 30 秒で切る. 読めた件が無ければ手順を作れない

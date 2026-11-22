@@ -214,8 +214,8 @@ describe('決めてほしいこと', () => {
       recipe: {
         steps: [{ op: 'filter_rows', column: 'error', compare: 'isna' }],
         item_steps: [
-          { op: 'mix_channels', channels: 1 },
           { op: 'resample', rate: 16000 },
+          { op: 'mix_channels', channels: 1 },
           { op: 'fix_length', seconds: 1 },
         ],
       },
