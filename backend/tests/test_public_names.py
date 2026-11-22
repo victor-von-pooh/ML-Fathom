@@ -17,7 +17,8 @@ PUBLIC = {
     "ml_quest": set(ml_quest.__all__),
 }
 
-# 持ち主 (ML-EDA) に公開してもらうのを待つ名前 (公開されたら置き換えて消す)
+# 持ち主 (ML-EDA) に公開してもらうのを待つ名前 (待っている理由は TODO.md.
+# 公開されたら置き換えて消す)
 WAITING = {
     "ml_eda.pipeline.frame_view",
     "ml_eda.pipeline.DATASET_FORMAT_VERSION",
@@ -51,8 +52,13 @@ def private_names(tree: ast.AST) -> set[str]:
                 if node.module != top or alias.name not in PUBLIC[top]:
                     names.add(f"{node.module}.{alias.name}")
         elif isinstance(node, ast.Import):
+            # 中のモジュールの import と, 別名 (後の属性を追えない) は誤り
             for alias in node.names:
-                if alias.name.split(".")[0] in PUBLIC and "." in alias.name:
+                if alias.name.split(".")[0] not in PUBLIC:
+                    continue
+                if alias.asname:
+                    names.add(f"import {alias.name} as {alias.asname}")
+                elif "." in alias.name:
                     names.add(alias.name)
         elif isinstance(node, ast.Attribute):
             chain = []
@@ -97,8 +103,8 @@ def test_only_public_names() -> None:
 
 def test_private_names_found() -> None:
     """
-    公開されていない名前を, from の import と属性の両方で見つけることを
-    確かめる関数
+    公開されていない名前を, from の import と属性の両方で見つけ, 組の
+    ライブラリに別名を付ける import も見つけることを確かめる関数
 
     Parameters
     ----------
@@ -122,6 +128,15 @@ def test_private_names_found() -> None:
     assert "ml_eda.media.read_image" in names
     assert "ml_quest.examples.example_problem" in names
     assert not any("read_cloud" in name for name in names)
+
+    # 別名を付ける import は, 公開の名前だけを使う場合も誤り
+    aliased = private_names(ast.parse(
+        "import ml_eda as e\nimport ml_eda.media as m\ne.read_cloud(x)\n"
+        "from ml_eda import read_cloud as load\n"
+    ))
+    assert aliased == {
+        "import ml_eda as e", "import ml_eda.media as m"
+    }
 
 
 def test_to_json() -> None:
