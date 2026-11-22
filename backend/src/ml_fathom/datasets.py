@@ -5,7 +5,8 @@ from typing import Any, Optional
 import ml_eda
 import yaml
 from ml_eda.pipeline import DATASET_FORMAT_VERSION, ITEMS_FORMAT_VERSIONS
-from ml_eda.profile import to_json
+
+from ml_fathom.jsonable import to_json
 
 # 一覧に出す項目の欄 (steps は版 3 でかけた中身の手順. 版 2 は無し)
 ENTRY_FIELDS = (
