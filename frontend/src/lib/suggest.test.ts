@@ -94,6 +94,48 @@ describe('autoItemSteps', () => {
     )
     expect(cloud[0]).toEqual({ op: 'sample_points', points: 512 })
   })
+
+  it('音声は最も多い周波数とチャンネル, 長さの中央値 (30 秒まで) にそろえる', () => {
+    const steps = autoItemSteps(
+      'audio',
+      profile({
+        items: {
+          kind: 'audio',
+          count: 6,
+          // 同じ数なら大きい周波数
+          sample_rates: { '8000': 3, '22050': 3 },
+          channels: { '2': 4, '1': 2 },
+          duration: { min: 0.2, median: 1.234, max: 3, total: 7 },
+        },
+      }),
+    )
+    expect(steps).toEqual([
+      { op: 'resample', rate: 22050 },
+      { op: 'mix_channels', channels: 2 },
+      { op: 'fix_length', seconds: 1.23 },
+    ])
+    // 長い録音は 30 秒で切る. 読めた件が無ければ手順を作れない
+    const long = autoItemSteps(
+      'audio',
+      profile({
+        items: {
+          kind: 'audio',
+          count: 2,
+          sample_rates: { '16000': 2 },
+          channels: { '1': 2 },
+          duration: { min: 60, median: 600, max: 900, total: 1200 },
+        },
+      }),
+    )
+    expect(long.at(-1)).toEqual({ op: 'fix_length', seconds: 30 })
+    const empty = autoItemSteps(
+      'audio',
+      profile({
+        items: { kind: 'audio', count: 1, sample_rates: {}, channels: {}, duration: null },
+      }),
+    )
+    expect(empty).toEqual([])
+  })
 })
 
 test('読めない件があれば, 画像は大きさ, 点群は error で除く手順を作る', () => {
@@ -106,6 +148,7 @@ test('読めない件があれば, 画像は大きさ, 点群は error で除く
   })
   const cloud = { columns: { error: column('text') }, items } as unknown as Profile
   expect(unreadableFilter('pointcloud', cloud)).toMatchObject({ column: 'error', compare: 'isna' })
+  expect(unreadableFilter('audio', cloud)).toMatchObject({ column: 'error', compare: 'isna' })
   expect(
     unreadableFilter('image', { columns: {}, items: { kind: 'image', count: 3 } } as Profile),
   ).toBe(null)

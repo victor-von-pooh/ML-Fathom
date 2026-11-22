@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import clsx from 'clsx'
 import { useState } from 'react'
 
 import { api } from '../../api/client'
@@ -13,12 +14,33 @@ export function AudioView({ sourceId, index }: { sourceId: string; index: number
     queryKey: ['item', sourceId, index],
     queryFn: () => api.item<AudioItem>(sourceId, index),
   })
+  if (item.isPending) return <Spinner label="音声を読み込み中" />
+  if (item.error) return <ErrorBox error={item.error} />
+  return (
+    <AudioPlayer
+      audio={item.data}
+      src={api.itemAudioUrl(sourceId, index)}
+      name={`${index} 番目の音声`}
+    />
+  )
+}
+
+/** 読んだ音声の再生の部品と波形 (name は読み上げの名前. 「3 番目の音声」など) */
+export function AudioPlayer({
+  audio,
+  src,
+  name,
+  height = 'h-40',
+}: {
+  audio: AudioItem
+  src: string
+  name: string
+  /** 波形の高さ (Tailwind の class) */
+  height?: string
+}) {
   // 再生した位置 (秒) と, 鳴らせなかったか
   const [position, setPosition] = useState(0)
   const [failed, setFailed] = useState(false)
-  if (item.isPending) return <Spinner label="音声を読み込み中" />
-  if (item.error) return <ErrorBox error={item.error} />
-  const audio = item.data
   const at = audio.seconds > 0 ? Math.min(position / audio.seconds, 1) * WAVE.width : 0
   return (
     <div className="space-y-3">
@@ -33,8 +55,8 @@ export function AudioView({ sourceId, index }: { sourceId: string; index: number
         <audio
           controls
           preload="metadata"
-          src={api.itemAudioUrl(sourceId, index)}
-          aria-label={`${index} 番目の音声の再生`}
+          src={src}
+          aria-label={`${name}の再生`}
           onTimeUpdate={(event) => setPosition(event.currentTarget.currentTime)}
           onError={() => setFailed(true)}
           className="w-full"
@@ -43,10 +65,10 @@ export function AudioView({ sourceId, index }: { sourceId: string; index: number
       <figure>
         <svg
           role="img"
-          aria-label={`${index} 番目の音声の波形 (${formatSeconds(audio.seconds)})`}
+          aria-label={`${name}の波形 (${formatSeconds(audio.seconds)})`}
           viewBox={`0 0 ${WAVE.width} ${WAVE.height}`}
           preserveAspectRatio="none"
-          className="h-40 w-full rounded-lg bg-surface-2"
+          className={clsx(height, 'w-full rounded-lg bg-surface-2')}
         >
           <line
             x1={0}

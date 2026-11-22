@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field
 
 from ml_fathom.datasets import dataset_summary
 from ml_fathom.items import (
+    audio_rate,
     audio_response,
     capture_layer,
     item_response,
@@ -1167,7 +1168,7 @@ def item_preview(
     request: Request, source_id: str, body: ItemPreviewRequest
 ) -> dict[str, Any]:
     """
-    画像, 文, 点群の中身の手順を, 数件にかけた前と後を返す関数
+    画像, 文, 点群, 音声の中身の手順を, 数件にかけた前と後を返す関数
 
     Parameters
     ----------
@@ -1208,7 +1209,10 @@ def item_preview(
                 "shape": list(np.shape(item["after"])),
                 "before": item_view(item["before"], data.kind),
                 "after": item_view(
-                    item["after"], data.kind, True, vocabulary
+                    item["after"], data.kind, True, vocabulary,
+                    audio_rate(
+                        result["steps"], int(item["before"]["sample_rate"])
+                    ) if data.kind == "audio" else None,
                 ),
             }
             for item in result["items"]

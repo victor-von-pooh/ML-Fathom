@@ -558,13 +558,18 @@ export interface PointsItem {
   colors: number[] | null
 }
 
-/** 中身の手順の前と後の 1 件 (画像は PNG の data URL, 文は文字と [番号, 語], 点群は点) */
+/** 中身の手順の前と後の音声 (先頭の決まった秒の波形と, 再生用の WAVE の data URL) */
+export interface AudioPreviewItem extends AudioItem {
+  src: string
+}
+
+/** 中身の手順の前と後の 1 件 (画像は PNG の data URL, 文は文字と [番号, 語], 点群は点, 音声は波形と音) */
 export interface ItemPreviewItem {
   index: number
   label: string | null
   shape: number[]
-  before: string | PointsItem
-  after: string | [number, string][] | PointsItem
+  before: string | PointsItem | AudioPreviewItem
+  after: string | [number, string][] | PointsItem | AudioPreviewItem
 }
 
 export interface ItemPreview {

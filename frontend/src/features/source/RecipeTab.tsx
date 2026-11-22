@@ -28,7 +28,7 @@ import {
   usageSnippet,
   withUnlabeled,
 } from '../../lib/recipe'
-import { autoRecipe, suggestSteps } from '../../lib/suggest'
+import { autoRecipe, ITEM_KINDS, suggestSteps } from '../../lib/suggest'
 import { useDecided } from '../../lib/useDecided'
 import { DecisionsCard } from './DecisionsCard'
 import { Findings } from './Findings'
@@ -281,7 +281,7 @@ export function RecipeTab({
   profile: Profile
   target: string | null
   steps: StepInfo[]
-  /** データの種類 (画像, 文, 点群は中身の手順も組み立てる) */
+  /** データの種類 (画像, 文, 点群, 音声は中身の手順も組み立てる) */
   kind: string
   itemSteps: ItemStepInfo[]
   /** 読み込みと読み込みの設定 (決めてほしいことで読み方を変えるため) */
@@ -290,7 +290,7 @@ export function RecipeTab({
   /** 問題の設定から始めた場合の problem.yaml の場所 */
   problem?: string | null
 }) {
-  const media = ['image', 'text', 'pointcloud'].includes(kind)
+  const media = ITEM_KINDS.includes(kind)
   const [addingItem, setAddingItem] = useState('')
   const queryClient = useQueryClient()
   const saved = useQuery({ queryKey: ['recipe', sourceId], queryFn: () => api.recipe(sourceId) })
@@ -706,14 +706,14 @@ export function RecipeTab({
                     update(withAutoItems(recipe, kind, profile))
                   }
                 }}
-                title="分析 (最も多い大きさ, 語の数, 点の数, 読めない件) から, 学習用の配列にする手順を作る"
+                title="分析 (最も多い大きさ, 語の数, 点の数, 音声の周波数とチャンネルと長さ, 読めない件) から, 学習用の配列にする手順を作る"
               >
                 学習用の配列にする手順を作る
               </Button>
             }
           >
             <p className="mb-2 text-xs text-ink-3">
-              1 件ずつの中身 (画像, 文, 点群) を学習用の配列にする手順.
+              1 件ずつの中身 (画像, 文, 点群, 音声) を学習用の配列にする手順.
               上の表の手順で件を絞った後に, 書き出すときにかける
               (値を学ぶ手順は学習用の件で当てはめる).
             </p>

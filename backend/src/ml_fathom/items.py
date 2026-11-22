@@ -23,6 +23,10 @@ AUDIO_SECONDS = 30.0
 # 波形の区間の数 (区間ごとに振幅の最小と最大を返す)
 WAVEFORM_BINS = 1000
 
+# 中身の手順の前と後で描いて鳴らす音声の長さ (秒. 先頭から. 何件も返す
+# ので短く)
+PREVIEW_SECONDS = 5.0
+
 # 再生用の WAVE のチャンネルの上限 (多いものは平均して 1 つに)
 PLAY_CHANNELS = 2
 
@@ -185,10 +189,47 @@ def audio_body(
         seconds (読んだ秒), truncated (先頭だけを読んだか), waveform
         (チャンネルを平均した振幅の, 区間ごとの min と max)
     """
+    # 波形は読んだ先頭の音から
+    shape = waveform_body(audio["samples"], int(audio["sample_rate"]))
+    count = int(np.shape(audio["samples"])[0])
+
+    # 全体の長さは読み込みの表から (欠けは NaN なので自分と等しくない)
+    row = data.frame.iloc[index]
+    duration = row.get("duration")
+    frames = row.get("frames")
+    known = duration is not None and duration == duration
+    counted = frames is not None and frames == frames
+    body = {
+        **shape,
+        "duration": float(duration) if known else None,
+        "truncated": bool(counted and count < int(frames)),
+    }
+
+    return body
+
+
+def waveform_body(samples: Any, rate: int) -> dict[str, Any]:
+    """
+    音の標本を, 画面で描く波形の辞書にする関数
+
+    Parameters
+    ----------
+    samples: Any
+        (標本の数, チャンネル) か (標本の数,) の値
+    rate: int
+        標本化の周波数
+
+    Returns
+    ----------
+    body: dict[str, Any]
+        sample_rate, channels, seconds (標本の秒), waveform (チャンネルを
+        平均した振幅の, 区間ごとの min と max)
+    """
     # チャンネルを平均した振幅 (数でない値は 0)
-    samples = np.nan_to_num(np.asarray(audio["samples"], dtype=np.float32))
-    rate = int(audio["sample_rate"])
-    mono = samples.mean(axis=1) if samples.size else np.zeros(0, np.float32)
+    values = np.nan_to_num(np.asarray(samples, dtype=np.float32))
+    if values.ndim == 1:
+        values = values[:, None]
+    mono = values.mean(axis=1) if values.size else np.zeros(0, np.float32)
     count = int(len(mono))
 
     # 区間ごとの最小と最大 (標本が区間より少なければ 1 標本ずつ)
@@ -199,23 +240,51 @@ def audio_body(
         edges = np.linspace(0, count, bins + 1).astype(int)[:-1]
         low = np.minimum.reduceat(mono, edges).round(4).tolist()
         high = np.maximum.reduceat(mono, edges).round(4).tolist()
-
-    # 全体の長さは読み込みの表から (欠けは NaN なので自分と等しくない)
-    row = data.frame.iloc[index]
-    duration = row.get("duration")
-    frames = row.get("frames")
-    known = duration is not None and duration == duration
-    counted = frames is not None and frames == frames
     body = {
         "sample_rate": rate,
-        "channels": int(samples.shape[1]) if samples.ndim == 2 else 1,
-        "duration": float(duration) if known else None,
+        "channels": int(values.shape[1]),
         "seconds": count / rate if rate else 0.0,
-        "truncated": bool(counted and count < int(frames)),
         "waveform": {"min": low, "max": high},
     }
 
     return body
+
+
+def audio_view(samples: Any, rate: int) -> dict[str, Any]:
+    """
+    手順の前か後の音声の 1 件を, 先頭の PREVIEW_SECONDS 秒の波形と
+    再生用の WAVE にする関数
+
+    Parameters
+    ----------
+    samples: Any
+        (標本の数, チャンネル) の値
+    rate: int
+        標本化の周波数
+
+    Returns
+    ----------
+    view: dict[str, Any]
+        sample_rate, channels, duration (全体の秒), seconds (波形と再生の
+        秒), truncated, waveform と, src (WAVE の data URL)
+    """
+    # 何件も返すので, 先頭の短い秒だけを描いて鳴らす
+    values = np.asarray(samples, dtype=np.float32)
+    if values.ndim == 1:
+        values = values[:, None]
+    count = int(values.shape[0])
+    head = values[: max(int(PREVIEW_SECONDS * rate), 0)]
+    encoded = base64.b64encode(
+        wav_bytes({"samples": head, "sample_rate": rate})
+    ).decode("ascii")
+    view = {
+        **waveform_body(head, rate),
+        "duration": count / rate if rate else 0.0,
+        "truncated": len(head) < count,
+        "src": f"data:audio/wav;base64,{encoded}",
+    }
+
+    return view
 
 
 def wav_bytes(audio: dict[str, Any]) -> bytes:
@@ -520,7 +589,7 @@ def points_response(item: Any) -> Response:
 
 def item_view(
     item: Any, kind: str, after: bool = False,
-    state: Optional[dict[str, Any]] = None
+    state: Optional[dict[str, Any]] = None, rate: Optional[int] = None
 ) -> Any:
     """
     手順の前か後の 1 件を, 画面で見せる形にする関数
@@ -529,19 +598,23 @@ def item_view(
     ----------
     item: Any
         画像 (前は (高さ, 幅) か (高さ, 幅, チャンネル) の uint8, 後は
-        (チャンネル, 高さ, 幅) の float), 文, 番号の並び, 点群
+        (チャンネル, 高さ, 幅) の float), 文, 番号の並び, 点群, 音声 (前は
+        samples と sample_rate の辞書, 後は (チャンネル, 標本の数) の配列)
     kind: str
         種類
     after: bool = False
         手順の後か
     state: Optional[dict[str, Any]] = None
         語彙の手順の当てはめた値 (番号を語に戻す)
+    rate: Optional[int] = None
+        音声の後の標本化の周波数 (後の配列は周波数を持たないため)
 
     Returns
     ----------
     view: Any
         画像は PNG の data URL, 文は文字, 番号の並びは [番号, 語] の並び,
-        点群は点と色の辞書 (見比べ用に 5000 点まで)
+        点群は点と色の辞書 (見比べ用に 5000 点まで), 音声は先頭の波形と
+        再生用の WAVE の data URL
     """
     # 画像の後は (チャンネル, 高さ, 幅) なので並びを戻す. 0 から 1 の値は
     # そのまま 255 倍にし (明るさを変えない), 正規化した値だけ伸ばす
@@ -555,6 +628,11 @@ def item_view(
         return f"data:image/png;base64,{encoded}"
     if kind == "pointcloud":
         return points_body(item, PREVIEW_POINTS)
+    # 音声の後は (チャンネル, 標本の数) なので並びを戻す
+    if kind == "audio":
+        if after:
+            return audio_view(np.asarray(item).T, int(rate or 0))
+        return audio_view(item["samples"], int(item["sample_rate"]))
     if after:
         words = (state or {}).get("vocabulary", [])
         return [
@@ -564,3 +642,31 @@ def item_view(
     view = str(item)[:2000]
 
     return view
+
+
+def audio_rate(steps: list[dict[str, Any]], rate: int) -> int:
+    """
+    音声の中身の手順をかけた後の標本化の周波数を求める関数
+
+    Parameters
+    ----------
+    steps: list[dict[str, Any]]
+        中身の手順
+    rate: int
+        手順の前の標本化の周波数
+
+    Returns
+    ----------
+    after: int
+        最後の resample の rate (無ければ前の周波数)
+    """
+    # 周波数を変える手順は resample だけ
+    after = next(
+        (
+            int(spec["rate"]) for spec in reversed(steps)
+            if spec.get("op") == "resample"
+        ),
+        rate,
+    )
+
+    return after

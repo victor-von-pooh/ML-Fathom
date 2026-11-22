@@ -1,3 +1,4 @@
+import base64
 import io
 import wave
 from pathlib import Path
@@ -12,8 +13,11 @@ from fastapi.testclient import TestClient
 from ml_fathom.app import create_app
 from ml_fathom.items import (
     AUDIO_SECONDS,
+    PREVIEW_SECONDS,
     WAVEFORM_BINS,
     audio_clip,
+    audio_rate,
+    audio_view,
     item_place,
     wav_bytes,
 )
@@ -48,7 +52,9 @@ def client(tmp_path: Path) -> TestClient:
     return client
 
 
-def write_wave(path: Path, seconds: float, channels: int) -> Path:
+def write_wave(
+    path: Path, seconds: float, channels: int, rate: int = RATE
+) -> Path:
     """
     正弦波の 16 bit の PCM の WAVE を保存する関数
 
@@ -60,6 +66,8 @@ def write_wave(path: Path, seconds: float, channels: int) -> Path:
         長さ (秒)
     channels: int
         チャンネルの数
+    rate: int = RATE
+        標本化の周波数
 
     Returns
     ----------
@@ -68,7 +76,7 @@ def write_wave(path: Path, seconds: float, channels: int) -> Path:
     """
     # 440 Hz の正弦波を半分の大きさで, 全てのチャンネルに
     path.parent.mkdir(parents=True, exist_ok=True)
-    times = np.arange(int(seconds * RATE)) / RATE
+    times = np.arange(int(seconds * rate)) / rate
     tone = 0.5 * np.sin(2 * np.pi * 440 * times)
     values = (np.repeat(tone[:, None], channels, axis=1) * 32767).astype(
         "<i2"
@@ -76,7 +84,7 @@ def write_wave(path: Path, seconds: float, channels: int) -> Path:
     with wave.open(str(path), "wb") as stream:
         stream.setnchannels(channels)
         stream.setsampwidth(2)
-        stream.setframerate(RATE)
+        stream.setframerate(rate)
         stream.writeframes(values.tobytes())
 
     return path
@@ -191,6 +199,121 @@ def test_audio_items(client: TestClient, tmp_path: Path) -> None:
     ).status_code == 422
     assert client.get(f"/api/sources/{sid}/items/99").status_code == 404
     assert client.get(f"/api/sources/{sid}/items/99/audio").status_code == 404
+
+
+def test_audio_recipe(client: TestClient, tmp_path: Path) -> None:
+    """
+    音声の中身の手順の確認, 数件の前と後 (波形と再生用の WAVE), 版 1 の
+    書き出しを確かめる関数
+
+    Parameters
+    ----------
+    client: TestClient
+        クライアント
+    tmp_path: Path
+        pytest が用意する一時ディレクトリ
+
+    Returns
+    ----------
+    None
+    """
+    # 周波数, チャンネル, 長さのそろわない音声と, 壊れた件
+    root = tmp_path / "sounds"
+    for number in range(3):
+        write_wave(root / "dog" / f"d{number}.wav", 0.3 + number * 0.1, 2)
+        write_wave(
+            root / "cat" / f"c{number}.wav", 0.4, 1, RATE * 2
+        )
+    (root / "cat" / "broken.wav").write_bytes(b"not a wave")
+    sid = client.post("/api/sources", json={"path": str(root)}).json()["id"]
+
+    # 手順が無ければ, そろわないことと読めない件の注意
+    recipe: dict = {
+        "target": "label", "task": "classification",
+        "split": {"method": "stratified", "valid": 0.3},
+    }
+    view = client.post(
+        f"/api/sources/{sid}/preview", json={"recipe": recipe, "upto": 0}
+    ).json()
+    assert any("filter_rows" in note for note in view["notes"])
+    assert any("resample" in note for note in view["notes"])
+
+    # 読めない件を除き, 1 チャンネル, 8000 Hz, 0.5 秒にそろえる
+    recipe["steps"] = [
+        {"op": "filter_rows", "column": "error", "compare": "isna"}
+    ]
+    recipe["item_steps"] = [
+        {"op": "mix_channels", "channels": 1},
+        {"op": "resample", "rate": RATE},
+        {"op": "fix_length", "seconds": 0.5},
+    ]
+    view = client.post(
+        f"/api/sources/{sid}/preview", json={"recipe": recipe, "upto": 1}
+    ).json()
+    assert view["notes"] == []
+
+    # 前は元の周波数とチャンネル, 後はそろえた形と再生用の WAVE
+    shown = client.post(
+        f"/api/sources/{sid}/item_preview",
+        json={"recipe": recipe, "count": 4},
+    ).json()
+    assert len(shown["items"]) == 4
+    rates = set()
+    for item in shown["items"]:
+        assert item["shape"] == [1, RATE // 2]
+        before, after = item["before"], item["after"]
+        rates.add(before["sample_rate"])
+        assert after["sample_rate"] == RATE and after["channels"] == 1
+        assert after["seconds"] == pytest.approx(0.5)
+        assert after["truncated"] is False
+        assert len(after["waveform"]["min"]) == WAVEFORM_BINS
+        assert after["src"].startswith("data:audio/wav;base64,")
+        played = base64.b64decode(after["src"].split(",", 1)[1])
+        with wave.open(io.BytesIO(played)) as stream:
+            assert stream.getframerate() == RATE
+            assert stream.getnframes() == RATE // 2
+    assert rates <= {RATE, RATE * 2}
+
+    # 書き出すと (件数, 1, 4000) の配列で, ML-EDA の load_dataset で読める
+    exported = client.post(
+        f"/api/sources/{sid}/export",
+        json={"recipe": recipe, "name": "sounds"},
+    ).json()
+    assert exported["info"]["splits"]["train"]["shape"][1:] == [1, RATE // 2]
+    assert exported["hints"]["input_shape"] == [1, RATE // 2]
+    dataset = ml_eda.load_dataset(exported["path"])
+    features, _ = dataset.arrays("train")
+    assert features.shape[1:] == (1, RATE // 2)
+    total = sum(
+        len(dataset.arrays(name)[0]) for name in exported["info"]["splits"]
+    )
+    assert total == 6
+
+
+def test_audio_view_clips_head() -> None:
+    """
+    手順の前と後の音声で, 先頭の PREVIEW_SECONDS 秒だけを描いて鳴らす
+    ことを確かめる関数
+
+    Parameters
+    ----------
+    None
+
+    Returns
+    ----------
+    None
+    """
+    # 長い音は先頭だけ (全体の長さは別に返す). 1 次元の値も 1 チャンネルに
+    samples = np.zeros(int((PREVIEW_SECONDS + 2) * RATE), dtype=np.float32)
+    view = audio_view(samples, RATE)
+    assert view["channels"] == 1 and view["truncated"] is True
+    assert view["seconds"] == pytest.approx(PREVIEW_SECONDS)
+    assert view["duration"] == pytest.approx(PREVIEW_SECONDS + 2)
+
+    # 後の周波数は最後の resample の rate (無ければ前の周波数)
+    steps = [{"op": "resample", "rate": 16000}, {"op": "fix_length"}]
+    assert audio_rate(steps, RATE) == 16000
+    assert audio_rate([{"op": "mix_channels"}], RATE) == RATE
 
 
 def test_audio_of_table(client: TestClient, tmp_path: Path) -> None:
