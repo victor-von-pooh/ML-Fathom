@@ -168,12 +168,16 @@ export function autoRecipe(
   return steps
 }
 
+/** 1 件ずつの中身を持ち, 中身の手順を組み立てる種類 */
+export const ITEM_KINDS = ['image', 'text', 'pointcloud', 'audio']
+
 /**
- * 分析から, 画像, 文, 点群を学習用の配列にする中身の手順を作る
+ * 分析から, 画像, 文, 点群, 音声を学習用の配列にする中身の手順を作る
  *
  * 画像は最も多い大きさにそろえ (色の形式が混ざれば RGB に), 正規化する.
  * 文は分析が比べて勧めた区切り方 (無ければ語の数の多めの値を長さ) の語彙で番号にする. 点群は点の数の中央値
- * (1024 まで) にそろえて正規化する
+ * (1024 まで) にそろえて正規化する. 音声は最も多いチャンネルの数と標本化の周波数, 長さの中央値 (30 秒まで)
+ * にそろえる
  */
 export function autoItemSteps(kind: string, profile: Profile): RecipeStep[] {
   if (kind === 'image') {
@@ -215,10 +219,26 @@ export function autoItemSteps(kind: string, profile: Profile): RecipeStep[] {
     )
     return [{ op: 'sample_points', points }, { op: 'normalize_cloud' }]
   }
+  if (kind === 'audio') {
+    // そろっていても足す (推論で読む新しい音声も同じ形にするため. 画像の resize と同じ).
+    // チャンネルを先にそろえる (周波数を変える計算が少なくなる)
+    const steps: RecipeStep[] = []
+    const channels = mostCommon(profile.items?.channels)
+    const rate = mostCommon(profile.items?.sample_rates)
+    if (channels) steps.push({ op: 'mix_channels', channels })
+    if (rate) steps.push({ op: 'resample', rate })
+    const median = profile.items?.duration?.median
+    if (median !== undefined && median > 0) {
+      // 長い録音は配列が大きくなりすぎないように切る
+      const seconds = Math.min(MAX_AUDIO_SECONDS, Math.max(0.01, Math.round(median * 100) / 100))
+      steps.push({ op: 'fix_length', seconds })
+    }
+    return steps
+  }
   return []
 }
 
-/** 読めない件 (画像は大きさが欠損, 点群などは error がある件) を除く表の手順 (無ければ null) */
+/** 読めない件 (画像は大きさが欠損, 点群と音声などは error がある件) を除く表の手順 (無ければ null) */
 export function unreadableFilter(kind: string, profile: Profile): RecipeStep | null {
   if (!profile.items?.unreadable) return null
   if (kind === 'image' && profile.columns.width) {
@@ -230,6 +250,19 @@ export function unreadableFilter(kind: string, profile: Profile): RecipeStep | n
 
 // 画像を縮める長い辺の上限
 const MAX_IMAGE_SIDE = 224
+
+// 音声をそろえる長さの上限 (秒)
+const MAX_AUDIO_SECONDS = 30
+
+/** 値ごとの件数 ({"16000": 12}) から, 最も多い値 (同じ数なら大きい値. 無ければ null) */
+function mostCommon(counts: Record<string, number> | undefined): number | null {
+  const entries = Object.entries(counts ?? {})
+    .map(([value, count]) => [Number(value), count] as const)
+    .filter(([value]) => Number.isFinite(value) && value > 0)
+  if (entries.length === 0) return null
+  entries.sort((a, b) => b[1] - a[1] || b[0] - a[0])
+  return entries[0]![0]
+}
 
 /** 列のよくある大きさ (数値なら第 3 四分位か中央値, 種類が少なければ最も多い値) */
 function typical(

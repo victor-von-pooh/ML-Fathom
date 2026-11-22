@@ -4,9 +4,10 @@ import { Eye } from 'lucide-react'
 import { useState } from 'react'
 
 import { api } from '../../api/client'
-import type { ItemPreviewItem, PointsItem, Recipe } from '../../api/types'
+import type { AudioPreviewItem, ItemPreviewItem, PointsItem, Recipe } from '../../api/types'
 import { Button, Card, ErrorBox, Spinner } from '../../components/ui'
 import { formatCount } from '../../lib/format'
+import { AudioPlayer } from './AudioView'
 import { PointCloudView } from './PointCloudView'
 
 // 文の後の番号の並びで見せる数
@@ -90,6 +91,34 @@ function TextPair({ item }: { item: ItemPreviewItem }) {
   )
 }
 
+/** 前と後を見る 1 件を選ぶ欄 */
+function ItemSelect({
+  items,
+  at,
+  onChange,
+}: {
+  items: ItemPreviewItem[]
+  at: number
+  onChange: (at: number) => void
+}) {
+  return (
+    <label className="flex items-center gap-2 text-sm">
+      <span className="text-ink-3">件</span>
+      <select
+        value={at}
+        onChange={(event) => onChange(Number(event.target.value))}
+        className="h-8 rounded border border-line bg-surface px-2"
+      >
+        {items.map((entry, position) => (
+          <option key={entry.index} value={position}>
+            #{entry.index} {entry.label ?? ''}
+          </option>
+        ))}
+      </select>
+    </label>
+  )
+}
+
 /** 点群の前と後 (選んだ 1 件) */
 function CloudPair({ items }: { items: ItemPreviewItem[] }) {
   const [at, setAt] = useState(0)
@@ -99,20 +128,7 @@ function CloudPair({ items }: { items: ItemPreviewItem[] }) {
   const after = item.after as PointsItem
   return (
     <div className="space-y-2">
-      <label className="flex items-center gap-2 text-sm">
-        <span className="text-ink-3">件</span>
-        <select
-          value={at}
-          onChange={(event) => setAt(Number(event.target.value))}
-          className="h-8 rounded border border-line bg-surface px-2"
-        >
-          {items.map((entry, position) => (
-            <option key={entry.index} value={position}>
-              #{entry.index} {entry.label ?? ''}
-            </option>
-          ))}
-        </select>
-      </label>
+      <ItemSelect items={items} at={at} onChange={setAt} />
       <div className="grid gap-3 md:grid-cols-2">
         <div>
           <p className="mb-1 text-xs text-ink-3">前 (点 {formatCount(before.count)})</p>
@@ -124,6 +140,35 @@ function CloudPair({ items }: { items: ItemPreviewItem[] }) {
           </p>
           <PointCloudView item={after} label={`#${item.index} の手順の後`} />
         </div>
+      </div>
+    </div>
+  )
+}
+
+/** 音声の前と後 (選んだ 1 件の再生と波形) */
+function AudioPair({ items }: { items: ItemPreviewItem[] }) {
+  const [at, setAt] = useState(0)
+  const item = items[Math.min(at, items.length - 1)]
+  if (!item) return null
+  return (
+    <div className="space-y-2">
+      <ItemSelect items={items} at={at} onChange={setAt} />
+      <div className="grid gap-3 md:grid-cols-2">
+        {(['before', 'after'] as const).map((side) => (
+          <div key={side}>
+            <p className="mb-1 text-xs font-semibold text-ink-2">
+              {side === 'before' ? '前' : `後 (形 ${shapeText(item.shape)})`}
+            </p>
+            {/* 件を変えたら再生した位置も戻す */}
+            <AudioPlayer
+              key={`${item.index}-${side}`}
+              audio={item[side] as AudioPreviewItem}
+              src={(item[side] as AudioPreviewItem).src}
+              name={`#${item.index} の手順の${side === 'before' ? '前' : '後'}`}
+              height="h-24"
+            />
+          </div>
+        ))}
       </div>
     </div>
   )
@@ -193,6 +238,7 @@ export function ItemPreviewCard({
             </ul>
           )}
           {kind === 'pointcloud' && <CloudPair items={data.items} />}
+          {kind === 'audio' && <AudioPair items={data.items} />}
         </div>
       )}
     </Card>

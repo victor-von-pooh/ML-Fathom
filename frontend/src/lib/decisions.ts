@@ -1,5 +1,5 @@
 import type { Profile, Recipe, RecipeStep } from '../api/types'
-import { autoItemSteps, unreadableFilter } from './suggest'
+import { autoItemSteps, ITEM_KINDS, unreadableFilter } from './suggest'
 
 /** 選んだときにすること (レシピを置き換える, データの設定を変える, このままにする) */
 export type DecisionAction =
@@ -320,14 +320,14 @@ export function findDecisions({
     })
   }
 
-  // 画像, 文, 点群の中身の手順
+  // 画像, 文, 点群, 音声の中身の手順
   const items = recipe.item_steps ?? []
-  if (['image', 'text', 'pointcloud'].includes(kind) && items.length === 0) {
+  if (ITEM_KINDS.includes(kind) && items.length === 0) {
     found.push({
       id: 'items',
       title: '中身を配列にする手順がありません',
       message:
-        '画像, 文, 点群は, 1 件ずつの中身を同じ形の配列にしないと書き出せません. 分析 (大きさ, 文の区切り方, 点の数) から作れます.',
+        '画像, 文, 点群, 音声は, 1 件ずつの中身を同じ形の配列にしないと書き出せません. 分析 (大きさ, 文の区切り方, 点の数, 音声の周波数とチャンネルと長さ) から作れます.',
       choices: [
         {
           label: '分析から作る',

@@ -197,6 +197,33 @@ describe('決めてほしいこと', () => {
     expect(ids({ ...text, recipe: same })).toEqual([])
   })
 
+  test('音声は中身の手順が無ければ, 読めない件を除いて形をそろえる手順を作る', () => {
+    const items = {
+      kind: 'audio',
+      count: 9,
+      unreadable: 1,
+      sample_rates: { '16000': 6, '44100': 2 },
+      channels: { '1': 8 },
+      duration: { min: 0.5, median: 1, max: 2, total: 9 },
+    }
+    const profile = profileOf({ error: column('text') }, [], { items })
+    const audio = { ...base, kind: 'audio', profile, target: 'label' }
+    const [card] = findDecisions({ ...audio, recipe })
+    expect(card!.id).toBe('items')
+    expect(card!.choices[0]!.action).toMatchObject({
+      recipe: {
+        steps: [{ op: 'filter_rows', column: 'error', compare: 'isna' }],
+        item_steps: [
+          { op: 'mix_channels', channels: 1 },
+          { op: 'resample', rate: 16000 },
+          { op: 'fix_length', seconds: 1 },
+        ],
+      },
+    })
+    const made = { ...recipe, item_steps: [{ op: 'fix_length', seconds: 1 }] }
+    expect(ids({ ...audio, recipe: made })).toEqual([])
+  })
+
   test('Excel に他のシートがあれば, シートを選ぶかを聞く', () => {
     const profile = profileOf({ a: column('numeric') }, [], {
       overview: { roles: {}, sheets: ['表紙', '売上'], sheet: '表紙' },
