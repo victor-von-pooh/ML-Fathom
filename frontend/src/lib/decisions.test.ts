@@ -122,6 +122,21 @@ describe('決めてほしいこと', () => {
     ])
     expect(found[1]!.choices[1]!.action).toMatchObject({ recipe: { steps: [] } })
 
+    // グループと時刻の組も時刻の順に分けるので, 時刻の順を勧めない
+    const groupTime = {
+      ...lagged,
+      split: { ...lagged.split, method: 'group_time', column: 'store' },
+    }
+    expect(
+      findDecisions({
+        ...base,
+        kind: 'timeseries',
+        profile,
+        recipe: groupTime,
+        target: 'sales',
+      }).map((item) => item.id),
+    ).not.toContain('split:time')
+
     // 時刻の列と間隔が分かれば日付でずらせる. ずらした後は聞かない
     const daily = profileOf({ sales: column('numeric') }, findings, {
       overview: { roles: { time: 'date' } },

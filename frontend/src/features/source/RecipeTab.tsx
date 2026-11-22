@@ -398,6 +398,10 @@ export function RecipeTab({
   }
   const result = preview.data
   const isFinal = upto === recipe.steps.length
+  // グループの列で分ける分割 (列が要る). グループの層化は目的の値で層を作るので, 回帰と時系列の
+  // 予測では使えない (ML-EDA の load_recipe が止める)
+  const grouped = ['group', 'group_time', 'stratified_group'].includes(recipe.split.method)
+  const stratifiable = !['regression', 'forecasting'].includes(recipe.task)
   // 分割の後の気付きは重要度つきで出し, 同じ文は注意の並びから除く
   const findings = result?.findings ?? []
   const notes = (result?.notes ?? []).filter(
@@ -468,8 +472,23 @@ export function RecipeTab({
               <option value="stratified">層化 (クラスの割合を保つ)</option>
               <option value="time">時刻の順 (最後を検証用に)</option>
               <option value="group">グループごと</option>
+              <option value="group_time">グループと時刻の組 (後から現れた相手を検証用に)</option>
+              <option
+                value="stratified_group"
+                disabled={!stratifiable && recipe.split.method !== 'stratified_group'}
+              >
+                グループの層化 (相手をまとめ, クラスの割合を保つ
+                {stratifiable ? '' : '. 回帰と時系列の予測では使えない'})
+              </option>
               <option value="none">分けない</option>
             </select>
+            {/* タスクを変えてグループの層化が残った場合 (ML-EDA は load_recipe で止める) */}
+            {recipe.split.method === 'stratified_group' && !stratifiable && (
+              <p role="alert" className="col-start-2 text-xs text-critical-text">
+                グループの層化は, 回帰と時系列の予測では使えません (目的の値で層を作れないため).
+                グループごとかグループと時刻の組を選ぶか, タスクを分類にしてください
+              </p>
+            )}
             {(['valid', 'test'] as const).map((key) => (
               <div key={key} className="contents">
                 <label htmlFor={`split-${key}`} className="text-ink-3">
@@ -495,13 +514,14 @@ export function RecipeTab({
                 />
               </div>
             ))}
-            {/* グループの列は group の分割に使い, 他の分割では分割をまたぐ重なりを確かめる
+            {/* グループの列は group, group_time, stratified_group の分割に使い (要る), 他の分割では
+                分割をまたぐ重なりを確かめる (任意)
                 (分けないときは重なりが無いので出さない) */}
             {recipe.split.method !== 'none' && (
               <>
                 <label htmlFor="split-column" className="text-ink-3">
                   グループの列
-                  {recipe.split.method !== 'group' && (
+                  {!grouped && (
                     <span className="block text-xs"> (任意. 分割をまたぐ重なりを確かめる)</span>
                   )}
                 </label>
@@ -516,7 +536,7 @@ export function RecipeTab({
                   }}
                   className="h-8 rounded border border-line bg-surface px-2 font-mono"
                 >
-                  <option value="">{recipe.split.method === 'group' ? '選ぶ…' : 'なし'}</option>
+                  <option value="">{grouped ? '選ぶ…' : 'なし'}</option>
                   {columns.map((column) => (
                     <option key={column}>{column}</option>
                   ))}
