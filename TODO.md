@@ -33,10 +33,6 @@
 
 ## 条件待ち
 
-### ML-EDA に公開してもらう名前に置き換える
-- 何を: `pipeline.frame_view` (`api.py` の表の中身), `pipeline.DATASET_FORMAT_VERSION` と `pipeline.ITEMS_FORMAT_VERSIONS` (`datasets.py` の版の見分け), `media.read_image` (`items.py` の撮影の 1 枚) を, ML-EDA の公開の名前に置き換え, `tests/test_public_names.py` の `WAITING` から消す
-- 待っているもの: ML-EDA がこれらを公開すること (表の見え方は `preview` の前と後と同じ形, 版の番号は書き出しの約束, 画像の読み方は読み込みと同じにするため, 画面で同じものを持たない)
-
 ### 行動の記録と介入の記録
 - 何を: 行動の記録 (利用者 × 品, 見せた記録) と介入の記録の種類を読み込み, それぞれの気付き (見せた記録の有無, 群どうしの釣り合いと重なり) を画面に出す
 - 待っているもの: ML-EDA の「型ごとのデータの約束」と「推薦で見せた記録を前提にするか」(ML-EDA がこの種類と気付きを持つこと), 実例
