@@ -290,6 +290,34 @@ test('多視点の撮影を登録し, カメラの配置と各枚の深度を見
 const PAIRS = path.resolve(import.meta.dirname, '.work', 'pairs')
 const SHAPES = path.resolve(import.meta.dirname, '.work', 'shapes')
 
+test('正解の無い件は既定で除き, unlabeled の分割に書くこともできる', async ({ page }) => {
+  await page.goto('/datasets')
+  await page.getByRole('link', { name: 'ファイルの組を書き出す' }).click()
+  const form = page.locator('#pairs-panel > div:not([hidden])')
+  const partial = path.join(path.dirname(TABLE), 'partial')
+  await form.getByLabel('画像のディレクトリ', { exact: true }).fill(path.join(partial, 'images'))
+  await form.getByLabel('領域のディレクトリ', { exact: true }).fill(path.join(partial, 'masks'))
+  await form.getByLabel('同じ名前があれば置き換える').check()
+  const button = page.getByRole('button', { name: 'ファイルの組を書き出す' })
+
+  // 既定は除く. 何が正解の無い件で, どうなるかを添える
+  const unlabeled = form.getByRole('combobox', { name: '正解の無い件' })
+  await expect(unlabeled).toHaveValue('drop')
+  await expect(unlabeled).toHaveAccessibleDescription(/領域の無い画像です. 書き出さず/)
+  await form.getByLabel('データセットの名前').fill('partial_drop')
+  await button.click()
+  await expect(page.getByText(/書き出しました/)).toBeVisible({ timeout: 20_000 })
+  await expect(page.getByText(/lonely/)).toBeVisible()
+  await expect(page.getByText(/unlabeled \(正解なし\)/)).toHaveCount(0)
+
+  // unlabeled の分割に書くと, 分割に「正解なし」が足される
+  await unlabeled.selectOption('keep')
+  await expect(unlabeled).toHaveAccessibleDescription(/unlabeled という名前の分割に書きます/)
+  await form.getByLabel('データセットの名前').fill('partial_keep')
+  await button.click()
+  await expect(page.getByText(/unlabeled \(正解なし\) 1 件/)).toBeVisible({ timeout: 20_000 })
+})
+
 test('画像と領域の組を版 2 で書き出し, 注意と使い方を見て一覧で確かめる', async ({ page }) => {
   await page.goto('/datasets')
   await page.getByRole('link', { name: 'ファイルの組を書き出す' }).click()

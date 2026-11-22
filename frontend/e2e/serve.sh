@@ -171,6 +171,10 @@ write_image_masks(work / "mixed", count=6, sizes=[(24, 32), (30, 18)])
 shutil.copyfile(sample["masks"] / "sample_000.png",
                 sample["masks"] / "orphan.png")
 write_shape_captures(work / "shapes", views=4, points=300)
+# 領域の無い画像を 1 つ持つ組 (正解の無い件を unlabeled の分割に書く)
+partial = write_image_masks(work / "partial", count=6)
+shutil.copyfile(partial["images"] / "sample_000.png",
+                partial["images"] / "lonely.png")
 PY
 
 # ML-Pathfinder の置き場に, 正解が画像の領域の問題の設定 (上の画像と領域を

@@ -110,6 +110,59 @@ def test_image_masks_export_and_list(
     assert item["normalization"] is None
 
 
+def test_image_masks_unlabeled(client: TestClient, tmp_path: Path) -> None:
+    """
+    正解の無い件を, 既定では除き, keep なら unlabeled の分割に書くことを
+    確かめる関数
+
+    Parameters
+    ----------
+    client: TestClient
+        クライアント
+    tmp_path: Path
+        pytest が用意する一時ディレクトリ
+
+    Returns
+    ----------
+    None
+    """
+    # 合成の見本に, 領域の無い画像を 1 つ足す
+    sample = write_image_masks(tmp_path / "pairs", count=10)
+    (sample["images"] / "lonely.png").write_bytes(
+        (sample["images"] / "sample_000.png").read_bytes()
+    )
+    body = {
+        "images": str(sample["images"]), "masks": str(sample["masks"]),
+        "name": "dropped", "split": {"valid": 0.2, "test": 0.0, "seed": 0},
+    }
+
+    # 既定 (除く) は分割に入れず, 注意に書く
+    dropped = client.post("/api/datasets/image_masks", json=body)
+    assert dropped.status_code == 200, dropped.text
+    splits = dropped.json()["info"]["splits"]
+    assert "unlabeled" not in splits
+    assert any("lonely" in note for note in dropped.json()["notes"])
+
+    # keep なら unlabeled の分割に書く. 正解の付いた件は同じ
+    kept = client.post("/api/datasets/image_masks", json={
+        **body, "name": "kept",
+        "split": {**body["split"], "unlabeled": "keep"},
+    })
+    assert kept.status_code == 200, kept.text
+    info = kept.json()["info"]
+    assert info["split"]["unlabeled"] == "keep"
+    assert info["splits"]["unlabeled"] == {"items": 1}
+    assert {name: value for name, value in info["splits"].items()
+            if name != "unlabeled"} == splits
+
+    # drop と keep の他は 422
+    wrong = client.post("/api/datasets/image_masks", json={
+        **body, "name": "wrong",
+        "split": {**body["split"], "unlabeled": "yes"},
+    })
+    assert wrong.status_code == 422
+
+
 def test_image_masks_item_steps(
     client: TestClient, tmp_path: Path
 ) -> None:

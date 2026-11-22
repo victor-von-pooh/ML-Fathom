@@ -167,6 +167,8 @@ class ExportRequest(BaseModel):
 class PairSplit(BaseModel):
     # 分割のしかた (省略でグループがあれば group)
     method: Optional[Literal["random", "group", "none"]] = None
+    # 正解の無い件を除くか unlabeled の分割に書くか (省略で除く)
+    unlabeled: Optional[Literal["drop", "keep"]] = None
     valid: Annotated[float, Field(ge=0, lt=1)] = 0.2
     test: Annotated[float, Field(ge=0, lt=1)] = 0.0
     seed: int = 0
@@ -1401,6 +1403,8 @@ def pair_options(body: PairExport) -> dict[str, Any]:
     }
     if body.split.method:
         split["method"] = body.split.method
+    if body.split.unlabeled:
+        split["unlabeled"] = body.split.unlabeled
     options = {
         "split": split, "groups": body.groups or None,
         "origin": body.origin.model_dump(), "name": body.name,
