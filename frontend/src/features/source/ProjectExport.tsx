@@ -16,10 +16,13 @@ export function ProjectExport({
   sourceId,
   recipe,
   onExported,
+  reasons,
 }: {
   sourceId: string
   recipe: Recipe
   onExported: () => void
+  /** 書き出せない理由を並べた要素の id (理由があれば押せない) */
+  reasons?: string
 }) {
   const queryClient = useQueryClient()
   const place = useQuery({
@@ -96,7 +99,8 @@ export function ProjectExport({
           icon={FolderOutput}
           className="mt-2"
           // 書き出し先の様子を読み直す間は押せない (古い様子で置き換えを決めないように)
-          disabled={exporter.isPending || place.isFetching}
+          disabled={exporter.isPending || place.isFetching || reasons !== undefined}
+          aria-describedby={reasons}
           onClick={run}
         >
           {exporter.isPending ? '書き出し中…' : 'プロジェクトへ書き出す'}

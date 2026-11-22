@@ -180,10 +180,13 @@ export function ItemPreviewCard({
   sourceId,
   kind,
   recipe,
+  reasons,
 }: {
   sourceId: string
   kind: string
   recipe: Recipe
+  /** 試せない理由を並べた要素の id (理由があれば押せない) */
+  reasons?: string
 }) {
   const run = useMutation({
     mutationFn: (current: Recipe) => api.itemPreview(sourceId, current),
@@ -196,7 +199,12 @@ export function ItemPreviewCard({
     <Card
       title="中身の手順の前と後"
       actions={
-        <Button icon={Eye} disabled={run.isPending} onClick={() => run.mutate(recipe)}>
+        <Button
+          icon={Eye}
+          disabled={run.isPending || reasons !== undefined}
+          aria-describedby={reasons}
+          onClick={() => run.mutate(recipe)}
+        >
           {data ? 'もう一度試す' : '数件で試す'}
         </Button>
       }

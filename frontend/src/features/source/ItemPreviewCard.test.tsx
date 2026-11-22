@@ -76,3 +76,19 @@ test('音声は選んだ 1 件の前と後を, 再生の部品と波形で並べ
   expect(sources()).toEqual(['data:audio/wav;base64,CCC', 'data:audio/wav;base64,DDD'])
   expect(screen.getByText(/44,100 Hz · 1 チャンネル/)).toBeInTheDocument()
 })
+
+test('試せない理由があれば, 数件で試すを押せず理由を読み上げる', () => {
+  const call = vi.spyOn(api, 'itemPreview')
+  const client = new QueryClient()
+  render(
+    <QueryClientProvider client={client}>
+      <p id="reasons">中身の手順 1 (resample) の rate は 192000 以下にしてください</p>
+      <ItemPreviewCard sourceId="s1" kind="audio" recipe={RECIPE} reasons="reasons" />
+    </QueryClientProvider>,
+  )
+  const button = screen.getByRole('button', { name: '数件で試す' })
+  expect(button).toBeDisabled()
+  expect(button).toHaveAccessibleDescription(/rate は 192000 以下/)
+  fireEvent.click(button)
+  expect(call).not.toHaveBeenCalled()
+})
