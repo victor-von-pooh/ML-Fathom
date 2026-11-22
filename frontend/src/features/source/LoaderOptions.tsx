@@ -16,17 +16,31 @@ const NUMERIC = new Set(['header', 'sheet'])
 // 真偽を選ぶ設定 (空は読み込みの既定. 取り違えた文字を送らないように選ばせる)
 const BOOLEAN = new Set(['digest', 'follow_links'])
 
-// 真と読む文字 (ML-EDA の読み込みと同じ. 大文字と小文字, 前後の空白は区別しない)
+// 真と偽に読む文字 (ML-EDA の option_flag と同じ. 大文字と小文字, 前後の空白は区別しない)
 const TRUE_WORDS = new Set(['true', '1', 'yes', 'on'])
+const FALSE_WORDS = new Set(['false', '0', 'no', 'off', ''])
 
-/** 保存した値を欄の文字にする (並びや辞書は JSON. 真偽の設定は true か false) */
+/**
+ * 保存した真偽の設定を選ぶ欄の値にする (ML-EDA と同じ読み方. null は偽, 数は 0 だけが偽.
+ * 知らない文字は書いてある文字のまま)
+ */
+function flagText(value: unknown): string {
+  if (typeof value === 'boolean') return value ? 'true' : 'false'
+  if (value === null) return 'false'
+  if (typeof value === 'number') return value === 0 ? 'false' : 'true'
+  if (typeof value === 'string') {
+    const word = value.trim().toLowerCase()
+    if (TRUE_WORDS.has(word)) return 'true'
+    if (FALSE_WORDS.has(word)) return 'false'
+    return value
+  }
+  return JSON.stringify(value)
+}
+
+/** 保存した値を欄の文字にする (並びや辞書は JSON. 真偽の設定は flagText) */
 function toText(key: string, value: unknown): string {
   if (value === undefined) return ''
-  if (BOOLEAN.has(key) && typeof value !== 'object') {
-    const word = String(value).trim().toLowerCase()
-    if (word === '') return ''
-    return value === true || TRUE_WORDS.has(word) ? 'true' : 'false'
-  }
+  if (BOOLEAN.has(key)) return flagText(value)
   if (value === null) return 'null'
   if (typeof value === 'object') return JSON.stringify(value)
   return String(value)
@@ -35,7 +49,8 @@ function toText(key: string, value: unknown): string {
 /** 欄の文字を値にする (空は省略. 区切り文字の \t はタブ. sheets はシートの名前) */
 function toValue(key: string, text: string, previous: unknown, sheets: string[]): unknown {
   if (text === '') return undefined
-  if (BOOLEAN.has(key)) return text === 'true'
+  // 真偽の設定の知らない文字は, 書いてあったとおりに戻す
+  if (BOOLEAN.has(key)) return text === 'true' ? true : text === 'false' ? false : text
   if (typeof previous === 'object' && previous !== null) {
     try {
       return JSON.parse(text) as unknown
@@ -150,6 +165,10 @@ export function LoaderOptions({
                     <option value="">既定</option>
                     <option value="true">true</option>
                     <option value="false">false</option>
+                    {/* 保存した知らない値も, 選んだまま見せる (ML-EDA が理由を返す) */}
+                    {!['', 'true', 'false'].includes(initial[key] ?? '') && (
+                      <option value={initial[key]}>{initial[key]}</option>
+                    )}
                   </select>
                 ) : (
                   <input

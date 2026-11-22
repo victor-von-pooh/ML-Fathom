@@ -64,3 +64,34 @@ test('文字で保存した真偽の設定も選んだ形で出し, 既定に戻
   fireEvent.click(screen.getByRole('button', { name: '読み直す' }))
   await waitFor(() => expect(update).toHaveBeenCalledWith('s1', { options: { digest: false } }))
 })
+
+test.each([
+  [true, 'true'],
+  [false, 'false'],
+  [' ON ', 'true'],
+  ['Off', 'false'],
+  ['', 'false'],
+  [1, 'true'],
+  [0, 'false'],
+  [null, 'false'],
+])('保存した %j を ML-EDA と同じく %s と出す', (value, shown) => {
+  renderOptions({ ...SOURCE, options: { follow_links: value } })
+  fireEvent.click(screen.getByRole('button', { name: '読み込みの設定' }))
+  expect(screen.getByLabelText('follow_links')).toHaveValue(shown)
+})
+
+test('知らない文字は書いてある文字のまま選択肢に出し, 変えなければ送らない', async () => {
+  const update = vi.spyOn(api, 'updateSource').mockResolvedValue(SOURCE)
+  renderOptions({ ...SOURCE, options: { follow_links: 'maybe' } })
+  fireEvent.click(screen.getByRole('button', { name: '読み込みの設定' }))
+  const field = screen.getByLabelText('follow_links')
+  expect(field).toHaveValue('maybe')
+  expect(screen.getByRole('option', { name: 'maybe' })).toBeInTheDocument()
+  fireEvent.change(screen.getByLabelText('digest'), { target: { value: 'false' } })
+  fireEvent.click(screen.getByRole('button', { name: '読み直す' }))
+  await waitFor(() =>
+    expect(update).toHaveBeenCalledWith('s1', {
+      options: { follow_links: 'maybe', digest: false },
+    }),
+  )
+})
