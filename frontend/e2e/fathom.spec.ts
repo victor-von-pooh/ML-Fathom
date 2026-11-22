@@ -353,6 +353,32 @@ test('多視点の撮影を登録し, カメラの配置と各枚の深度を見
   )
 })
 
+test('音声を登録し, 種類の名前と, 1 件ずつの再生と波形を見る', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'データを追加' }).first().click()
+  await page
+    .getByLabel('ディレクトリのパス')
+    .fill(path.resolve(import.meta.dirname, '.work', 'sounds'))
+  await page.getByRole('button', { name: '移動' }).click()
+  await page.getByRole('button', { name: 'このディレクトリを選ぶ' }).click()
+  await expect(page.getByLabel('読み込み', { exact: true })).toHaveValue('audio_folder')
+  await page.getByRole('button', { name: '追加', exact: true }).click()
+  await expect(page.getByText('音声 · audio_folder')).toBeVisible({ timeout: 20_000 })
+
+  // 中身を見る: 長い録音は先頭の 30 秒だけを再生と波形にする
+  await page.getByRole('tab', { name: '中身を見る' }).click()
+  const list = page.getByRole('list', { name: '音声' })
+  await list.getByRole('button', { name: /high\.wav/ }).click()
+  await expect(page.getByRole('img', { name: /番目の音声の波形/ })).toBeVisible()
+  await expect(page.getByText(/再生と波形は先頭の 30\.0 秒だけ/)).toBeVisible()
+  const player = page.locator('audio')
+  const source = await player.getAttribute('src')
+  const played = await page.request.get(source!)
+  expect(played.headers()['content-type']).toBe('audio/wav')
+  // 8000 Hz, 1 チャンネル, 16 bit の 30 秒と, WAVE の頭の 44 バイト
+  expect((await played.body()).length).toBe(8000 * 2 * 30 + 44)
+})
+
 // e2e/serve.sh が ML-EDA の合成の見本で作ったファイルの組
 const PAIRS = path.resolve(import.meta.dirname, '.work', 'pairs')
 const SHAPES = path.resolve(import.meta.dirname, '.work', 'shapes')

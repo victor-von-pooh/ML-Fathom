@@ -1,6 +1,7 @@
 import base64
 import io
 import math
+import wave
 from pathlib import Path
 from typing import Any, Optional
 
@@ -14,6 +15,16 @@ MAX_POINTS = 50_000
 
 # 前と後を見比べる点群の点の数の上限 (何件も返すので少なく)
 PREVIEW_POINTS = 5_000
+
+# 再生と波形に使う音声の長さ (秒. 先頭から. 長い録音で大きな音を送らない
+# ように)
+AUDIO_SECONDS = 30.0
+
+# 波形の区間の数 (区間ごとに振幅の最小と最大を返す)
+WAVEFORM_BINS = 1000
+
+# 再生用の WAVE のチャンネルの上限 (多いものは平均して 1 つに)
+PLAY_CHANNELS = 2
 
 
 def item_response(
@@ -34,13 +45,27 @@ def item_response(
     Returns
     ----------
     response: Response
-        画像は PNG, 点群は点と色の JSON, 文は JSON
+        画像は PNG, 点群は点と色の JSON, 文は JSON, 音声は波形の JSON
 
     Raises
     ----------
     HTTPException
-        中身を持たない種類か, 読めない場合は 422
+        中身を持たない種類か, 読めない場合と, ファイルが読み込んだ
+        ディレクトリの外の場合は 422
     """
+    # 音声は先頭の決まった長さだけを読む (load_item は全てを読むため)
+    response: Response
+    if data.kind == "audio":
+        response = JSONResponse(
+            audio_body(data, index, audio_clip(data, index))
+        )
+        response.headers["Cache-Control"] = "private, max-age=60"
+        return response
+
+    # ファイルを 1 件ずつ読む種類は, 読み込んだディレクトリの中に限る
+    if data.kind in ("image", "pointcloud"):
+        item_place(data, index)
+
     # 種類ごとに形を変える
     try:
         item = data.load_item(index)
@@ -63,6 +88,196 @@ def item_response(
     else:
         response = JSONResponse({"text": str(item)})
     # 同じ画面で何度も開くので, 少しの間はブラウザに覚えさせる
+    response.headers["Cache-Control"] = "private, max-age=60"
+
+    return response
+
+
+def item_place(data: ml_eda.Data, index: int) -> Path:
+    """
+    1 件のファイルの場所を, 読み込んだディレクトリの中に限って返す関数
+
+    Parameters
+    ----------
+    data: ml_eda.Data
+        画像, 点群, 音声のデータ (読み込みが source に root を書いたもの)
+    index: int
+        行の位置
+
+    Returns
+    ----------
+    place: Path
+        シンボリックリンクと .. をたどった後の場所
+
+    Raises
+    ----------
+    HTTPException
+        読み込んだ場所か path の列が無い場合と, 場所が読み込んだ
+        ディレクトリの外 (.. や絶対パス, 外を指すシンボリックリンク) の
+        場合は 422
+    """
+    # 根と行の場所をたどった後で比べる (絶対パスは根を無視して外に出る)
+    root = data.source.get("root")
+    if not root or "path" not in data.frame.columns:
+        raise HTTPException(422, "1 件のファイルの場所がありません")
+    base = Path(str(root)).resolve()
+    place = (base / str(data.frame["path"].iloc[index])).resolve()
+    if not place.is_relative_to(base):
+        raise HTTPException(
+            422, "読み込んだディレクトリの外のファイルは読みません"
+        )
+
+    return place
+
+
+def audio_clip(data: ml_eda.Data, index: int) -> dict[str, Any]:
+    """
+    音声の 1 件の先頭の AUDIO_SECONDS 秒を読む関数
+
+    Parameters
+    ----------
+    data: ml_eda.Data
+        音声のデータ
+    index: int
+        行の位置
+
+    Returns
+    ----------
+    audio: dict[str, Any]
+        samples ((標本の数, チャンネル) の float32) と sample_rate
+        (ML-EDA の read_audio)
+
+    Raises
+    ----------
+    HTTPException
+        場所が無いか読み込んだディレクトリの外の場合と, 読めない場合は 422
+    """
+    # 場所は読み込んだディレクトリの中に限る
+    place = item_place(data, index)
+    try:
+        audio: dict[str, Any] = ml_eda.read_audio(place, AUDIO_SECONDS)
+    except Exception as error:
+        # 壊れたファイルや soundfile の無い形式など, 読めない理由は様々
+        raise HTTPException(422, f"読めませんでした: {error}") from error
+
+    return audio
+
+
+def audio_body(
+    data: ml_eda.Data, index: int, audio: dict[str, Any]
+) -> dict[str, Any]:
+    """
+    音声の 1 件を, 画面で描く波形の辞書にする関数
+
+    Parameters
+    ----------
+    data: ml_eda.Data
+        音声のデータ
+    index: int
+        行の位置
+    audio: dict[str, Any]
+        audio_clip で読んだ先頭の音
+
+    Returns
+    ----------
+    body: dict[str, Any]
+        sample_rate, channels, duration (全体の秒. 分からなければ None),
+        seconds (読んだ秒), truncated (先頭だけを読んだか), waveform
+        (チャンネルを平均した振幅の, 区間ごとの min と max)
+    """
+    # チャンネルを平均した振幅 (数でない値は 0)
+    samples = np.nan_to_num(np.asarray(audio["samples"], dtype=np.float32))
+    rate = int(audio["sample_rate"])
+    mono = samples.mean(axis=1) if samples.size else np.zeros(0, np.float32)
+    count = int(len(mono))
+
+    # 区間ごとの最小と最大 (標本が区間より少なければ 1 標本ずつ)
+    bins = min(WAVEFORM_BINS, count)
+    low: list[float] = []
+    high: list[float] = []
+    if bins:
+        edges = np.linspace(0, count, bins + 1).astype(int)[:-1]
+        low = np.minimum.reduceat(mono, edges).round(4).tolist()
+        high = np.maximum.reduceat(mono, edges).round(4).tolist()
+
+    # 全体の長さは読み込みの表から (欠けは NaN なので自分と等しくない)
+    row = data.frame.iloc[index]
+    duration = row.get("duration")
+    frames = row.get("frames")
+    known = duration is not None and duration == duration
+    counted = frames is not None and frames == frames
+    body = {
+        "sample_rate": rate,
+        "channels": int(samples.shape[1]) if samples.ndim == 2 else 1,
+        "duration": float(duration) if known else None,
+        "seconds": count / rate if rate else 0.0,
+        "truncated": bool(counted and count < int(frames)),
+        "waveform": {"min": low, "max": high},
+    }
+
+    return body
+
+
+def wav_bytes(audio: dict[str, Any]) -> bytes:
+    """
+    音を, ブラウザで鳴らせる 16 bit の PCM の WAVE のバイト列にする関数
+
+    Parameters
+    ----------
+    audio: dict[str, Any]
+        samples ((標本の数, チャンネル) の float32) と sample_rate
+
+    Returns
+    ----------
+    data: bytes
+        WAVE (PLAY_CHANNELS より多いチャンネルは平均して 1 つに. -1 から
+        1 の外は端にそろえる)
+    """
+    # チャンネルをそろえ, 16 bit の整数にする
+    samples = np.nan_to_num(np.asarray(audio["samples"], dtype=np.float32))
+    if samples.ndim == 1:
+        samples = samples[:, None]
+    if samples.shape[1] > PLAY_CHANNELS:
+        samples = samples.mean(axis=1, keepdims=True)
+    values = (samples.clip(-1.0, 1.0) * 32767).round().astype("<i2")
+    buffer = io.BytesIO()
+    with wave.open(buffer, "wb") as stream:
+        stream.setnchannels(max(int(samples.shape[1]), 1))
+        stream.setsampwidth(2)
+        stream.setframerate(int(audio["sample_rate"]))
+        stream.writeframes(values.tobytes())
+    data = buffer.getvalue()
+
+    return data
+
+
+def audio_response(data: ml_eda.Data, index: int) -> Response:
+    """
+    音声の 1 件の先頭の AUDIO_SECONDS 秒を, 再生用の WAVE で返す関数
+
+    Parameters
+    ----------
+    data: ml_eda.Data
+        音声のデータ
+    index: int
+        行の位置
+
+    Returns
+    ----------
+    response: Response
+        16 bit の PCM の WAVE
+
+    Raises
+    ----------
+    HTTPException
+        音声のデータでない場合と, 読めない場合は 422
+    """
+    # 先頭だけを読んで WAVE にする
+    if data.kind != "audio":
+        raise HTTPException(422, "音声のデータではありません")
+    response = Response(
+        wav_bytes(audio_clip(data, index)), media_type="audio/wav"
+    )
     response.headers["Cache-Control"] = "private, max-age=60"
 
     return response

@@ -255,6 +255,10 @@ export interface ItemsInfo {
   frames?: { min: number; median: number; max: number } | null
   depth?: { valid: number | null; confident: number | null }
   distance?: { min: number | null; max: number | null }
+  /** 音声の標本化の周波数 (Hz) とチャンネルの数ごとの件数, 長さ (秒) */
+  sample_rates?: Record<string, number>
+  channels?: Record<string, number>
+  duration?: { min: number; median: number; max: number; total: number } | null
 }
 
 /** 文を区切る単位 (文字, 語, 部分語) ごとの測った値 */
@@ -533,6 +537,19 @@ export interface CaptureItem {
   }
   intrinsics: Record<string, number | null>
   point_cloud: boolean
+}
+
+/** 音声の 1 件 (先頭の決まった秒まで). 波形はチャンネルを平均した振幅の区間ごとの最小と最大 */
+export interface AudioItem {
+  sample_rate: number
+  channels: number
+  /** 全体の長さ (秒. 分からなければ null) */
+  duration: number | null
+  /** 再生と波形に使う長さ (秒) */
+  seconds: number
+  /** 先頭だけを読んだか */
+  truncated: boolean
+  waveform: { min: number[]; max: number[] }
 }
 
 export interface PointsItem {
