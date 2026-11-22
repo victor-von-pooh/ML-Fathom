@@ -58,7 +58,7 @@ ML-Fathom の今の設計と決まりをまとめる. まだやっていない�
 | `GET /api/sources/{id}/profile` | 分析の結果 |
 | `GET /api/sources/{id}/rows` | 表の中身 (並べ替え, 絞り込み, ページ) |
 | `GET /api/sources/{id}/items/{index}?size=` | 1 件の中身 (画像, 点群, 音声のファイルは, 読み込んだディレクトリの中の場所だけを読む (`..` や絶対パス, 外を指すシンボリックリンクは 422). 画像は PNG で, size で縮める. 点群は有限の点の JSON (5 万点まで間引く). 多視点の撮影は各枚 (番号, 追跡, 画像と深度と信頼度の有無) と上から見たカメラの配置と点群の有無の JSON. 音声は周波数, チャンネル, 全体の長さ, 見せる長さ (先頭の 30 秒まで), 区間ごとの振幅の最小と最大の JSON) |
-| `GET /api/sources/{id}/items/{index}/audio` | 音声の先頭の 30 秒までを再生用の WAVE (16 bit の PCM. 3 チャンネル以上は平均して 1 チャンネルに) で返す. 音は ML-EDA の `read_audio` で先頭の秒だけを読む |
+| `GET /api/sources/{id}/items/{index}/audio` | 音声の先頭の 30 秒までを再生用の WAVE (16 bit の PCM. 3 チャンネル以上は平均して 1 チャンネルに) で返す. 音は ML-EDA の `load_item(index, seconds)` で先頭の秒だけを読む |
 | `GET /api/sources/{id}/items/{index}/frames/{frame}?layer=&size=` | 多視点の撮影の 1 枚の PNG (`layer` は image, depth, confidence. 深度は欠けを除いた 2 % 点から 98 % 点で 0 から 255 に, 信頼度は値のまま. 場所は ML-EDA が撮影のディレクトリの中に限ったものだけ) |
 | `GET /api/sources/{id}/items/{index}/cloud` | 多視点の撮影の点群の JSON (5 万点まで間引く) |
 | `GET, PUT /api/sources/{id}/recipe` | レシピ |

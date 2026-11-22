@@ -421,10 +421,13 @@ def test_item_place_stays_inside(tmp_path: Path, kind: str) -> None:
     }
     if kind == "link":
         (root / "link.wav").symlink_to(secret)
+    frame = pd.DataFrame({"path": [places[kind], "inside.wav"]})
     data = ml_eda.Data(
-        kind="audio",
-        frame=pd.DataFrame({"path": [places[kind], "inside.wav"]}),
-        source={"root": str(root)},
+        kind="audio", frame=frame, source={"root": str(root)},
+        item_loader=lambda i: ml_eda.read_audio(root / frame["path"].iloc[i]),
+        head_loader=lambda i, seconds: ml_eda.read_audio(
+            root / frame["path"].iloc[i], seconds
+        ),
     )
 
     # 外は 422 で読まない. 中はたどった後の場所
