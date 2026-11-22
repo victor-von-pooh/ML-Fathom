@@ -13,9 +13,20 @@ const READ_AS = new Set(['kind', 'time_column', 'text_column'])
 // 整数と null を値として読む設定 (それ以外は書いたとおりの文字)
 const NUMERIC = new Set(['header', 'sheet'])
 
-/** 保存した値を欄の文字にする (並びや辞書は JSON) */
-function toText(value: unknown): string {
+// 真偽を選ぶ設定 (空は読み込みの既定. 取り違えた文字を送らないように選ばせる)
+const BOOLEAN = new Set(['digest', 'follow_links'])
+
+// 真と読む文字 (ML-EDA の読み込みと同じ. 大文字と小文字, 前後の空白は区別しない)
+const TRUE_WORDS = new Set(['true', '1', 'yes', 'on'])
+
+/** 保存した値を欄の文字にする (並びや辞書は JSON. 真偽の設定は true か false) */
+function toText(key: string, value: unknown): string {
   if (value === undefined) return ''
+  if (BOOLEAN.has(key) && typeof value !== 'object') {
+    const word = String(value).trim().toLowerCase()
+    if (word === '') return ''
+    return value === true || TRUE_WORDS.has(word) ? 'true' : 'false'
+  }
   if (value === null) return 'null'
   if (typeof value === 'object') return JSON.stringify(value)
   return String(value)
@@ -24,6 +35,7 @@ function toText(value: unknown): string {
 /** 欄の文字を値にする (空は省略. 区切り文字の \t はタブ. sheets はシートの名前) */
 function toValue(key: string, text: string, previous: unknown, sheets: string[]): unknown {
   if (text === '') return undefined
+  if (BOOLEAN.has(key)) return text === 'true'
   if (typeof previous === 'object' && previous !== null) {
     try {
       return JSON.parse(text) as unknown
@@ -57,7 +69,7 @@ export function LoaderOptions({
   const id = useId()
   const box = useRef<HTMLDivElement>(null)
   const keys = Object.keys(loader?.options ?? {}).filter((key) => !READ_AS.has(key))
-  const initial = Object.fromEntries(keys.map((key) => [key, toText(source.options[key])]))
+  const initial = Object.fromEntries(keys.map((key) => [key, toText(key, source.options[key])]))
   const [open, setOpen] = useState(false)
   const [texts, setTexts] = useState<Record<string, string>>(initial)
   const close = () => {
@@ -126,14 +138,29 @@ export function LoaderOptions({
                 {key}
               </label>
               <span>
-                <input
-                  id={`${id}-${key}`}
-                  value={texts[key] ?? ''}
-                  autoFocus={index === 0}
-                  aria-describedby={`${id}-${key}-help`}
-                  onChange={(event) => setTexts({ ...texts, [key]: event.target.value })}
-                  className="h-8 w-full rounded border border-line bg-surface px-2 font-mono text-sm"
-                />
+                {BOOLEAN.has(key) ? (
+                  <select
+                    id={`${id}-${key}`}
+                    value={texts[key] ?? ''}
+                    autoFocus={index === 0}
+                    aria-describedby={`${id}-${key}-help`}
+                    onChange={(event) => setTexts({ ...texts, [key]: event.target.value })}
+                    className="h-8 w-full rounded border border-line bg-surface px-2 font-mono text-sm"
+                  >
+                    <option value="">既定</option>
+                    <option value="true">true</option>
+                    <option value="false">false</option>
+                  </select>
+                ) : (
+                  <input
+                    id={`${id}-${key}`}
+                    value={texts[key] ?? ''}
+                    autoFocus={index === 0}
+                    aria-describedby={`${id}-${key}-help`}
+                    onChange={(event) => setTexts({ ...texts, [key]: event.target.value })}
+                    className="h-8 w-full rounded border border-line bg-surface px-2 font-mono text-sm"
+                  />
+                )}
                 <span id={`${id}-${key}-help`} className="text-xs text-ink-3">
                   {loader?.options[key]}
                 </span>

@@ -2,6 +2,7 @@ import base64
 import io
 import wave
 from pathlib import Path
+from typing import Any
 
 import ml_eda
 import numpy as np
@@ -18,7 +19,6 @@ from ml_fathom.items import (
     audio_clip,
     audio_rate,
     audio_view,
-    item_place,
     wav_bytes,
 )
 
@@ -117,6 +117,39 @@ def positions(client: TestClient, sid: str) -> dict[str, int]:
     }
 
     return found
+
+
+def row_errors(client: TestClient, sid: str) -> dict[str, Any]:
+    """
+    登録したデータの表の error の列を, ファイルの名前から引く辞書を作る
+    関数
+
+    Parameters
+    ----------
+    client: TestClient
+        クライアント
+    sid: str
+        データの ID
+
+    Returns
+    ----------
+    errors: dict[str, Any]
+        ファイルの名前 (クラスのフォルダを除く) から error の値 (列が
+        無ければ空の辞書)
+    """
+    # 表の中身の path と error の列
+    rows = client.get(
+        f"/api/sources/{sid}/rows", params={"offset": 0, "limit": 50}
+    ).json()
+    names = [column["name"] for column in rows["columns"]]
+    errors: dict[str, Any] = {}
+    if "error" in names:
+        at, place = names.index("error"), names.index("path")
+        errors = {
+            str(row[place]).split("/")[-1]: row[at] for row in rows["rows"]
+        }
+
+    return errors
 
 
 def test_audio_items(client: TestClient, tmp_path: Path) -> None:
@@ -418,10 +451,11 @@ def test_wav_bytes_mixes_channels() -> None:
 
 
 @pytest.mark.parametrize("kind", ["outside", "absolute", "link"])
-def test_item_place_stays_inside(tmp_path: Path, kind: str) -> None:
+def test_audio_clip_stays_inside(tmp_path: Path, kind: str) -> None:
     """
     1 件の場所が .. や絶対パス, 外を指すシンボリックリンクで読み込んだ
-    ディレクトリの外に出る場合は 422 にすることを確かめる関数
+    ディレクトリの外に出る場合は, ML-EDA の load_item の理由で 422 に
+    し, 設定 follow_links が true ならリンクの先を読むことを確かめる関数
 
     Parameters
     ----------
@@ -446,29 +480,33 @@ def test_item_place_stays_inside(tmp_path: Path, kind: str) -> None:
         write_wave(root / "target.wav", 0.1, 1)
 
     # ML-EDA の読み込みの Data で, 外と絶対パスは表の場所を書き換える
-    # (1 件の読み込みは表の場所を見るので, ML-EDA だけなら外を読む)
     data = ml_eda.load_data(root)
     paths = data.frame["path"].tolist()
     target, inside = paths.index("target.wav"), paths.index("inside.wav")
     places = {"outside": "../secret.wav", "absolute": str(secret)}
     if kind in places:
         data.frame.loc[target, "path"] = places[kind]
-    outside = data.load_item(target, seconds=AUDIO_SECONDS)
-    assert len(outside["samples"]) == int(0.2 * RATE)
 
-    # 外は 422 で読まない. 中はたどった後の場所
+    # 外は理由 (設定 follow_links の案内) 付きの 422. 中は読む
     with pytest.raises(HTTPException) as caught:
         audio_clip(data, target)
     assert caught.value.status_code == 422
-    assert "外" in str(caught.value.detail)
-    assert item_place(data, inside) == (root / "inside.wav").resolve()
+    assert "follow_links" in str(caught.value.detail)
     assert audio_clip(data, inside)["sample_rate"] == RATE
+
+    # follow_links が true なら外を指すリンクの先も読む
+    if kind == "link":
+        followed = ml_eda.load_data(root, follow_links=True)
+        index = followed.frame["path"].tolist().index("target.wav")
+        clip = audio_clip(followed, index)
+        assert len(clip["samples"]) == int(0.2 * RATE)
 
 
 def test_outside_links_refused(client: TestClient, tmp_path: Path) -> None:
     """
     音声と画像のディレクトリの中の, 外を指すシンボリックリンクの件を,
-    中身と再生の API で 422 にすることを確かめる関数
+    既定では一覧に理由を出して中身と再生の API で 422 にし, 読み込みの
+    設定 follow_links を true にすると読むことを確かめる関数
 
     Parameters
     ----------
@@ -492,6 +530,7 @@ def test_outside_links_refused(client: TestClient, tmp_path: Path) -> None:
     sid = source["id"]
     found = positions(client, sid)
     link = found["link.wav"]
+    assert "follow_links" in str(row_errors(client, sid)["link.wav"])
     assert client.get(f"/api/sources/{sid}/items/{link}").status_code == 422
     assert client.get(
         f"/api/sources/{sid}/items/{link}/audio"
@@ -509,9 +548,35 @@ def test_outside_links_refused(client: TestClient, tmp_path: Path) -> None:
     source = client.post("/api/sources", json={"path": str(pictures)}).json()
     sid = source["id"]
     found = positions(client, sid)
-    assert client.get(
-        f"/api/sources/{sid}/items/{found['link.png']}"
-    ).status_code == 422
+    refused = client.get(f"/api/sources/{sid}/items/{found['link.png']}")
+    assert refused.status_code == 422
+    assert "follow_links" in refused.json()["detail"]
     assert client.get(
         f"/api/sources/{sid}/items/{found['inside.png']}"
     ).status_code == 200
+
+    # 一覧の表の error に理由が出る
+    assert "follow_links" in str(row_errors(client, sid)["link.png"])
+
+    # 設定 follow_links を true にして読み直すと, 一覧も中身も読む
+    changed = client.patch(
+        f"/api/sources/{sid}", json={"options": {"follow_links": True}}
+    )
+    assert changed.status_code == 200
+    assert changed.json()["options"] == {"follow_links": True}
+    assert not row_errors(client, sid).get("link.png")
+    assert client.get(
+        f"/api/sources/{sid}/items/{found['link.png']}"
+    ).status_code == 200
+
+    # 書き出しもリンクの先を読む (2 枚とも)
+    recipe = {
+        "split": {"method": "random", "valid": 0.0},
+        "item_steps": [{"op": "resize", "width": 2, "height": 2}],
+    }
+    exported = client.post(
+        f"/api/sources/{sid}/export", json={"recipe": recipe, "name": "links"}
+    )
+    assert exported.status_code == 200, exported.text
+    splits = exported.json()["info"]["splits"]
+    assert sum(split["shape"][0] for split in splits.values()) == 2

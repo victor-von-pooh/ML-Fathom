@@ -41,10 +41,34 @@ function PointCloudItem({ sourceId, index }: { sourceId: string; index: number }
   )
 }
 
-/** 一覧の 1 枚の画像 (読めなければ代わりの表示. 小さな画像は画素をぼかさない) */
-function Thumbnail({ src, alt }: { src: string; alt: string }) {
+/** 表の error の値 (読めない理由. 無ければ null) */
+function reasonOf(value: unknown): string | null {
+  return typeof value === 'string' && value !== '' ? value : null
+}
+
+/** 読めない件の理由 (一覧の 1 件の下に. 長い理由は 2 行で切り, 全文は title に) */
+function Reason({ reason }: { reason: string }) {
+  return (
+    <span className="line-clamp-2 text-xs text-critical-text" title={reason}>
+      読めません: {reason}
+    </span>
+  )
+}
+
+/**
+ * 一覧の 1 枚の画像 (表に読めない理由があれば読まずに理由を, 読めなければ代わりの表示.
+ * 小さな画像は画素をぼかさない)
+ */
+function Thumbnail({ src, alt, reason }: { src: string; alt: string; reason: string | null }) {
   const [failed, setFailed] = useState(false)
   const [small, setSmall] = useState(false)
+  if (reason) {
+    return (
+      <div className="flex aspect-square w-full items-center justify-center rounded bg-surface-2 p-1 text-center">
+        <Reason reason={reason} />
+      </div>
+    )
+  }
   if (failed) {
     return (
       <div className="flex aspect-square w-full items-center justify-center rounded bg-surface-2 text-xs text-ink-3">
@@ -217,6 +241,7 @@ export function SamplesTab({ source, profile }: { source: Source; profile: Profi
                   <Thumbnail
                     src={`${api.itemUrl(source.id, index)}?size=${THUMBNAIL}`}
                     alt={`${path}${label ? ` (${label})` : ''}`}
+                    reason={reasonOf(valueOf(row, 'error'))}
                   />
                   <figcaption className="mt-1 truncate text-xs" title={path}>
                     {label ? <span className="font-semibold">{String(label)} </span> : null}
@@ -261,6 +286,7 @@ export function SamplesTab({ source, profile }: { source: Source; profile: Profi
             {data.rows.map((row, at) => {
               const index = data.index[at]!
               const label = valueOf(row, 'label')
+              const reason = reasonOf(valueOf(row, 'error'))
               return (
                 <li key={index}>
                   <button
@@ -276,8 +302,8 @@ export function SamplesTab({ source, profile }: { source: Source; profile: Profi
                     <span className="text-xs text-ink-3">
                       {label !== undefined && `${String(label)} · `}点{' '}
                       {formatNumber(valueOf(row, 'points'))}
-                      {valueOf(row, 'error') ? ' · 読めません' : ''}
                     </span>
+                    {reason && <Reason reason={reason} />}
                   </button>
                 </li>
               )
@@ -302,6 +328,7 @@ export function SamplesTab({ source, profile }: { source: Source; profile: Profi
               const index = data.index[at]!
               const label = valueOf(row, 'label')
               const duration = valueOf(row, 'duration')
+              const reason = reasonOf(valueOf(row, 'error'))
               return (
                 <li key={index}>
                   <button
@@ -316,12 +343,12 @@ export function SamplesTab({ source, profile }: { source: Source; profile: Profi
                     <span className="truncate font-mono">{String(valueOf(row, 'path'))}</span>
                     <span className="text-xs text-ink-3">
                       {label !== undefined && label !== null && `${String(label)} · `}
-                      {valueOf(row, 'error')
-                        ? '読めません'
-                        : `${formatNumber(valueOf(row, 'sample_rate'))} Hz · ${formatNumber(
-                            valueOf(row, 'channels'),
-                          )} ch · ${formatSeconds(typeof duration === 'number' ? duration : null)}`}
+                      {!reason &&
+                        `${formatNumber(valueOf(row, 'sample_rate'))} Hz · ${formatNumber(
+                          valueOf(row, 'channels'),
+                        )} ch · ${formatSeconds(typeof duration === 'number' ? duration : null)}`}
                     </span>
+                    {reason && <Reason reason={reason} />}
                   </button>
                 </li>
               )
@@ -348,6 +375,7 @@ export function SamplesTab({ source, profile }: { source: Source; profile: Profi
               const index = data.index[at]!
               const confident = valueOf(row, 'depth_confident')
               const gap = valueOf(row, 'view_gap')
+              const reason = reasonOf(valueOf(row, 'error'))
               return (
                 <li key={index}>
                   <button
@@ -361,13 +389,12 @@ export function SamplesTab({ source, profile }: { source: Source; profile: Profi
                   >
                     <span className="truncate font-mono">{String(valueOf(row, 'path'))}</span>
                     <span className="text-xs text-ink-3">
-                      {valueOf(row, 'error')
-                        ? '読めません'
-                        : `${formatNumber(valueOf(row, 'frames'))} 枚`}
+                      {!reason && `${formatNumber(valueOf(row, 'frames'))} 枚`}
                       {typeof confident === 'number' &&
                         ` · 信頼できる深度 ${(confident * 100).toFixed(1)} %`}
                       {typeof gap === 'number' && ` · 隙間 ${gap.toFixed(0)} 度`}
                     </span>
+                    {reason && <Reason reason={reason} />}
                   </button>
                 </li>
               )

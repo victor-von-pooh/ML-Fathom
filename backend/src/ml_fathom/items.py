@@ -55,8 +55,8 @@ def item_response(
     Raises
     ----------
     HTTPException
-        中身を持たない種類か, 読めない場合と, ファイルが読み込んだ
-        ディレクトリの外の場合は 422
+        中身を持たない種類か, 読めない場合と, 読み込んだディレクトリの
+        外を指すリンクの場合 (ML-EDA の load_item の誤り) は 422
     """
     # 音声は先頭の決まった長さだけを読む (長い録音で大きな音を送らないため)
     response: Response
@@ -67,11 +67,8 @@ def item_response(
         response.headers["Cache-Control"] = "private, max-age=60"
         return response
 
-    # ファイルを 1 件ずつ読む種類は, 読み込んだディレクトリの中に限る
-    if data.kind in ("image", "pointcloud"):
-        item_place(data, index)
-
-    # 種類ごとに形を変える
+    # 種類ごとに形を変える (外を指すリンクは load_item が理由付きの
+    # ValueError にする. 設定 follow_links が true なら読む)
     try:
         item = data.load_item(index)
     except ValueError as error:
@@ -98,43 +95,6 @@ def item_response(
     return response
 
 
-def item_place(data: ml_eda.Data, index: int) -> Path:
-    """
-    1 件のファイルの場所を, 読み込んだディレクトリの中に限って返す関数
-
-    Parameters
-    ----------
-    data: ml_eda.Data
-        画像, 点群, 音声のデータ (読み込みが source に root を書いたもの)
-    index: int
-        行の位置
-
-    Returns
-    ----------
-    place: Path
-        シンボリックリンクと .. をたどった後の場所
-
-    Raises
-    ----------
-    HTTPException
-        読み込んだ場所か path の列が無い場合と, 場所が読み込んだ
-        ディレクトリの外 (.. や絶対パス, 外を指すシンボリックリンク) の
-        場合は 422
-    """
-    # 根と行の場所をたどった後で比べる (絶対パスは根を無視して外に出る)
-    root = data.source.get("root")
-    if not root or "path" not in data.frame.columns:
-        raise HTTPException(422, "1 件のファイルの場所がありません")
-    base = Path(str(root)).resolve()
-    place = (base / str(data.frame["path"].iloc[index])).resolve()
-    if not place.is_relative_to(base):
-        raise HTTPException(
-            422, "読み込んだディレクトリの外のファイルは読みません"
-        )
-
-    return place
-
-
 def audio_clip(data: ml_eda.Data, index: int) -> dict[str, Any]:
     """
     音声の 1 件の先頭の AUDIO_SECONDS 秒を読む関数
@@ -155,12 +115,14 @@ def audio_clip(data: ml_eda.Data, index: int) -> dict[str, Any]:
     Raises
     ----------
     HTTPException
-        場所が無いか読み込んだディレクトリの外の場合と, 読めない場合は 422
+        読み込んだディレクトリの外を指すリンクの場合 (ML-EDA の load_item
+        の誤り) と, 読めない場合は 422
     """
-    # 場所は読み込んだディレクトリの中に限り, 先頭の秒だけを読む
-    item_place(data, index)
+    # 先頭の秒だけを読む (外を指すリンクの理由はそのまま返す)
     try:
         audio: dict[str, Any] = data.load_item(index, seconds=AUDIO_SECONDS)
+    except ValueError as error:
+        raise HTTPException(422, str(error)) from error
     except Exception as error:
         # 壊れたファイルや soundfile の無い形式など, 読めない理由は様々
         raise HTTPException(422, f"読めませんでした: {error}") from error
