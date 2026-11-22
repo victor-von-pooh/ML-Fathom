@@ -239,7 +239,8 @@ export function findDecisions({
 
   // 分割の方法
   const split = (method: string): Recipe => ({ ...recipe, split: { ...recipe.split, method } })
-  if (kind === 'timeseries' && recipe.split.method !== 'time') {
+  // グループと時刻の組も時刻の順に分ける (後から現れた相手を検証用に) ので勧めない
+  if (kind === 'timeseries' && !['time', 'group_time'].includes(recipe.split.method)) {
     found.push({
       id: 'split:time',
       title: '時系列の分割が時刻の順ではありません',

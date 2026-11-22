@@ -46,6 +46,28 @@ pd.DataFrame({
 }).to_csv(sys.argv[1], index=False)
 PY
 
+# 客ごとの注文の時系列 (グループと時刻の組の分割, グループの層化を確かめる).
+# 客は 40 人で, 現れる日をずらす. amount はほぼ全て違う値
+uv run python - "$WORK/orders.csv" <<'PY'
+import sys
+
+import numpy as np
+import pandas as pd
+
+rng = np.random.default_rng(3)
+rows = []
+for customer in range(40):
+    start = pd.Timestamp("2024-01-01") + pd.Timedelta(days=customer)
+    for visit in range(4):
+        rows.append({
+            "customer": f"c{customer:02d}",
+            "date": (start + pd.Timedelta(days=visit * 7)).strftime("%Y-%m-%d"),
+            "amount": round(float(rng.normal(100, 30)), 2),
+            "returned": "yes" if customer % 4 == 0 else "no",
+        })
+pd.DataFrame(rows).to_csv(sys.argv[1], index=False)
+PY
+
 # 目的の列が一部の行にだけある表 (正解の欠けた行を unlabeled の分割に残す)
 uv run python - "$WORK/sensors.csv" <<'PY'
 import sys

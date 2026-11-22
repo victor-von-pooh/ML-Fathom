@@ -91,6 +91,73 @@ test('無作為の分割でもグループの列を選ぶと, 分割をまたぐ
   await expect(page.getByRole('combobox', { name: 'グループの列', exact: true })).toBeVisible()
 })
 
+test('グループと時刻の組とグループの層化で分け, 使えないタスクと目的の値では誤りを出す', async ({
+  page,
+}) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'データを追加' }).first().click()
+  await page.getByLabel('ディレクトリのパス').fill(path.dirname(TABLE))
+  await page.getByRole('button', { name: '移動' }).click()
+  await page.getByRole('button', { name: /orders\.csv/ }).click()
+  await page.getByRole('button', { name: '追加', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'orders.csv' })).toBeVisible()
+  // 日付の列を時刻にして時系列として読む
+  await page
+    .getByRole('combobox', { name: '読み方' })
+    .selectOption({ label: '時系列 (時刻: date)' })
+  await page.getByRole('tab', { name: '前処理と書き出し' }).click()
+  const split = page.getByRole('combobox', { name: '分割', exact: true })
+  await expect(split).toBeVisible({ timeout: 20_000 })
+
+  // グループと時刻の組: グループの列は要る欄 (任意でない). 選ぶと後から現れた客を検証用に分ける
+  await split.selectOption('group_time')
+  const group = page.getByRole('combobox', { name: 'グループの列', exact: true })
+  await expect(group).toBeVisible()
+  await group.selectOption('customer')
+  await expect(page.getByText(/分割: train \d+ 行, valid \d+ 行/)).toBeVisible({ timeout: 20_000 })
+  // 時刻の順に分けるので, 時刻の順を勧めない
+  await expect(page.getByText('時系列の分割が時刻の順ではありません')).toHaveCount(0)
+
+  // グループの層化: 目的の列が無ければ ML-EDA の誤りが出る
+  await split.selectOption('stratified_group')
+  await expect(page.getByText(/目的の列が要ります/)).toBeVisible({ timeout: 20_000 })
+
+  // 分類なら分けられる
+  await page.getByRole('combobox', { name: '目的の列' }).selectOption('returned')
+  await page.getByRole('combobox', { name: 'タスク' }).selectOption('classification')
+  await expect(page.getByText(/分割: train \d+ 行, valid \d+ 行/)).toBeVisible({ timeout: 20_000 })
+
+  // 回帰にすると, 選択肢は選べなくなり, 残った指定には誤りを出す
+  await page.getByRole('combobox', { name: '目的の列' }).selectOption('amount')
+  await page.getByRole('combobox', { name: 'タスク' }).selectOption('regression')
+  await expect(
+    page.getByRole('alert').filter({ hasText: /回帰と時系列の予測では使えません/ }),
+  ).toBeVisible()
+  await expect(page.getByText(/stratified_group/).first()).toBeVisible({ timeout: 20_000 })
+  // 欄と誤りの文は左のカードの中に収まる (長い選択肢でもはみ出さない)
+  const card = page
+    .locator('section')
+    .filter({ has: page.getByRole('heading', { name: '目的と分割' }) })
+  const cardBox = (await card.boundingBox())!
+  for (const target of [split, page.getByRole('combobox', { name: 'グループの列', exact: true })]) {
+    const box = (await target.boundingBox())!
+    expect(box.x + box.width).toBeLessThanOrEqual(cardBox.x + cardBox.width)
+  }
+  const alertBox = (await page
+    .getByRole('alert')
+    .filter({ hasText: /回帰と時系列の予測では使えません/ })
+    .boundingBox())!
+  expect(alertBox.x + alertBox.width).toBeLessThanOrEqual(cardBox.x + cardBox.width)
+  await split.selectOption('group')
+  await expect(split.locator('option[value="stratified_group"]')).toBeDisabled()
+
+  // タスクを決めないと選べるが, 目的の値がほぼ全て違えば ML-EDA の誤りが出る
+  await page.getByRole('combobox', { name: 'タスク' }).selectOption('none')
+  await expect(split.locator('option[value="stratified_group"]')).toBeEnabled()
+  await split.selectOption('stratified_group')
+  await expect(page.getByText(/値がほぼ全て違う/)).toBeVisible({ timeout: 20_000 })
+})
+
 test('正解の欠けた行を unlabeled の分割に残し, 保存して読み直す', async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'データを追加' }).first().click()
