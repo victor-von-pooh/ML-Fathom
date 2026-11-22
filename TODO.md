@@ -26,7 +26,7 @@
 - つながり: ML-EDA の音声の読み込み (種類 `audio`)
 
 ### 音声のレシピのタブ
-- 何を: レシピのタブで, 音声を中身の種類として扱う (`RecipeTab.tsx` の中身の種類の一覧と `decisions.ts` の `withAutoItems` に `audio` を足す). ML-EDA の音声の中身の手順 (`resample`, `mix_channels`, `fix_length`) を選べるようにし, 書き出しまで通す
+- 何を: レシピのタブで, 音声を中身の種類として扱う (`RecipeTab.tsx` の中身の種類の一覧 (`media`), `decisions.ts` の中身の種類の一覧, `suggest.ts` の `autoItemSteps` と `unreadableFilter` に `audio` を足す). ML-EDA の音声の中身の手順 (`resample`, `mix_channels`, `fix_length`) を選べるようにし, 書き出しまで通す
 - なぜ: ML-EDA は音声の中身の手順と書き出しを持つが, 今の画面は音声を表として扱い, 中身の手順の欄が出ないため
 - 終わりの条件: 音声のデータで中身の手順を画面で書き, 書き出したデータセットを読める. テストがある
 - つながり: ML-EDA の音声の中身の手順と書き出し. このリポジトリの「音声のデータを画面で見る」の後
