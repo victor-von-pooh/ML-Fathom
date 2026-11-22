@@ -58,6 +58,8 @@ interface CommonFields {
   name: string
   overwrite: boolean
   method: '' | 'random' | 'group' | 'none'
+  /** 正解の無い件を除くか, unlabeled の分割に書くか (ML-EDA の split.unlabeled) */
+  unlabeled: 'drop' | 'keep'
   valid: string
   test: string
   seed: string
@@ -71,6 +73,7 @@ const INITIAL: CommonFields = {
   name: '',
   overwrite: false,
   method: '',
+  unlabeled: 'drop',
   valid: '0.2',
   test: '0',
   seed: '0',
@@ -97,6 +100,7 @@ function linkedFields(settings: PairSettings): CommonFields {
   return {
     ...INITIAL,
     method: split.method ?? '',
+    unlabeled: split.unlabeled === 'keep' ? 'keep' : 'drop',
     valid: numberText(split.valid, INITIAL.valid),
     test: numberText(split.test, INITIAL.test),
     seed: numberText(split.seed, INITIAL.seed),
@@ -168,6 +172,8 @@ function commonBody(
     overwrite: fields.overwrite,
     split: {
       ...(fields.method ? { method: fields.method } : {}),
+      // 除く (drop) は既定と同じなので渡さない
+      ...(fields.unlabeled === 'keep' ? { unlabeled: 'keep' as const } : {}),
       valid: valid!,
       test: test!,
       seed,
@@ -203,11 +209,14 @@ function CommonCard({
   fields,
   setFields,
   groupHint,
+  unlabeledHint,
 }: {
   prefix: string
   fields: CommonFields
   setFields: (fields: CommonFields) => void
   groupHint: string
+  /** 正解の無い件の例 (領域の無い画像, 点群の無い撮影) */
+  unlabeledHint: string
 }) {
   const set = <K extends keyof CommonFields>(key: K, value: CommonFields[K]) =>
     setFields({ ...fields, [key]: value })
@@ -229,6 +238,26 @@ function CommonCard({
               <option value="none">分けない (全て学習用)</option>
             </select>
           </Row>
+          <Row id={`${prefix}-unlabeled`} label="正解の無い件">
+            <select
+              id={`${prefix}-unlabeled`}
+              value={fields.unlabeled}
+              aria-describedby={`${prefix}-unlabeled-note`}
+              onChange={(event) =>
+                set('unlabeled', event.target.value as CommonFields['unlabeled'])
+              }
+              className="h-8 rounded border border-line bg-surface px-2"
+            >
+              <option value="drop">除く (数と例を書き出しの注意に書く)</option>
+              <option value="keep">unlabeled の分割に書く</option>
+            </select>
+          </Row>
+          <p id={`${prefix}-unlabeled-note`} className="col-start-2 text-xs text-ink-3">
+            正解の無い件は{unlabeledHint}です.{' '}
+            {fields.unlabeled === 'keep'
+              ? '除かずに unlabeled という名前の分割に書きます (正解の項目は空). 半教師ありの学習や推論の確かめに使えます. 正解の付いた件の分割と中身は除く場合と同じで, 分割の割合とグループの確かめにも入りません.'
+              : '書き出さず, 数と例を書き出しの注意に書きます.'}
+          </p>
           <Row id={`${prefix}-valid`} label="検証用の割合">
             <input
               id={`${prefix}-valid`}
@@ -668,6 +697,7 @@ function ImageMasksForm({ linked }: { linked?: Linked }) {
           fields={fields}
           setFields={setFields}
           groupHint={'sample_000,site_a\nsample_001,site_b'}
+          unlabeledHint="領域の無い画像"
         />
       </div>
       <div>
@@ -782,6 +812,7 @@ function CaptureCloudsForm({ linked }: { linked?: Linked }) {
           fields={fields}
           setFields={setFields}
           groupHint={'scan_001,object_a\nscan_002,object_a'}
+          unlabeledHint="点群の無い撮影"
         />
       </div>
       <div>

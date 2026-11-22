@@ -431,7 +431,14 @@ export type DatasetSummary = TableDataset | ItemsDataset | UnreadableDataset
 export interface PairExportBase {
   name: string
   overwrite: boolean
-  split: { method?: 'random' | 'group' | 'none'; valid: number; test: number; seed: number }
+  split: {
+    method?: 'random' | 'group' | 'none'
+    /** 正解の無い件を unlabeled の分割に書くなら keep (除くなら省く) */
+    unlabeled?: 'drop' | 'keep'
+    valid: number
+    test: number
+    seed: number
+  }
   groups?: Record<string, string>
   origin: PairOrigin
   /** 項目の名前から中身の手順の並び (渡すと版 3 で書き出す) */
@@ -462,7 +469,13 @@ export interface PairSettings {
   function: 'export_image_masks' | 'export_capture_clouds'
   inputs: string | null
   targets: string | null
-  split: { method?: 'random' | 'group' | 'none'; valid?: number; test?: number; seed?: number }
+  split: {
+    method?: 'random' | 'group' | 'none'
+    unlabeled?: 'drop' | 'keep'
+    valid?: number
+    test?: number
+    seed?: number
+  }
   groups: Record<string, string> | null
   origin: Partial<PairOrigin>
   options: {
