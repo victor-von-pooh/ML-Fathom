@@ -383,6 +383,8 @@ test('正解の無い件は既定で除き, unlabeled の分割に書くこと�
   await form.getByLabel('データセットの名前').fill('partial_keep')
   await button.click()
   await expect(page.getByText(/unlabeled \(正解なし\) 1 件/)).toBeVisible({ timeout: 20_000 })
+  // 学習のスクリプトでの使い方に, 正解の無い件の分割の読み方が足される
+  await expect(page.getByText(/unlabeled = dataset\.split\("unlabeled"\)/)).toBeVisible()
 })
 
 test('画像と領域の組を版 2 で書き出し, 注意と使い方を見て一覧で確かめる', async ({ page }) => {
@@ -614,4 +616,31 @@ test('領域の問題の設定から始め, 下書きのままプロジェクト
     .filter({ hasText: '問題の設定 領域のプロジェクト からプロジェクトへ書き出したもの' })
   await expect(card.getByText('版 3 · ファイルの組')).toBeVisible()
   await expect(card.getByText('プロジェクト', { exact: true }).first()).toBeVisible()
+})
+
+test('表として読んだデータで時刻の分割を選ぶと, 日時の列を時刻にする読み方を案内する', async ({
+  page,
+}) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'データを追加' }).first().click()
+  await page.getByLabel('ディレクトリのパス').fill(path.dirname(TABLE))
+  await page.getByRole('button', { name: '移動' }).click()
+  await page.getByRole('button', { name: /sozai\.csv/ }).click()
+  await page.getByRole('button', { name: '追加', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'sozai.csv' }).first()).toBeVisible()
+  const readAs = page.getByRole('combobox', { name: '読み方' })
+  await readAs.selectOption('table')
+  await expect(readAs).toHaveValue('table', { timeout: 20_000 })
+
+  // 時刻の順を選ぶと, 日時に見える列 (date) を時刻にする読み方を案内する
+  await page.getByRole('tab', { name: '前処理と書き出し' }).click()
+  const split = page.getByRole('combobox', { name: '分割', exact: true })
+  await split.selectOption('time')
+  const hint = page.getByText(/「読み方」を「時系列 \(時刻: date\)」にすると使えます/)
+  await expect(hint).toBeVisible({ timeout: 20_000 })
+  await expect(page.getByText(/日時の列が要ります/).first()).toBeVisible({ timeout: 20_000 })
+
+  // 他の分割では出さない
+  await split.selectOption('random')
+  await expect(hint).toHaveCount(0)
 })

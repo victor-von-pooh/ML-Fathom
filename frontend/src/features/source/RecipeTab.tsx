@@ -22,6 +22,7 @@ import { findDecisions, withAutoItems } from '../../lib/decisions'
 import {
   canKeepUnlabeled,
   fitUnlabeled,
+  looksLikeDatetime,
   splitLabel,
   untargetedDraft,
   usageSnippet,
@@ -402,6 +403,12 @@ export function RecipeTab({
   // 予測では使えない (ML-EDA の load_recipe が止める)
   const grouped = ['group', 'group_time', 'stratified_group'].includes(recipe.split.method)
   const stratifiable = !['regression', 'forecasting'].includes(recipe.task)
+  // 時刻で分ける分割を, 時刻の列の無い読み方 (表) で選んだか. 日時の型の列があれば読み方を案内する
+  const timeSplit =
+    ['time', 'group_time'].includes(recipe.split.method) && !profile.overview.roles?.time
+  const datetimes = Object.entries(profile.columns)
+    .filter(([, info]) => looksLikeDatetime(info))
+    .map(([name]) => name)
   // 分割の後の気付きは重要度つきで出し, 同じ文は注意の並びから除く
   const findings = result?.findings ?? []
   const notes = (result?.notes ?? []).filter(
@@ -489,6 +496,13 @@ export function RecipeTab({
               <p role="alert" className="col-start-2 text-xs text-critical-text">
                 グループの層化は, 回帰と時系列の予測では使えません (目的の値で層を作れないため).
                 グループごとかグループと時刻の組を選ぶか, タスクを分類にしてください
+              </p>
+            )}
+            {/* 表として読むと日時の列を時刻に使わないので, 時刻で分けるなら読み方を案内する */}
+            {timeSplit && datetimes.length > 0 && (
+              <p className="col-start-2 text-xs text-warning-text">
+                時刻で分けるには日時の列が要ります. 日時に見える列 ({datetimes.join(', ')})
+                があるので, 上の「読み方」を「時系列 (時刻: {datetimes[0]})」にすると使えます
               </p>
             )}
             {(['valid', 'test'] as const).map((key) => (
