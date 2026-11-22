@@ -2,13 +2,21 @@ import io
 import wave
 from pathlib import Path
 
+import ml_eda
 import numpy as np
 import pandas as pd
 import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from ml_fathom.app import create_app
-from ml_fathom.items import AUDIO_SECONDS, WAVEFORM_BINS, wav_bytes
+from ml_fathom.items import (
+    AUDIO_SECONDS,
+    WAVEFORM_BINS,
+    audio_clip,
+    item_place,
+    wav_bytes,
+)
 
 # テストで使うトークン
 TOKEN = "test-token"
@@ -227,3 +235,131 @@ def test_wav_bytes_clips() -> None:
     with wave.open(io.BytesIO(data)) as stream:
         values = np.frombuffer(stream.readframes(4), dtype="<i2")
     assert values.tolist() == [32767, -32767, 0, 16384]
+
+
+def test_wav_bytes_mixes_channels() -> None:
+    """
+    再生用の WAVE で, 3 チャンネル以上を平均して 1 チャンネルにし,
+    2 チャンネルまではそのまま残すことを確かめる関数
+
+    Parameters
+    ----------
+    None
+
+    Returns
+    ----------
+    None
+    """
+    # 4 チャンネルは標本の組ごとの平均
+    samples = np.array(
+        [[0.4, 0.2, 0.0, -0.2], [-1.0, -1.0, 1.0, 0.2]], dtype=np.float32
+    )
+    data = wav_bytes({"samples": samples, "sample_rate": RATE})
+    with wave.open(io.BytesIO(data)) as stream:
+        assert stream.getnchannels() == 1
+        values = np.frombuffer(stream.readframes(2), dtype="<i2")
+    expected = np.round(samples.mean(axis=1) * 32767).astype(int)
+    assert values.tolist() == expected.tolist()
+
+    # 2 チャンネルは左右を残す
+    data = wav_bytes({"samples": samples[:, :2], "sample_rate": RATE})
+    with wave.open(io.BytesIO(data)) as stream:
+        assert stream.getnchannels() == 2
+        values = np.frombuffer(stream.readframes(2), dtype="<i2")
+    expected = np.round(samples[:, :2] * 32767).astype(int).ravel()
+    assert values.tolist() == expected.tolist()
+
+
+@pytest.mark.parametrize("kind", ["outside", "absolute", "link"])
+def test_item_place_stays_inside(tmp_path: Path, kind: str) -> None:
+    """
+    1 件の場所が .. や絶対パス, 外を指すシンボリックリンクで読み込んだ
+    ディレクトリの外に出る場合は 422 にすることを確かめる関数
+
+    Parameters
+    ----------
+    tmp_path: Path
+        pytest が用意する一時ディレクトリ
+    kind: str
+        outside (..), absolute (絶対パス), link (外を指すシンボリック
+        リンク)
+
+    Returns
+    ----------
+    None
+    """
+    # 置き場の外の音声と, 置き場の中の音声
+    root = tmp_path / "sounds"
+    secret = write_wave(tmp_path / "secret.wav", 0.1, 1)
+    write_wave(root / "inside.wav", 0.1, 1)
+    places = {
+        "outside": "../secret.wav", "absolute": str(secret),
+        "link": "link.wav",
+    }
+    if kind == "link":
+        (root / "link.wav").symlink_to(secret)
+    data = ml_eda.Data(
+        kind="audio",
+        frame=pd.DataFrame({"path": [places[kind], "inside.wav"]}),
+        source={"root": str(root)},
+    )
+
+    # 外は 422 で読まない. 中はたどった後の場所
+    with pytest.raises(HTTPException) as caught:
+        audio_clip(data, 0)
+    assert caught.value.status_code == 422
+    assert "外" in str(caught.value.detail)
+    assert item_place(data, 1) == (root / "inside.wav").resolve()
+    assert audio_clip(data, 1)["sample_rate"] == RATE
+
+
+def test_outside_links_refused(client: TestClient, tmp_path: Path) -> None:
+    """
+    音声と画像のディレクトリの中の, 外を指すシンボリックリンクの件を,
+    中身と再生の API で 422 にすることを確かめる関数
+
+    Parameters
+    ----------
+    client: TestClient
+        クライアント
+    tmp_path: Path
+        pytest が用意する一時ディレクトリ
+
+    Returns
+    ----------
+    None
+    """
+    image = pytest.importorskip("PIL.Image")
+
+    # 音声: 中の 1 件と, 外の音声を指すリンク
+    root = tmp_path / "sounds"
+    write_wave(root / "inside.wav", 0.1, 1)
+    secret = write_wave(tmp_path / "secret.wav", 0.1, 1)
+    (root / "link.wav").symlink_to(secret)
+    source = client.post("/api/sources", json={"path": str(root)}).json()
+    sid = source["id"]
+    found = positions(client, sid)
+    link = found["link.wav"]
+    assert client.get(f"/api/sources/{sid}/items/{link}").status_code == 422
+    assert client.get(
+        f"/api/sources/{sid}/items/{link}/audio"
+    ).status_code == 422
+    inside = found["inside.wav"]
+    assert client.get(f"/api/sources/{sid}/items/{inside}").status_code == 200
+
+    # 画像: 外の画像を指すリンク
+    pictures = tmp_path / "pictures"
+    pictures.mkdir()
+    pixels = np.zeros((4, 4, 3), dtype=np.uint8)
+    image.fromarray(pixels).save(pictures / "inside.png")
+    image.fromarray(pixels).save(tmp_path / "secret.png")
+    (pictures / "link.png").symlink_to(tmp_path / "secret.png")
+    source = client.post("/api/sources", json={"path": str(pictures)}).json()
+    sid = source["id"]
+    found = positions(client, sid)
+    assert client.get(
+        f"/api/sources/{sid}/items/{found['link.png']}"
+    ).status_code == 422
+    assert client.get(
+        f"/api/sources/{sid}/items/{found['inside.png']}"
+    ).status_code == 200

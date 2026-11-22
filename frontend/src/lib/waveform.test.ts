@@ -30,10 +30,13 @@ test('waveformPath は最小と最大が同じでも幅のある線にし, 空�
   expect(waveformPath([], [])).toBe('')
 })
 
-test('formatSeconds は 60 秒を境に形を変える', () => {
+test('formatSeconds は丸めた後の 10 秒と 60 秒を境に形を変える', () => {
   expect(formatSeconds(1.234)).toBe('1.23 秒')
   expect(formatSeconds(12.34)).toBe('12.3 秒')
   expect(formatSeconds(125)).toBe('2 分 5 秒')
   expect(formatSeconds(119.6)).toBe('2 分 0 秒')
+  expect(formatSeconds(59.96)).toBe('1 分 0 秒')
+  expect(formatSeconds(59.94)).toBe('59.9 秒')
+  expect(formatSeconds(9.996)).toBe('10.0 秒')
   expect(formatSeconds(null)).toBe('–')
 })

@@ -28,7 +28,9 @@ export function waveformPath(low: number[], high: number[]): string {
 /** 秒を, 60 秒未満は「1.25 秒」, それ以上は「2 分 5 秒」の形にする */
 export function formatSeconds(seconds: number | null | undefined): string {
   if (seconds === null || seconds === undefined || !Number.isFinite(seconds)) return '–'
-  if (seconds < 60) return `${seconds.toFixed(seconds < 10 ? 2 : 1)} 秒`
+  // 丸めた後の値で桁と形を選ぶ (9.996 秒は 10.0 秒, 59.96 秒は 1 分 0 秒)
+  if (Number(seconds.toFixed(2)) < 10) return `${seconds.toFixed(2)} 秒`
+  if (Number(seconds.toFixed(1)) < 60) return `${seconds.toFixed(1)} 秒`
   const whole = Math.round(seconds)
   return `${Math.floor(whole / 60)} 分 ${whole % 60} 秒`
 }

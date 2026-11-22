@@ -50,7 +50,8 @@ def item_response(
     Raises
     ----------
     HTTPException
-        中身を持たない種類か, 読めない場合は 422
+        中身を持たない種類か, 読めない場合と, ファイルが読み込んだ
+        ディレクトリの外の場合は 422
     """
     # 音声は先頭の決まった長さだけを読む (load_item は全てを読むため)
     response: Response
@@ -60,6 +61,10 @@ def item_response(
         )
         response.headers["Cache-Control"] = "private, max-age=60"
         return response
+
+    # ファイルを 1 件ずつ読む種類は, 読み込んだディレクトリの中に限る
+    if data.kind in ("image", "pointcloud"):
+        item_place(data, index)
 
     # 種類ごとに形を変える
     try:
@@ -88,6 +93,43 @@ def item_response(
     return response
 
 
+def item_place(data: ml_eda.Data, index: int) -> Path:
+    """
+    1 件のファイルの場所を, 読み込んだディレクトリの中に限って返す関数
+
+    Parameters
+    ----------
+    data: ml_eda.Data
+        画像, 点群, 音声のデータ (読み込みが source に root を書いたもの)
+    index: int
+        行の位置
+
+    Returns
+    ----------
+    place: Path
+        シンボリックリンクと .. をたどった後の場所
+
+    Raises
+    ----------
+    HTTPException
+        読み込んだ場所か path の列が無い場合と, 場所が読み込んだ
+        ディレクトリの外 (.. や絶対パス, 外を指すシンボリックリンク) の
+        場合は 422
+    """
+    # 根と行の場所をたどった後で比べる (絶対パスは根を無視して外に出る)
+    root = data.source.get("root")
+    if not root or "path" not in data.frame.columns:
+        raise HTTPException(422, "1 件のファイルの場所がありません")
+    base = Path(str(root)).resolve()
+    place = (base / str(data.frame["path"].iloc[index])).resolve()
+    if not place.is_relative_to(base):
+        raise HTTPException(
+            422, "読み込んだディレクトリの外のファイルは読みません"
+        )
+
+    return place
+
+
 def audio_clip(data: ml_eda.Data, index: int) -> dict[str, Any]:
     """
     音声の 1 件の先頭の AUDIO_SECONDS 秒を読む関数
@@ -108,13 +150,10 @@ def audio_clip(data: ml_eda.Data, index: int) -> dict[str, Any]:
     Raises
     ----------
     HTTPException
-        読み込んだ場所が無い場合と, 読めない場合は 422
+        場所が無いか読み込んだディレクトリの外の場合と, 読めない場合は 422
     """
-    # 場所は ML-EDA の読み込みが書いた根と, 行の相対の場所
-    root = data.source.get("root")
-    if not root:
-        raise HTTPException(422, "音声の読み込んだ場所がありません")
-    place = Path(str(root)) / str(data.frame["path"].iloc[index])
+    # 場所は読み込んだディレクトリの中に限る
+    place = item_place(data, index)
     try:
         audio: dict[str, Any] = ml_eda.read_audio(place, AUDIO_SECONDS)
     except Exception as error:
