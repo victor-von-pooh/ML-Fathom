@@ -12,6 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from ml_fathom.api import (
     EXPORT_LOCK,
+    check_recipe_limits,
     check_step_limits,
     export_message,
     find_source,
@@ -1091,12 +1092,14 @@ def export_project(
     Raises
     ----------
     HTTPException
-        記録が無いか前処理の失敗は 422, プロジェクトが無ければ 404,
+        記録が無いか前処理の失敗か上限を超えた手順の引数は 422,
+        プロジェクトが無ければ 404,
         データセットでないものがあるか, 置き換えを指定せずにデータセット
         がある場合は 409
     """
-    # 書き出し先と, 置き換えてよいか (確かめと書き出しの間に変わらない
-    # ように, 書き出しと同じ鍵の中で確かめる)
+    # 手順の引数の上限と, 書き出し先と, 置き換えてよいか (確かめと書き出し
+    # の間に変わらないように, 書き出しと同じ鍵の中で確かめる)
+    check_recipe_limits(body.recipe)
     source, _, problem = linked_problem(request, source_id)
     record = project_record(problem)
     data = load_source(source)
