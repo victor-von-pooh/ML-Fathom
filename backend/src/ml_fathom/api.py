@@ -60,10 +60,16 @@ PAIR_STEPS: dict[str, dict[str, tuple[str, tuple[str, ...]]]] = {
     },
 }
 
-# 中身の手順の引数の上限 (書き出しの前に確かめる. 大きすぎる値で手元の
-# 計算機の記憶を使い切らないように. 画像の辺は 4096 画素, 点の数は
-# 100 万点まで)
-STEP_LIMITS = {"width": 4096, "height": 4096, "points": 1_000_000}
+# 中身の手順の引数の上限 (手順を中身にかける前に確かめる. 大きすぎる値で
+# 手元の計算機の記憶を使い切らないように. 同じ名前の引数はどの手順でも
+# 同じ上限. 画像の辺は 4096 画素, 点の数は 100 万点, 音声の標本化の周波数
+# は 192000 Hz, 長さは 600 秒, チャンネルは 32, 語彙の大きさと文の長さは
+# 65536 まで)
+STEP_LIMITS: dict[str, int | float] = {
+    "width": 4096, "height": 4096, "points": 1_000_000,
+    "rate": 192_000, "seconds": 600, "channels": 32,
+    "max_tokens": 65_536, "length": 65_536,
+}
 
 
 class Cache:
@@ -425,7 +431,8 @@ def check_step_limits(item_steps: Any) -> None:
     Parameters
     ----------
     item_steps: Any
-        項目の名前から中身の手順の並び (無ければ None)
+        項目の名前から中身の手順の並び (ファイルの組の書き出し), 手順の
+        並び (版 1 のレシピ), 無ければ None
 
     Returns
     ----------
@@ -436,13 +443,16 @@ def check_step_limits(item_steps: Any) -> None:
     HTTPException
         上限を超えた引数があれば 422
     """
-    # 項目ごとの手順の数の引数
+    # 項目ごとの手順の数の引数 (版 1 のレシピの並びは 1 つの項目として)
+    if isinstance(item_steps, list):
+        item_steps = {"中身の": item_steps}
     if not isinstance(item_steps, dict):
         return
     for entry, steps in item_steps.items():
         if not isinstance(steps, list):
             continue
-        for spec in steps:
+        label = entry if entry == "中身の" else f"{entry} の"
+        for number, spec in enumerate(steps, 1):
             if not isinstance(spec, dict):
                 continue
             for name, highest in STEP_LIMITS.items():
@@ -453,9 +463,35 @@ def check_step_limits(item_steps: Any) -> None:
                     continue
                 if value > highest:
                     raise HTTPException(
-                        422, f"{entry} の手順 {spec.get('op')} の {name} は "
-                        f"{highest} 以下にしてください"
+                        422, f"{label}手順 {number} の {spec.get('op')} の "
+                        f"{name} ({value}) は {highest} 以下にしてください"
                     )
+
+
+def check_recipe_limits(recipe: Any) -> None:
+    """
+    版 1 のレシピの中身の手順の引数が上限を超えていないことを確かめる関数
+
+    中身の手順を中身にかける経路 (数件で試す, 書き出し, プロジェクトへの
+    書き出し) は全てこれを通す
+
+    Parameters
+    ----------
+    recipe: Any
+        レシピ (辞書でなければ確かめない)
+
+    Returns
+    ----------
+    None
+
+    Raises
+    ----------
+    HTTPException
+        上限を超えた引数があれば 422
+    """
+    # レシピの item_steps (並び)
+    if isinstance(recipe, dict):
+        check_step_limits(recipe.get("item_steps"))
 
 
 @router.get("/info")
@@ -1187,9 +1223,12 @@ def item_preview(
     Raises
     ----------
     HTTPException
-        中身を持たない種類か, 手順が誤っている場合は 422
+        中身を持たない種類か, 手順が誤っているか, 引数が上限を超えた場合は
+        422
     """
-    # 少ない見本で当てはめて, 画面で見せる形にする (画像の形の誤りも 422)
+    # 手順の引数の上限を確かめ, 少ない見本で当てはめて, 画面で見せる形に
+    # する (画像の形の誤りも 422)
+    check_recipe_limits(body.recipe)
     data = load_source(find_source(request, source_id))
     try:
         result = ml_eda.preview_items(data, body.recipe, body.count)
@@ -1247,9 +1286,12 @@ def export(
     Raises
     ----------
     HTTPException
-        名前の誤りと前処理の失敗は 422, 既にある場合は 409
+        名前の誤り, 前処理の失敗, 上限を超えた手順の引数は 422, 既にある
+        場合は 409
     """
-    # 置き場の datasets の下に書き出し, レシピも保存
+    # 手順の引数の上限を確かめ, 置き場の datasets の下に書き出し, レシピも
+    # 保存
+    check_recipe_limits(body.recipe)
     store = get_store(request)
     data = load_source(find_source(request, source_id))
     try:

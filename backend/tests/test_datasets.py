@@ -4,13 +4,14 @@ import numpy as np
 import pandas as pd
 import pytest
 import yaml
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from ml_eda import ITEM_STEPS
 from ml_eda.itemprep import ENTRY_STEPS
 from ml_eda.pipeline import ITEMS_FORMAT_VERSIONS
 from ml_eda.synthetic import write_image_masks, write_shape_captures
 
-from ml_fathom.api import PAIR_STEPS
+from ml_fathom.api import PAIR_STEPS, STEP_LIMITS, check_step_limits
 from ml_fathom.app import create_app
 
 # テストで使うトークン
@@ -486,3 +487,49 @@ def test_pair_steps_in_entry_steps() -> None:
         _, ops = PAIR_STEPS[form][entry]
         assert set(ops) <= set(ENTRY_STEPS[kind]), (form, entry)
         assert all(op in ITEM_STEPS for op in ops), (form, entry)
+
+
+def test_check_step_limits() -> None:
+    """
+    中身の手順の引数の上限を, 版 1 のレシピの並びとファイルの組の項目ごと
+    の辞書の両方で確かめる関数
+
+    Parameters
+    ----------
+    None
+
+    Returns
+    ----------
+    None
+    """
+    # 上限ちょうどの値と, 形の誤り (ML-EDA が確かめる) は通す
+    at_limit = [{"op": "resample", "rate": 192_000},
+                {"op": "fix_length", "seconds": 600}]
+    check_step_limits(at_limit)
+    check_step_limits({"capture": [{"op": "resize", "width": 4096,
+                                    "height": 4096}]})
+    check_step_limits(None)
+    check_step_limits([{"op": "resample", "rate": "many"}, "resize"])
+
+    # 並びは「中身の手順」, 辞書は項目の名前で, 番号と入れた値を出す
+    with pytest.raises(HTTPException) as caught:
+        check_step_limits([{"op": "mix_channels", "channels": 1},
+                           {"op": "normalize"},
+                           {"op": "resample", "rate": 200_000}])
+    assert caught.value.status_code == 422
+    assert caught.value.detail == (
+        "中身の手順 3 の resample の rate (200000) は 192000 以下に"
+        "してください"
+    )
+    with pytest.raises(HTTPException) as caught:
+        check_step_limits({"image": [{"op": "resize", "width": 8,
+                                      "height": 4097}]})
+    assert caught.value.detail == (
+        "image の手順 1 の resize の height (4097) は 4096 以下に"
+        "してください"
+    )
+
+    # 同じ名前の引数はどの手順でも同じ上限
+    for name in ("channels", "max_tokens", "length", "seconds", "points"):
+        with pytest.raises(HTTPException):
+            check_step_limits([{"op": "any", name: STEP_LIMITS[name] + 1}])

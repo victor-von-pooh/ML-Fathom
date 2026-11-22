@@ -613,6 +613,14 @@ def test_export_project(client: TestClient, tmp_path: Path) -> None:
     assert exported.json()["hints"]["outputs"] == 1
     assert client.get(f"{url}/project").json()["state"] == "dataset"
 
+    # 上限を超えた中身の手順の引数は書き出す前に 422
+    wrong = {**recipe, "item_steps": [{"op": "resample", "rate": 192_001}]}
+    refused = client.post(f"{url}/export_project", json={
+        "recipe": wrong, "overwrite": True
+    })
+    assert refused.status_code == 422
+    assert "手順 1 の resample の rate (192001)" in refused.json()["detail"]
+
     # 置き換えは指定した場合だけ
     again = client.post(f"{url}/export_project", json={"recipe": recipe})
     assert again.status_code == 409 and "既に" in again.json()["detail"]

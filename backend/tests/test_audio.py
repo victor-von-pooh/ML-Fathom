@@ -289,6 +289,30 @@ def test_audio_recipe(client: TestClient, tmp_path: Path) -> None:
     )
     assert total == 6
 
+    # 上限ちょうどの周波数と長さは通る
+    for steps in ([{"op": "resample", "rate": 192_000},
+                   {"op": "fix_length", "seconds": 0.01}],
+                  [{"op": "fix_length", "seconds": 600}]):
+        assert client.post(
+            f"/api/sources/{sid}/item_preview",
+            json={"recipe": {**recipe, "item_steps": steps}, "count": 1},
+        ).status_code == 200, steps
+
+    # 上限を超えた周波数と長さは, 見本と書き出しの前に 422
+    for step in ({"op": "resample", "rate": 192_001},
+                 {"op": "fix_length", "seconds": 600.5}):
+        wrong = {**recipe, "item_steps": [step]}
+        shown_wrong = client.post(
+            f"/api/sources/{sid}/item_preview",
+            json={"recipe": wrong, "count": 4},
+        )
+        assert shown_wrong.status_code == 422, step
+        assert "以下にしてください" in shown_wrong.json()["detail"]
+        assert client.post(
+            f"/api/sources/{sid}/export",
+            json={"recipe": wrong, "name": "too_large"},
+        ).status_code == 422, step
+
 
 def test_audio_view_clips_head() -> None:
     """
