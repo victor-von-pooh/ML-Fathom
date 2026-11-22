@@ -436,7 +436,8 @@ export function RecipeTab({
           onDecide={decide}
         />
         <Card title="目的と分割">
-          <div className="grid grid-cols-[7rem_1fr] items-center gap-2 text-sm">
+          {/* 長い選択肢の文で欄がカードの外へ広がらないように, 右の列は幅を超えない */}
+          <div className="grid grid-cols-[7rem_minmax(0,1fr)] items-center gap-2 text-sm">
             <span className="text-ink-3">目的の列</span>
             <span className="font-mono">{target ?? 'なし (上で選ぶ)'}</span>
             <label htmlFor="task" className="text-ink-3">
@@ -446,7 +447,7 @@ export function RecipeTab({
               id="task"
               value={recipe.task}
               onChange={(event) => update({ ...recipe, task: event.target.value })}
-              className="h-8 rounded border border-line bg-surface px-2"
+              className="h-8 rounded border border-line bg-surface px-2 min-w-0 max-w-full"
             >
               {Object.entries(TASK_LABELS).map(([value, label]) => (
                 <option key={value} value={value}>
@@ -466,19 +467,20 @@ export function RecipeTab({
                 if (split.method === 'none') delete split.column
                 update({ ...recipe, split })
               }}
-              className="h-8 rounded border border-line bg-surface px-2"
+              className="h-8 rounded border border-line bg-surface px-2 min-w-0 max-w-full"
             >
               <option value="random">無作為</option>
               <option value="stratified">層化 (クラスの割合を保つ)</option>
               <option value="time">時刻の順 (最後を検証用に)</option>
               <option value="group">グループごと</option>
-              <option value="group_time">グループと時刻の組 (後から現れた相手を検証用に)</option>
+              <option value="group_time">グループと時刻の組 (新しい相手を検証用に)</option>
               <option
                 value="stratified_group"
                 disabled={!stratifiable && recipe.split.method !== 'stratified_group'}
               >
-                グループの層化 (相手をまとめ, クラスの割合を保つ
-                {stratifiable ? '' : '. 回帰と時系列の予測では使えない'})
+                {stratifiable
+                  ? 'グループの層化 (クラスの割合を保つ)'
+                  : 'グループの層化 (回帰と時系列では使えない)'}
               </option>
               <option value="none">分けない</option>
             </select>
@@ -534,7 +536,7 @@ export function RecipeTab({
                     if (!split.column) delete split.column
                     update({ ...recipe, split })
                   }}
-                  className="h-8 rounded border border-line bg-surface px-2 font-mono"
+                  className="h-8 rounded border border-line bg-surface px-2 font-mono min-w-0 max-w-full"
                 >
                   <option value="">{grouped ? '選ぶ…' : 'なし'}</option>
                   {columns.map((column) => (

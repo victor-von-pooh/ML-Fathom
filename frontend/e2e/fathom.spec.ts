@@ -134,6 +134,20 @@ test('グループと時刻の組とグループの層化で分け, 使えない
     page.getByRole('alert').filter({ hasText: /回帰と時系列の予測では使えません/ }),
   ).toBeVisible()
   await expect(page.getByText(/stratified_group/).first()).toBeVisible({ timeout: 20_000 })
+  // 欄と誤りの文は左のカードの中に収まる (長い選択肢でもはみ出さない)
+  const card = page
+    .locator('section')
+    .filter({ has: page.getByRole('heading', { name: '目的と分割' }) })
+  const cardBox = (await card.boundingBox())!
+  for (const target of [split, page.getByRole('combobox', { name: 'グループの列', exact: true })]) {
+    const box = (await target.boundingBox())!
+    expect(box.x + box.width).toBeLessThanOrEqual(cardBox.x + cardBox.width)
+  }
+  const alertBox = (await page
+    .getByRole('alert')
+    .filter({ hasText: /回帰と時系列の予測では使えません/ })
+    .boundingBox())!
+  expect(alertBox.x + alertBox.width).toBeLessThanOrEqual(cardBox.x + cardBox.width)
   await split.selectOption('group')
   await expect(split.locator('option[value="stratified_group"]')).toBeDisabled()
 
