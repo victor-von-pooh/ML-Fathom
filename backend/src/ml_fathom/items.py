@@ -9,6 +9,7 @@ import ml_eda
 import numpy as np
 from fastapi import HTTPException
 from fastapi.responses import JSONResponse, Response
+from ml_eda import read_image
 
 # 点群として返す点の数の上限 (多い場合は間引く)
 MAX_POINTS = 50_000
@@ -440,7 +441,7 @@ def capture_layer(
     if not place:
         raise HTTPException(404, f"{frame} 枚目に {layer} がありません")
     if layer == "image":
-        array: np.ndarray = ml_eda.media.read_image(Path(place))
+        array: np.ndarray = read_image(Path(place))
         return array
     with Image.open(place) as image:
         values = np.asarray(image, dtype=np.float64)

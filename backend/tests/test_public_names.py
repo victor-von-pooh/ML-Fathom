@@ -19,12 +19,7 @@ PUBLIC = {
 
 # 持ち主 (ML-EDA) に公開してもらうのを待つ名前 (待っている理由は TODO.md.
 # 公開されたら置き換えて消す)
-WAITING = {
-    "ml_eda.pipeline.frame_view",
-    "ml_eda.pipeline.DATASET_FORMAT_VERSION",
-    "ml_eda.pipeline.ITEMS_FORMAT_VERSIONS",
-    "ml_eda.media.read_image",
-}
+WAITING: set[str] = set()
 
 
 def private_names(tree: ast.AST) -> set[str]:

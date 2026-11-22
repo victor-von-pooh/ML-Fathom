@@ -139,6 +139,39 @@ def test_source_profile_and_rows(client: TestClient, tmp_path: Path) -> None:
     assert "table.csv" in [entry["name"] for entry in listing["entries"]]
 
 
+def test_rows_with_nullable_values(
+    client: TestClient, tmp_path: Path
+) -> None:
+    """
+    欠損を持てる真偽と整数, 無限大の列を持つ表の中身を返し, 欠損と
+    無限大を None にすることを確かめる関数
+
+    Parameters
+    ----------
+    client: TestClient
+        クライアント
+    tmp_path: Path
+        pytest が用意する一時ディレクトリ
+
+    Returns
+    ----------
+    None
+    """
+    # 欠損を持てる型は parquet で保つ
+    file = tmp_path / "nullable.parquet"
+    pd.DataFrame({
+        "flag": pd.array([True, None, False], dtype="boolean"),
+        "count": pd.array([1, None, 3], dtype="Int64"),
+        "v": [1.5, np.inf, np.nan],
+    }).to_parquet(file)
+    sid = client.post("/api/sources", json={"path": str(file)}).json()["id"]
+    response = client.get(f"/api/sources/{sid}/rows")
+    assert response.status_code == 200
+    assert response.json()["rows"] == [
+        [True, 1, 1.5], [None, None, None], [False, 3, None]
+    ]
+
+
 def test_recipe_preview_and_export(
     client: TestClient, tmp_path: Path
 ) -> None:

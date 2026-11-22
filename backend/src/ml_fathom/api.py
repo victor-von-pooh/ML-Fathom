@@ -11,8 +11,7 @@ import numpy as np
 import yaml
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import Response
-from ml_eda import ITEM_STEPS
-from ml_eda.pipeline import frame_view
+from ml_eda import ITEM_STEPS, frame_view
 from pydantic import BaseModel, Field
 
 from ml_fathom.datasets import dataset_summary

@@ -4,7 +4,7 @@ from typing import Any, Optional
 
 import ml_eda
 import yaml
-from ml_eda.pipeline import DATASET_FORMAT_VERSION, ITEMS_FORMAT_VERSIONS
+from ml_eda import DATASET_FORMAT_VERSION, ITEMS_FORMAT_VERSIONS
 
 from ml_fathom.jsonable import to_json
 
