@@ -87,6 +87,11 @@ test('load_items の使い方の例は, ある分割と正規化だけを書く'
   expect(plain).toContain('{"id", "split", "group", "image", "mask"}')
   expect(plain).not.toContain('dataset.split("valid")')
   expect(plain).not.toContain('normalize_capture')
+  expect(plain).not.toContain('dataset.split("unlabeled")')
+  // 正解の無い件を unlabeled の分割に書いた場合は, その読み方を足す
+  const kept = itemsSnippet('/d/partial', { train: {}, unlabeled: {} }, ['image', 'mask'], false)
+  expect(kept).toContain('unlabeled = dataset.split("unlabeled")')
+  expect(kept).toContain('正解の項目は None')
   const full = itemsSnippet('/d/objects', { train: {}, valid: {}, test: {} }, [], true)
   expect(full).toContain('valid = dataset.split("valid")')
   expect(full).toContain('test = dataset.split("test")')

@@ -147,7 +147,7 @@ export function depthConventionText(
 
 /**
  * 書き出した版 2, 版 3 のデータセットを読む例 (load_items).
- * 検証用とテスト用の行は, その分割がある場合だけ. 正規化をかけたものと,
+ * 検証用, テスト用, 正解の無い件 (unlabeled) の行は, その分割がある場合だけ. 正規化をかけたものと,
  * 中身の手順をかけたもの (版 3) は推論の注意を足す
  */
 export function itemsSnippet(
@@ -166,6 +166,10 @@ export function itemsSnippet(
     `item = train[0]                   # {${keys}} の辞書`,
     'valid' in splits ? 'valid = dataset.split("valid")' : null,
     'test' in splits ? 'test = dataset.split("test")' : null,
+    // 正解の無い件の分割 (split.unlabeled: keep). 正解の項目は None なので, 正解のある分割と分けて使う
+    'unlabeled' in splits
+      ? 'unlabeled = dataset.split("unlabeled")   # 正解の無い件 (正解の項目は None). 半教師ありの学習や推論の確かめに'
+      : null,
     'paths = dataset.split("train", read=False)[0]   # 配列の代わりに場所',
     normalized
       ? '# 推論のときは normalize_capture で同じ正規化をかけて read_capture で読み, 出力から shift を引いて元の座標に戻す'

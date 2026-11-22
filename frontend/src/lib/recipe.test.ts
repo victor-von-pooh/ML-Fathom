@@ -3,6 +3,7 @@ import { expect, test } from 'vitest'
 import type { ColumnInfo, Recipe } from '../api/types'
 import {
   canKeepUnlabeled,
+  looksLikeDatetime,
   fitUnlabeled,
   splitLabel,
   untargetedDraft,
@@ -88,4 +89,26 @@ test('使い方の例は, ある分割だけを読む', () => {
   expect(only).not.toContain('unlabeled')
   expect(only).toContain('["shape"][1:]')
   expect(only.split('\n')[3]).toBe('dataset = load_dataset("/d")')
+})
+
+test('日時の型の列と, よく出る値が全て日付の文字の列を日時に見える列とする', () => {
+  const info = (fields: Partial<ColumnInfo>): ColumnInfo =>
+    ({
+      type: 'categorical',
+      dtype: 'object',
+      count: 1,
+      missing: 0,
+      missing_ratio: 0,
+      unique: 1,
+      ...fields,
+    }) as ColumnInfo
+  expect(looksLikeDatetime(info({ type: 'datetime' }))).toBe(true)
+  const dates = [
+    { value: '2025-01-01', count: 4 },
+    { value: '2025/1/2 12:30', count: 4 },
+  ]
+  expect(looksLikeDatetime(info({ top: dates }))).toBe(true)
+  expect(looksLikeDatetime(info({ top: [...dates, { value: 'east', count: 1 }] }))).toBe(false)
+  expect(looksLikeDatetime(info({ top: [] }))).toBe(false)
+  expect(looksLikeDatetime(info({ type: 'numeric' }))).toBe(false)
 })

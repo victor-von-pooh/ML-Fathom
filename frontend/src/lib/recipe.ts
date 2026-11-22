@@ -79,6 +79,20 @@ export function usageSnippet(
 }
 
 /** 分割の名前の表示 (unlabeled は正解の無い分割と分かるように) */
+/** 日付か日時の文字の形 (2025-01-01, 2025/1/1 12:00 など) */
+const DATE_TEXT =
+  /^\d{4}[-/]\d{1,2}[-/]\d{1,2}([ T]\d{1,2}:\d{2}(:\d{2}(\.\d+)?)?)?(Z|[+-]\d{2}:?\d{2})?$/
+
+/**
+ * 日時に見える列か. 日時の型の列か, 表として読んで文字のままの列で, よく出る値が全て日付か日時の
+ * 文字の形のもの (時刻で分けるときに, 読み方を時系列にする案内に使う)
+ */
+export function looksLikeDatetime(info: ColumnInfo): boolean {
+  if (info.type === 'datetime') return true
+  const values = (info.top ?? []).map((item) => item.value)
+  return values.length > 0 && values.every((value) => DATE_TEXT.test(value.trim()))
+}
+
 export function splitLabel(name: string): string {
   return name === 'unlabeled' ? 'unlabeled (正解なし)' : name
 }
