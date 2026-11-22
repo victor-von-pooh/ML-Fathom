@@ -94,6 +94,7 @@ export const api = {
   },
   itemUrl: (id: string, index: number) => `/api/sources/${id}/items/${index}`,
   item: <T>(id: string, index: number) => request<T>(`/api/sources/${id}/items/${index}`),
+  itemAudioUrl: (id: string, index: number) => `/api/sources/${id}/items/${index}/audio`,
   captureFrameUrl: (
     id: string,
     index: number,

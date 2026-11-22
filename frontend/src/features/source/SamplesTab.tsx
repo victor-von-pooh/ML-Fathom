@@ -7,11 +7,16 @@ import type { PointsItem, Profile, Source } from '../../api/types'
 import { Button, Card, ErrorBox, Spinner, StatTile } from '../../components/ui'
 import { formatCount, formatNumber } from '../../lib/format'
 import { useDebounced } from '../../lib/useDebounced'
+import { formatSeconds } from '../../lib/waveform'
+import { AudioView } from './AudioView'
 import { CaptureView } from './CaptureView'
 import { PointCloudView } from './PointCloudView'
 
 // 1 ページの件数
-const PAGE = { image: 48, text: 30, pointcloud: 20, capture: 20 } as Record<string, number>
+const PAGE = { image: 48, text: 30, pointcloud: 20, capture: 20, audio: 30 } as Record<
+  string,
+  number
+>
 
 // 一覧の画像の長い辺 (画素)
 const THUMBNAIL = 256
@@ -62,7 +67,15 @@ function Thumbnail({ src, alt }: { src: string; alt: string }) {
   )
 }
 
-/** 画像, 文, 点群, 多視点の撮影の中身を 1 件ずつ見る */
+/** 件数の多い順に「値 (件数)」を並べる */
+function breakdown(counts: Record<string, number>, unit: string): string {
+  return Object.entries(counts)
+    .sort((a, b) => b[1] - a[1])
+    .map(([value, count]) => `${value}${unit} (${count})`)
+    .join(', ')
+}
+
+/** 画像, 文, 点群, 多視点の撮影, 音声の中身を 1 件ずつ見る */
 export function SamplesTab({ source, profile }: { source: Source; profile: Profile }) {
   const kind = source.kind
   const page = PAGE[kind] ?? 30
@@ -122,6 +135,27 @@ export function SamplesTab({ source, profile }: { source: Source; profile: Profi
               label="撮影距離"
               value={`${items.distance.min.toFixed(2)}–${items.distance.max.toFixed(2)} m`}
               hint="枚ごとの深度の中央値の範囲"
+            />
+          )}
+          {items.sample_rates && Object.keys(items.sample_rates).length > 0 && (
+            <StatTile
+              label="標本化の周波数"
+              value={breakdown(items.sample_rates, ' Hz')}
+              hint="括弧は件数"
+            />
+          )}
+          {items.channels && Object.keys(items.channels).length > 0 && (
+            <StatTile
+              label="チャンネルの数"
+              value={breakdown(items.channels, '')}
+              hint="括弧は件数"
+            />
+          )}
+          {items.duration && (
+            <StatTile
+              label="長さ"
+              value={formatSeconds(items.duration.median)}
+              hint={`中央値. ${formatSeconds(items.duration.min)} から ${formatSeconds(items.duration.max)}`}
             />
           )}
           {items.unreadable !== undefined && (
@@ -254,6 +288,52 @@ export function SamplesTab({ source, profile }: { source: Source; profile: Profi
               <p className="text-sm text-ink-3">左の一覧から選ぶと, 3D で表示します.</p>
             ) : (
               <PointCloudItem sourceId={source.id} index={selected} />
+            )}
+          </Card>
+        </div>
+      )}
+      {data && kind === 'audio' && (
+        <div className="grid gap-4 lg:grid-cols-[18rem_1fr]">
+          <ul
+            aria-label="音声"
+            className="max-h-[70vh] overflow-auto rounded-xl border border-line bg-surface"
+          >
+            {data.rows.map((row, at) => {
+              const index = data.index[at]!
+              const label = valueOf(row, 'label')
+              const duration = valueOf(row, 'duration')
+              return (
+                <li key={index}>
+                  <button
+                    type="button"
+                    aria-current={selected === index}
+                    onClick={() => setSelected(index)}
+                    className={clsx(
+                      'flex w-full flex-col px-3 py-1.5 text-left text-sm hover:bg-surface-2',
+                      selected === index && 'bg-accent-soft',
+                    )}
+                  >
+                    <span className="truncate font-mono">{String(valueOf(row, 'path'))}</span>
+                    <span className="text-xs text-ink-3">
+                      {label !== undefined && label !== null && `${String(label)} · `}
+                      {valueOf(row, 'error')
+                        ? '読めません'
+                        : `${formatNumber(valueOf(row, 'sample_rate'))} Hz · ${formatNumber(
+                            valueOf(row, 'channels'),
+                          )} ch · ${formatSeconds(typeof duration === 'number' ? duration : null)}`}
+                    </span>
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
+          <Card title={selected === null ? '音声を選んでください' : `${selected} 番目の音声`}>
+            {selected === null ? (
+              <p className="text-sm text-ink-3">
+                左の一覧から選ぶと, 再生できるようにし, 波形を表示します.
+              </p>
+            ) : (
+              <AudioView key={selected} sourceId={source.id} index={selected} />
             )}
           </Card>
         </div>

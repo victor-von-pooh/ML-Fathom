@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field
 
 from ml_fathom.datasets import dataset_summary
 from ml_fathom.items import (
+    audio_response,
     capture_layer,
     item_response,
     item_view,
@@ -890,12 +891,41 @@ def get_item(
     Returns
     ----------
     response: Response
-        画像は PNG, 点群と文は JSON
+        画像は PNG, 点群と文と音声の波形は JSON
     """
     data = load_source(find_source(request, source_id))
     if not 0 <= index < len(data.frame):
         raise HTTPException(404, f"{index} 番目はありません")
     response = item_response(data, index, size)
+
+    return response
+
+
+@router.get("/sources/{source_id}/items/{index}/audio")
+def get_item_audio(
+    request: Request, source_id: str, index: int
+) -> Response:
+    """
+    音声の 1 件の先頭を, 再生用の WAVE で返す関数
+
+    Parameters
+    ----------
+    request: Request
+        リクエスト
+    source_id: str
+        データの ID
+    index: int
+        行の位置
+
+    Returns
+    ----------
+    response: Response
+        先頭の AUDIO_SECONDS 秒までの 16 bit の PCM の WAVE
+    """
+    data = load_source(find_source(request, source_id))
+    if not 0 <= index < len(data.frame):
+        raise HTTPException(404, f"{index} 番目はありません")
+    response = audio_response(data, index)
 
     return response
 

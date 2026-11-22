@@ -178,6 +178,27 @@ for index in range(6):
 }), "utf-8")
 PY
 
+# 音声の見本 (2 クラスの正弦波の WAVE. 1 つは再生と波形の上限より長い)
+uv run python - "$WORK/sounds" <<'PY'
+import sys
+import wave
+from pathlib import Path
+
+import numpy as np
+
+root = Path(sys.argv[1])
+rate = 8000
+for label, tone, seconds in (("low", 220, 1.0), ("high", 880, 35.0)):
+    (root / label).mkdir(parents=True)
+    times = np.arange(int(rate * seconds)) / rate
+    values = (0.5 * np.sin(2 * np.pi * tone * times) * 32767).astype("<i2")
+    with wave.open(str(root / label / f"{label}.wav"), "wb") as stream:
+        stream.setnchannels(1)
+        stream.setsampwidth(2)
+        stream.setframerate(rate)
+        stream.writeframes(values.tobytes())
+PY
+
 # ファイルの組の見本 (ML-EDA の合成の見本). 画像と領域 (組にならない領域を
 # 1 つ足す), 大きさの混ざった画像と領域, 単純な形の撮影と正確な点群
 uv run python - "$WORK" <<'PY'
