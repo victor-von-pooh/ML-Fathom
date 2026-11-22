@@ -7,7 +7,6 @@ import ml_eda
 import ml_quest
 import yaml
 from fastapi import APIRouter, HTTPException, Request
-from ml_eda.profile import to_json
 from ml_quest import is_column_part, is_items_part
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -22,6 +21,7 @@ from ml_fathom.api import (
     pair_result,
     source_view,
 )
+from ml_fathom.jsonable import to_json
 from ml_fathom.settings import get_problems_dir
 
 router = APIRouter(prefix="/api")

@@ -13,7 +13,6 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import Response
 from ml_eda import ITEM_STEPS
 from ml_eda.pipeline import frame_view
-from ml_eda.profile import to_json
 from pydantic import BaseModel, Field
 
 from ml_fathom.datasets import dataset_summary
@@ -26,6 +25,7 @@ from ml_fathom.items import (
     png_response,
     points_response,
 )
+from ml_fathom.jsonable import to_json
 from ml_fathom.samples import sample_target, write_samples
 from ml_fathom.settings import get_problems_dir
 from ml_fathom.store import SourceStore
@@ -1001,7 +1001,7 @@ def get_capture_cloud(
     if not item.get("point_cloud"):
         raise HTTPException(404, "この撮影には点群がありません")
     try:
-        cloud = ml_eda.media.read_cloud(Path(item["point_cloud"]))
+        cloud = ml_eda.read_cloud(Path(item["point_cloud"]))
     except Exception as error:
         raise HTTPException(422, f"読めませんでした: {error}") from error
     response = points_response(cloud)
