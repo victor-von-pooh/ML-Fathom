@@ -1,4 +1,4 @@
-import type { ColumnInfo, Recipe } from '../api/types'
+import type { ColumnInfo, ItemStepInfo, Recipe, RecipeStep } from '../api/types'
 
 /**
  * 目的の列の欠けた行の扱いを変えたレシピ (ML-EDA の split.unlabeled).
@@ -95,4 +95,24 @@ export function looksLikeDatetime(info: ColumnInfo): boolean {
 
 export function splitLabel(name: string): string {
   return name === 'unlabeled' ? 'unlabeled (正解なし)' : name
+}
+
+/**
+ * 版 1 のレシピの中身の手順で, 引数の上限 (`GET /api/info` の item_steps の limits) を
+ * 超えた値の理由の並び. 数でない値や上限の無い引数は ML-EDA が確かめるので見ない
+ */
+export function itemLimitErrors(steps: RecipeStep[], infos: ItemStepInfo[]): string[] {
+  const errors: string[] = []
+  steps.forEach((step, index) => {
+    const info = infos.find((item) => item.op === step.op)
+    for (const [name, highest] of Object.entries(info?.limits ?? {})) {
+      const value = step[name]
+      if (typeof value === 'number' && value > highest) {
+        errors.push(
+          `中身の手順 ${index + 1} (${step.op}) の ${name} は ${highest} 以下にしてください`,
+        )
+      }
+    }
+  })
+  return errors
 }

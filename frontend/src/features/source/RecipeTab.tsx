@@ -22,6 +22,7 @@ import { findDecisions, withAutoItems } from '../../lib/decisions'
 import {
   canKeepUnlabeled,
   fitUnlabeled,
+  itemLimitErrors,
   looksLikeDatetime,
   splitLabel,
   untargetedDraft,
@@ -388,6 +389,10 @@ export function RecipeTab({
   const items = recipe.item_steps ?? []
   const setItems = (next: RecipeStep[]) => update({ ...recipe, item_steps: next })
   const kindSteps = itemSteps.filter((item) => item.kind === kind)
+  // 中身の手順の引数が上限を超えていれば, 送る前に理由を出して試すと書き出すを止める
+  // (ファイルの組の書き出しの欄と同じ. API も 422 で止める)
+  const limitErrors = media ? itemLimitErrors(items, kindSteps) : []
+  const reasons = limitErrors.length > 0 ? 'item-step-reasons' : undefined
   // 選んでいる手順は, 動かした先でも選んだままにする
   const move = (index: number, delta: number) => {
     const next = [...recipe.steps]
@@ -741,6 +746,13 @@ export function RecipeTab({
                 />
               ))}
             </ol>
+            {limitErrors.length > 0 && (
+              <ul id="item-step-reasons" className="mt-2 list-disc pl-5 text-xs text-critical-text">
+                {limitErrors.map((error) => (
+                  <li key={error}>{error}</li>
+                ))}
+              </ul>
+            )}
             {kind === 'text' && profile.items?.tokenizers && (
               <TokenizerTable
                 comparison={profile.items.tokenizers}
@@ -833,7 +845,8 @@ export function RecipeTab({
             variant="primary"
             icon={Upload}
             className="mt-3"
-            disabled={exporter.isPending || !name}
+            disabled={exporter.isPending || !name || reasons !== undefined}
+            aria-describedby={reasons}
             onClick={() => exporter.mutate()}
           >
             {exporter.isPending ? '書き出し中…' : '学習用に書き出す'}
@@ -865,6 +878,7 @@ export function RecipeTab({
             <ProjectExport
               sourceId={sourceId}
               recipe={recipe}
+              reasons={reasons}
               onExported={() => {
                 // 書き出しはレシピも保存するので, 編集中の印を外す
                 setDraft(null)
@@ -956,7 +970,9 @@ export function RecipeTab({
             値を学ぶ手順 (標準化, 補完など) は, 学習用のデータだけで当てはめます.
           </p>
         </Card>
-        {media && <ItemPreviewCard sourceId={sourceId} kind={kind} recipe={recipe} />}
+        {media && (
+          <ItemPreviewCard sourceId={sourceId} kind={kind} recipe={recipe} reasons={reasons} />
+        )}
       </div>
     </div>
   )

@@ -383,6 +383,37 @@ def source_view(source: dict[str, Any]) -> dict[str, Any]:
     return view
 
 
+def item_step_infos() -> list[dict[str, Any]]:
+    """
+    版 1 のレシピで選べる中身の手順を, 引数の上限を添えて返す関数
+
+    画面が上限を超えた値を送る前に止められるように, 手順の引数のうち
+    STEP_LIMITS にあるものの上限を添える
+
+    Parameters
+    ----------
+    None
+
+    Returns
+    ----------
+    steps: list[dict[str, Any]]
+        手順 (op, kind, params, description, fits, limits) の並び
+    """
+    # 登録簿の順のまま, 引数の上限を添える
+    steps = [
+        {
+            **item,
+            "limits": {
+                name: STEP_LIMITS[name] for name in item["params"]
+                if name in STEP_LIMITS
+            },
+        }
+        for item in ml_eda.describe_item_steps()
+    ]
+
+    return steps
+
+
 def pair_steps() -> dict[str, dict[str, list[dict[str, Any]]]]:
     """
     ファイルの組の書き出しの項目ごとに, 選べる中身の手順を返す関数
@@ -397,23 +428,16 @@ def pair_steps() -> dict[str, dict[str, list[dict[str, Any]]]]:
     ----------
     steps: dict[str, dict[str, list[dict[str, Any]]]]
         書き出し (image_masks, capture_clouds) から, 項目の名前から手順
-        (op, kind, params, description, fits, required) の並び
+        (op, kind, params, description, fits, limits, required) の並び
     """
     # 登録簿の順のまま, 項目の種類と名前で絞る
-    described = ml_eda.describe_item_steps()
+    described = item_step_infos()
     steps: dict[str, dict[str, list[dict[str, Any]]]] = {}
     for form, entries in PAIR_STEPS.items():
         steps[form] = {}
         for entry, (kind, ops) in entries.items():
             steps[form][entry] = [
-                {
-                    **item,
-                    "required": list(ITEM_STEPS[item["op"]].required),
-                    "limits": {
-                        name: STEP_LIMITS[name] for name in item["params"]
-                        if name in STEP_LIMITS
-                    },
-                }
+                {**item, "required": list(ITEM_STEPS[item["op"]].required)}
                 for item in described
                 if item["kind"] == kind and item["op"] in ops
             ]
@@ -506,13 +530,13 @@ def get_info() -> dict[str, Any]:
     Returns
     ----------
     info: dict[str, Any]
-        loaders, steps, item_steps, pair_steps (ファイルの組の書き出しの
-        項目ごとの中身の手順), kinds, 版
+        loaders, steps, item_steps (引数の上限付き), pair_steps (ファイルの
+        組の書き出しの項目ごとの中身の手順), kinds, 版
     """
     info = {
         "loaders": ml_eda.describe_loaders(),
         "steps": ml_eda.describe_steps(),
-        "item_steps": ml_eda.describe_item_steps(),
+        "item_steps": item_step_infos(),
         "pair_steps": pair_steps(),
         "kinds": list(ml_eda.KINDS),
         "version": ml_eda.__version__,

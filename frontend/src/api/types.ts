@@ -104,13 +104,13 @@ export interface StepInfo {
 
 export interface ItemStepInfo extends StepInfo {
   kind: string
+  /** 引数の上限 (画像の辺, 点の数, 音声の周波数など. 上限の無い引数は無い) */
+  limits: Record<string, number>
 }
 
 /** ファイルの組の書き出しの項目で選べる中身の手順 (省けない引数付き) */
 export interface PairStepInfo extends ItemStepInfo {
   required: string[]
-  /** 引数の上限 (画像の辺と点の数. 上限の無い引数は無い) */
-  limits: Record<string, number>
 }
 
 /** ファイルの組の書き出しの種類から, 項目の名前から選べる中身の手順 */

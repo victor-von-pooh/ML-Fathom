@@ -455,6 +455,42 @@ test('外を指すリンクの件は理由を出して読まず, 読み込みの
   await expect(page.getByRole('img', { name: /番目の音声の波形/ })).toBeVisible()
 })
 
+test('中身の手順の引数が上限を超えると, 理由を出して試すと書き出すを止める', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'データを追加' }).first().click()
+  await page
+    .getByLabel('ディレクトリのパス')
+    .fill(path.resolve(import.meta.dirname, '.work', 'sounds'))
+  await page.getByRole('button', { name: '移動' }).click()
+  await page.getByRole('button', { name: 'このディレクトリを選ぶ' }).click()
+  await page.getByRole('button', { name: '追加', exact: true }).click()
+  await expect(page.getByText('音声 · audio_folder')).toBeVisible({ timeout: 20_000 })
+
+  // 周波数を上限 (192000 Hz) より大きくすると, 理由が出て試すと書き出すを押せない
+  await page.getByRole('tab', { name: '前処理と書き出し' }).click()
+  await page.getByRole('button', { name: '学習用の配列にする手順を作る' }).click()
+  const steps = page.locator('section', {
+    has: page.getByRole('heading', { name: /^中身の手順 \(/ }),
+  })
+  const rate = steps.getByLabel('rate', { exact: true })
+  await rate.fill('200000')
+  await rate.blur()
+  const reason = '中身の手順 1 (resample) の rate は 192000 以下にしてください'
+  await expect(steps.getByText(reason)).toBeVisible()
+  const trial = page.getByRole('button', { name: '数件で試す' })
+  const exporter = page.getByRole('button', { name: '学習用に書き出す' })
+  await expect(trial).toBeDisabled()
+  await expect(exporter).toBeDisabled()
+  await expect(exporter).toHaveAccessibleDescription(reason)
+
+  // 上限ちょうどに戻すと, 理由が消えて押せる
+  await rate.fill('192000')
+  await rate.blur()
+  await expect(steps.getByText(reason)).toHaveCount(0)
+  await expect(trial).toBeEnabled()
+  await expect(exporter).toBeEnabled()
+})
+
 // e2e/serve.sh が ML-EDA の合成の見本で作ったファイルの組
 const PAIRS = path.resolve(import.meta.dirname, '.work', 'pairs')
 const SHAPES = path.resolve(import.meta.dirname, '.work', 'shapes')

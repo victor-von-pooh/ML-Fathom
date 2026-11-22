@@ -1,10 +1,11 @@
 import { expect, test } from 'vitest'
 
-import type { ColumnInfo, Recipe } from '../api/types'
+import type { ColumnInfo, ItemStepInfo, Recipe } from '../api/types'
 import {
   canKeepUnlabeled,
   looksLikeDatetime,
   fitUnlabeled,
+  itemLimitErrors,
   splitLabel,
   untargetedDraft,
   usageSnippet,
@@ -111,4 +112,40 @@ test('日時の型の列と, よく出る値が全て日付の文字の列を日
   expect(looksLikeDatetime(info({ top: [...dates, { value: 'east', count: 1 }] }))).toBe(false)
   expect(looksLikeDatetime(info({ top: [] }))).toBe(false)
   expect(looksLikeDatetime(info({ type: 'numeric' }))).toBe(false)
+})
+
+test('中身の手順の引数が上限を超えた値だけに, 手順の番号と上限を添えた理由を出す', () => {
+  const info = (op: string, limits: Record<string, number>): ItemStepInfo => ({
+    op,
+    kind: 'audio',
+    params: {},
+    description: '',
+    fits: false,
+    limits,
+  })
+  const infos = [info('resample', { rate: 192000 }), info('fix_length', { seconds: 600 })]
+  // 上限ちょうど, 数でない値, 上限の無い手順と知らない手順は通す
+  expect(
+    itemLimitErrors(
+      [
+        { op: 'resample', rate: 192000 },
+        { op: 'fix_length', seconds: 'long' },
+        { op: 'mix_channels', channels: 99 },
+      ],
+      infos,
+    ),
+  ).toEqual([])
+  expect(
+    itemLimitErrors(
+      [
+        { op: 'fix_length', seconds: 10 },
+        { op: 'resample', rate: 200000 },
+        { op: 'fix_length', seconds: 601 },
+      ],
+      infos,
+    ),
+  ).toEqual([
+    '中身の手順 2 (resample) の rate は 192000 以下にしてください',
+    '中身の手順 3 (fix_length) の seconds は 600 以下にしてください',
+  ])
 })

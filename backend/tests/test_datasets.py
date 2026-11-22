@@ -550,3 +550,35 @@ def test_check_step_limits() -> None:
     for name in ("channels", "max_tokens", "length", "seconds", "points"):
         with pytest.raises(HTTPException):
             check_step_limits([{"op": "any", name: STEP_LIMITS[name] + 1}])
+
+
+def test_info_item_step_limits(client: TestClient) -> None:
+    """
+    版 1 のレシピの中身の手順の一覧に, 引数の上限を添えることを確かめる
+    関数
+
+    Parameters
+    ----------
+    client: TestClient
+        クライアント
+
+    Returns
+    ----------
+    None
+    """
+    # 上限は STEP_LIMITS のうち, その手順の引数にあるものだけ
+    steps = {
+        step["op"]: step
+        for step in client.get("/api/info").json()["item_steps"]
+    }
+    assert steps["resize"]["limits"] == {"width": 4096, "height": 4096}
+    assert steps["resample"]["limits"] == {"rate": 192_000}
+    assert steps["fix_length"]["limits"] == {"seconds": 600}
+    assert steps["sample_points"]["limits"] == {"points": 1_000_000}
+    assert steps["normalize"]["limits"] == {}
+    for step in steps.values():
+        assert set(step["limits"]) <= set(step["params"]), step["op"]
+        assert all(
+            STEP_LIMITS[name] == value
+            for name, value in step["limits"].items()
+        ), step["op"]
