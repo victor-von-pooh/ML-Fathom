@@ -379,6 +379,37 @@ test('音声を登録し, 種類の名前と, 1 件ずつの再生と波形を�
   expect((await played.body()).length).toBe(8000 * 2 * 30 + 44)
 })
 
+test('外を指すリンクの件は理由を出して読まず, 読み込みの設定 follow_links で読む', async ({
+  page,
+}) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'データを追加' }).first().click()
+  await page
+    .getByLabel('ディレクトリのパス')
+    .fill(path.resolve(import.meta.dirname, '.work', 'linked'))
+  await page.getByRole('button', { name: '移動' }).click()
+  await page.getByRole('button', { name: 'このディレクトリを選ぶ' }).click()
+  await page.getByRole('button', { name: '追加', exact: true }).click()
+  await expect(page.getByText('音声 · audio_folder')).toBeVisible({ timeout: 20_000 })
+
+  // 既定では一覧に理由が出て, 1 件の中身も理由付きで読まない
+  await page.getByRole('tab', { name: '中身を見る' }).click()
+  const list = page.getByRole('list', { name: '音声' })
+  const outside = list.getByRole('button', { name: /outside\.wav/ })
+  await expect(outside).toContainText('外を指すリンク')
+  await outside.click()
+  await expect(page.getByRole('alert')).toContainText('follow_links')
+
+  // follow_links を true にして読み直すと, 一覧も中身も読む
+  await page.getByRole('button', { name: '読み込みの設定', exact: true }).click()
+  await page.getByLabel('follow_links').selectOption('true')
+  await page.getByRole('button', { name: '読み直す' }).click()
+  await page.getByRole('tab', { name: '中身を見る' }).click()
+  await expect(outside).toContainText('8,000 Hz', { timeout: 20_000 })
+  await outside.click()
+  await expect(page.getByRole('img', { name: /番目の音声の波形/ })).toBeVisible()
+})
+
 // e2e/serve.sh が ML-EDA の合成の見本で作ったファイルの組
 const PAIRS = path.resolve(import.meta.dirname, '.work', 'pairs')
 const SHAPES = path.resolve(import.meta.dirname, '.work', 'shapes')

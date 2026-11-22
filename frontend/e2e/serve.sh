@@ -199,6 +199,13 @@ for label, tone, seconds in (("low", 220, 1.0), ("high", 880, 35.0)):
         stream.writeframes(values.tobytes())
 PY
 
+# 外を指すリンクを持つ音声のディレクトリ (中の 1 件と, 外の音声へのリンク.
+# 既定では読まず, 読み込みの設定 follow_links で読む)
+mkdir -p "$WORK/linked"
+cp "$WORK/sounds/low/low.wav" "$WORK/linked/inside.wav"
+cp "$WORK/sounds/low/low.wav" "$WORK/shared.wav"
+ln -s "$WORK/shared.wav" "$WORK/linked/outside.wav"
+
 # ファイルの組の見本 (ML-EDA の合成の見本). 画像と領域 (組にならない領域を
 # 1 つ足す), 大きさの混ざった画像と領域, 単純な形の撮影と正確な点群
 uv run python - "$WORK" <<'PY'

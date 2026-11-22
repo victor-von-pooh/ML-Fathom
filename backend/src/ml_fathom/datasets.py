@@ -14,6 +14,35 @@ ENTRY_FIELDS = (
 )
 
 
+def points_outside(base: Path, path: Path) -> bool:
+    """
+    リンクをたどった後の場所が, ディレクトリの外かを返す関数
+
+    ML-EDA の読み込みと同じ決まりで, ディレクトリ自体もたどった後の場所と
+    比べる (ディレクトリ自体のリンクは信頼する)
+
+    Parameters
+    ----------
+    base: Path
+        データセットのディレクトリ
+    path: Path
+        確かめる場所
+
+    Returns
+    ----------
+    outside: bool
+        たどった後の path が, たどった後の base の下に無いか (リンクが
+        輪になってたどれない場合も True)
+    """
+    # 両方のリンクをたどってから比べる
+    try:
+        outside = not path.resolve().is_relative_to(base.resolve())
+    except (OSError, RuntimeError):
+        outside = True
+
+    return outside
+
+
 def table_summary(path: Path) -> dict[str, Any]:
     """
     版 1 (1 件 = 1 行の表) のデータセットを一覧の 1 件にする関数
@@ -120,11 +149,21 @@ def dataset_summary(path: Path) -> Optional[dict[str, Any]]:
     if path.name.startswith(".") or not file.is_file():
         return summary
 
-    # 版を読んでから読み分ける
+    # 版を読んでから読み分ける (外を指すリンクの dataset.yaml は, ML-EDA
+    # の load_items と同じく読まない)
     summary = {
         "name": path.name, "path": str(path), "format_version": None,
         "created_at": None,
     }
+    if points_outside(path, file):
+        summary.update(
+            form="unreadable", unknown_version=False,
+            error=(
+                "dataset.yaml はデータセットのディレクトリの外を指すリンク"
+                "なので読みません"
+            )
+        )
+        return summary
     try:
         info = yaml.safe_load(file.read_text(encoding="utf-8"))
     except (OSError, UnicodeDecodeError, yaml.YAMLError) as error:

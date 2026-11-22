@@ -13,6 +13,7 @@ from ml_eda.synthetic import write_image_masks, write_shape_captures
 
 from ml_fathom.api import PAIR_STEPS, STEP_LIMITS, check_step_limits
 from ml_fathom.app import create_app
+from ml_fathom.datasets import dataset_summary
 
 # テストで使うトークン
 TOKEN = "test-token"
@@ -380,8 +381,8 @@ def test_capture_clouds_export(client: TestClient, tmp_path: Path) -> None:
 
 def test_list_unreadable(client: TestClient, tmp_path: Path) -> None:
     """
-    知らない版と壊れたデータセットが, 一覧から消えずに理由を出すことを
-    確かめる関数
+    知らない版と壊れたデータセット, 外を指すリンクの dataset.yaml が,
+    一覧から消えずに理由を出すことを確かめる関数
 
     Parameters
     ----------
@@ -432,12 +433,28 @@ def test_list_unreadable(client: TestClient, tmp_path: Path) -> None:
     (root / "listed" / "dataset.yaml").write_text(
         "- 1\n- 2\n", encoding="utf-8"
     )
+    # 外の dataset.yaml を指すリンク (ML-EDA の load_items と同じく読まない)
+    (root / "linked").mkdir()
+    (root / "linked" / "dataset.yaml").symlink_to(
+        root / "v1" / "dataset.yaml"
+    )
 
     # 版 1 は今までどおり, 他は読めないものとして並ぶ
     datasets = {
         item["name"]: item for item in client.get("/api/datasets").json()
     }
-    assert set(datasets) == {"v1", "future", "broken", "float", "listed"}
+    assert set(datasets) == {
+        "v1", "future", "broken", "float", "listed", "linked"
+    }
+    assert datasets["linked"]["form"] == "unreadable"
+    assert datasets["linked"]["unknown_version"] is False
+    assert "外を指すリンク" in datasets["linked"]["error"]
+
+    # データセットのディレクトリ自体のリンクは信頼する (一覧は同じ場所を
+    # 1 つにするので, 1 件を直に読む)
+    (tmp_path / "alias").symlink_to(root / "v1")
+    alias = dataset_summary(tmp_path / "alias")
+    assert alias is not None and alias["form"] == "table"
     assert datasets["float"]["unknown_version"] is True
     assert datasets["listed"]["unknown_version"] is False
     assert "辞書" in datasets["listed"]["error"]
