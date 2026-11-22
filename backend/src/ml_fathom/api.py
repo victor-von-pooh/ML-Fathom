@@ -60,10 +60,13 @@ PAIR_STEPS: dict[str, dict[str, tuple[str, tuple[str, ...]]]] = {
     },
 }
 
-# 中身の手順の引数の上限 (書き出しの前に確かめる. 大きすぎる値で手元の
-# 計算機の記憶を使い切らないように. 画像の辺は 4096 画素, 点の数は
-# 100 万点まで)
-STEP_LIMITS = {"width": 4096, "height": 4096, "points": 1_000_000}
+# 中身の手順の引数の上限 (見本と書き出しの前に確かめる. 大きすぎる値で
+# 手元の計算機の記憶を使い切らないように. 画像の辺は 4096 画素, 点の数は
+# 100 万点, 音声の標本化の周波数は 192000 Hz, 長さは 600 秒まで)
+STEP_LIMITS: dict[str, int | float] = {
+    "width": 4096, "height": 4096, "points": 1_000_000,
+    "rate": 192_000, "seconds": 600,
+}
 
 
 class Cache:
@@ -425,7 +428,8 @@ def check_step_limits(item_steps: Any) -> None:
     Parameters
     ----------
     item_steps: Any
-        項目の名前から中身の手順の並び (無ければ None)
+        項目の名前から中身の手順の並び (ファイルの組の書き出し), 手順の
+        並び (版 1 のレシピ), 無ければ None
 
     Returns
     ----------
@@ -436,7 +440,9 @@ def check_step_limits(item_steps: Any) -> None:
     HTTPException
         上限を超えた引数があれば 422
     """
-    # 項目ごとの手順の数の引数
+    # 項目ごとの手順の数の引数 (版 1 のレシピの並びは 1 つの項目として)
+    if isinstance(item_steps, list):
+        item_steps = {"中身": item_steps}
     if not isinstance(item_steps, dict):
         return
     for entry, steps in item_steps.items():
@@ -1187,9 +1193,12 @@ def item_preview(
     Raises
     ----------
     HTTPException
-        中身を持たない種類か, 手順が誤っている場合は 422
+        中身を持たない種類か, 手順が誤っているか, 引数が上限を超えた場合は
+        422
     """
-    # 少ない見本で当てはめて, 画面で見せる形にする (画像の形の誤りも 422)
+    # 手順の引数の上限を確かめ, 少ない見本で当てはめて, 画面で見せる形に
+    # する (画像の形の誤りも 422)
+    check_step_limits(body.recipe.get("item_steps"))
     data = load_source(find_source(request, source_id))
     try:
         result = ml_eda.preview_items(data, body.recipe, body.count)
@@ -1247,9 +1256,12 @@ def export(
     Raises
     ----------
     HTTPException
-        名前の誤りと前処理の失敗は 422, 既にある場合は 409
+        名前の誤り, 前処理の失敗, 上限を超えた手順の引数は 422, 既にある
+        場合は 409
     """
-    # 置き場の datasets の下に書き出し, レシピも保存
+    # 手順の引数の上限を確かめ, 置き場の datasets の下に書き出し, レシピも
+    # 保存
+    check_step_limits(body.recipe.get("item_steps"))
     store = get_store(request)
     data = load_source(find_source(request, source_id))
     try:

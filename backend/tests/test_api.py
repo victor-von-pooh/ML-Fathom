@@ -414,6 +414,18 @@ def test_images(client: TestClient, tmp_path: Path) -> None:
     ).json()
     assert exported["info"]["splits"]["train"]["shape"][1:] == [3, 8, 8]
 
+    # 上限を超えた画像の辺は, 見本と書き出しの前に 422
+    wrong = {**recipe, "item_steps": [
+        {"op": "resize", "width": 4097, "height": 8}
+    ]}
+    assert client.post(
+        f"/api/sources/{sid}/item_preview",
+        json={"recipe": wrong, "count": 3},
+    ).status_code == 422
+    assert client.post(
+        f"/api/sources/{sid}/export", json={"recipe": wrong, "name": "big"}
+    ).status_code == 422
+
 
 def test_points_response() -> None:
     """
