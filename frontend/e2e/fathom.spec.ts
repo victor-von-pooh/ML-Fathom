@@ -379,6 +379,51 @@ test('音声を登録し, 種類の名前と, 1 件ずつの再生と波形を�
   expect((await played.body()).length).toBe(8000 * 2 * 30 + 44)
 })
 
+test('音声で中身の手順を分析から作り, 数件で試して前と後の再生と波形を見る', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'データを追加' }).first().click()
+  await page
+    .getByLabel('ディレクトリのパス')
+    .fill(path.resolve(import.meta.dirname, '.work', 'sounds'))
+  await page.getByRole('button', { name: '移動' }).click()
+  await page.getByRole('button', { name: 'このディレクトリを選ぶ' }).click()
+  await page.getByRole('button', { name: '追加', exact: true }).click()
+  await expect(page.getByText('音声 · audio_folder')).toBeVisible({ timeout: 20_000 })
+
+  // 分析 (8000 Hz, 1 チャンネル, 長さの中央値 18 秒) から, 周波数, チャンネル, 長さの順の手順を作る
+  await page.getByRole('tab', { name: '前処理と書き出し' }).click()
+  await page.getByRole('button', { name: '学習用の配列にする手順を作る' }).click()
+  const steps = page.locator('section', {
+    has: page.getByRole('heading', { name: '中身の手順 (3)' }),
+  })
+  await expect(steps.locator('ol > li code')).toHaveText(['resample', 'mix_channels', 'fix_length'])
+  await expect(steps.getByLabel('rate', { exact: true })).toHaveValue('8000')
+  await expect(steps.getByLabel('channels', { exact: true })).toHaveValue('1')
+  await expect(steps.getByLabel('seconds', { exact: true })).toHaveValue('18')
+
+  // 数件で試すと, 選んだ 1 件の前と後の再生と波形が出る
+  const preview = page.locator('section', {
+    has: page.getByRole('heading', { name: '中身の手順の前と後' }),
+  })
+  await preview.getByRole('button', { name: '数件で試す' }).click()
+  await expect(preview.getByText(/学習用の .+ 件で当てはめた/)).toBeVisible({ timeout: 20_000 })
+  const sounds: Record<string, Buffer> = {}
+  for (const side of ['前', '後']) {
+    await expect(
+      preview.getByRole('img', { name: new RegExp(`の手順の${side}の波形`) }),
+    ).toBeVisible()
+    const src = await preview.getByLabel(new RegExp(`の手順の${side}の再生`)).getAttribute('src')
+    expect(src).toMatch(/^data:audio\/wav;base64,/)
+    const sound = Buffer.from(src!.split(',')[1]!, 'base64')
+    expect(sound.subarray(0, 4).toString('ascii')).toBe('RIFF')
+    sounds[side] = sound
+  }
+  // 後は 18 秒にそろえた形で, 再生は先頭の 5 秒 (8000 Hz, 1 チャンネル, 16 bit と頭の 44 バイト)
+  await expect(preview.getByText('後 (形 (1, 144000))')).toBeVisible()
+  expect(sounds['後']!.length).toBe(8000 * 2 * 5 + 44)
+  await expect(preview.getByText(/長さ 18\.0 秒 \(再生と波形は先頭の 5\.00 秒だけ\)/)).toBeVisible()
+})
+
 test('外を指すリンクの件は理由を出して読まず, 読み込みの設定 follow_links で読む', async ({
   page,
 }) => {
