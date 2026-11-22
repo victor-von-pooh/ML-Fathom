@@ -411,29 +411,34 @@ def test_item_place_stays_inside(tmp_path: Path, kind: str) -> None:
     ----------
     None
     """
-    # 置き場の外の音声と, 置き場の中の音声
+    # 置き場の外の音声と, 置き場の中の音声 (外を指すリンクか, 場所を
+    # 書き換える件)
     root = tmp_path / "sounds"
-    secret = write_wave(tmp_path / "secret.wav", 0.1, 1)
+    secret = write_wave(tmp_path / "secret.wav", 0.2, 1)
     write_wave(root / "inside.wav", 0.1, 1)
-    places = {
-        "outside": "../secret.wav", "absolute": str(secret),
-        "link": "link.wav",
-    }
     if kind == "link":
-        (root / "link.wav").symlink_to(secret)
-    data = ml_eda.Data(
-        kind="audio",
-        frame=pd.DataFrame({"path": [places[kind], "inside.wav"]}),
-        source={"root": str(root)},
-    )
+        (root / "target.wav").symlink_to(secret)
+    else:
+        write_wave(root / "target.wav", 0.1, 1)
+
+    # ML-EDA の読み込みの Data で, 外と絶対パスは表の場所を書き換える
+    # (1 件の読み込みは表の場所を見るので, ML-EDA だけなら外を読む)
+    data = ml_eda.load_data(root)
+    paths = data.frame["path"].tolist()
+    target, inside = paths.index("target.wav"), paths.index("inside.wav")
+    places = {"outside": "../secret.wav", "absolute": str(secret)}
+    if kind in places:
+        data.frame.loc[target, "path"] = places[kind]
+    outside = data.load_item(target, seconds=AUDIO_SECONDS)
+    assert len(outside["samples"]) == int(0.2 * RATE)
 
     # 外は 422 で読まない. 中はたどった後の場所
     with pytest.raises(HTTPException) as caught:
-        audio_clip(data, 0)
+        audio_clip(data, target)
     assert caught.value.status_code == 422
     assert "外" in str(caught.value.detail)
-    assert item_place(data, 1) == (root / "inside.wav").resolve()
-    assert audio_clip(data, 1)["sample_rate"] == RATE
+    assert item_place(data, inside) == (root / "inside.wav").resolve()
+    assert audio_clip(data, inside)["sample_rate"] == RATE
 
 
 def test_outside_links_refused(client: TestClient, tmp_path: Path) -> None:

@@ -57,7 +57,7 @@ def item_response(
         中身を持たない種類か, 読めない場合と, ファイルが読み込んだ
         ディレクトリの外の場合は 422
     """
-    # 音声は先頭の決まった長さだけを読む (load_item は全てを読むため)
+    # 音声は先頭の決まった長さだけを読む (長い録音で大きな音を送らないため)
     response: Response
     if data.kind == "audio":
         response = JSONResponse(
@@ -149,17 +149,17 @@ def audio_clip(data: ml_eda.Data, index: int) -> dict[str, Any]:
     ----------
     audio: dict[str, Any]
         samples ((標本の数, チャンネル) の float32) と sample_rate
-        (ML-EDA の read_audio)
+        (ML-EDA の load_item に秒を渡した形)
 
     Raises
     ----------
     HTTPException
         場所が無いか読み込んだディレクトリの外の場合と, 読めない場合は 422
     """
-    # 場所は読み込んだディレクトリの中に限る
-    place = item_place(data, index)
+    # 場所は読み込んだディレクトリの中に限り, 先頭の秒だけを読む
+    item_place(data, index)
     try:
-        audio: dict[str, Any] = ml_eda.read_audio(place, AUDIO_SECONDS)
+        audio: dict[str, Any] = data.load_item(index, seconds=AUDIO_SECONDS)
     except Exception as error:
         # 壊れたファイルや soundfile の無い形式など, 読めない理由は様々
         raise HTTPException(422, f"読めませんでした: {error}") from error
