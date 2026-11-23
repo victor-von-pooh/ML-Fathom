@@ -37,8 +37,9 @@ SHAPE_ERRORS = (ValueError, TypeError, AttributeError, KeyError)
 SUFFIXES = (".yaml", ".yml")
 
 # 作るの受け持ちのうち登録したデータとレシピで書き出す正解の種類から, 合う
-# データの種類 (ML-EDA の読み込みの kind. 骨組みが読むデータセットの種類)
-GENERATE_KINDS = {"image": "image", "table": "table"}
+# データの種類 (ML-EDA の Data.kind. 日時の列を見つけた表は timeseries に
+# なるが, 中身は表なので表を作る課題に使える)
+GENERATE_KINDS = {"image": ("image",), "table": ("table", "timeseries")}
 
 # 作るものの正解の種類の, 理由の文の名前
 KIND_NAMES = {"image": "画像", "table": "表"}
@@ -505,12 +506,11 @@ def start_from_problem(
     if is_generate(problem):
         kind = ml_quest.active_value(problem, f"{ml_quest.PART}.target.kind")
         name = KIND_NAMES[kind]
-        if data.kind != GENERATE_KINDS[kind]:
+        if data.kind not in GENERATE_KINDS[kind]:
             raise HTTPException(
-                422, f"{data_path.name} は{name}のデータではありません "
-                f"(読み込み {loader}). 作るものが{name}の問題の設定には, "
-                f"ML-Pathfinder の「手元のデータは」で{name}のデータを入れて"
-                "ください"
+                422, f"{data_path.name} は{name}のデータではありません. "
+                f"作るものが{name}の問題の設定には, ML-Pathfinder の「手元"
+                f"のデータは」で{name}のデータを入れてください"
             )
     elif target not in [str(name) for name in data.frame.columns]:
         raise HTTPException(

@@ -347,8 +347,62 @@ def test_generate_wrong_data(client: TestClient, tmp_path: Path) -> None:
     ml_quest.save_problem(problem, path)
     response = client.post("/api/problems/start", json={"path": str(path)})
     assert response.status_code == 422
-    assert "表のデータではありません" in response.json()["detail"]
+    detail = response.json()["detail"]
+    assert "表のデータではありません" in detail
+    assert "image_folder" not in detail and "読み込み" not in detail
     assert client.get("/api/sources").json() == []
+
+    # 作るものが画像なのに, ディレクトリでない表のファイル
+    table = write_table(tmp_path / "raw")
+    problem = ml_quest.attach_data(generate_problem("image"), str(table))
+    ml_quest.save_problem(problem, path)
+    response = client.post("/api/problems/start", json={"path": str(path)})
+    assert response.status_code == 422
+    assert "画像のデータではありません" in response.json()["detail"]
+    assert client.get("/api/sources").json() == []
+
+
+def test_generate_timeseries_table(
+    client: TestClient, tmp_path: Path
+) -> None:
+    """
+    日時の列を持ち時系列として読まれる表も, 作るものが表の問題の設定で
+    始められることを確かめる関数
+
+    Parameters
+    ----------
+    client: TestClient
+        クライアント
+    tmp_path: Path
+        一時ディレクトリ
+
+    Returns
+    ----------
+    None
+    """
+    # 日ごとの行 (ML-EDA は日時の列を見つけて timeseries にする)
+    rows = 40
+    data = tmp_path / "daily.csv"
+    pd.DataFrame({
+        "date": pd.date_range("2025-01-01", periods=rows).strftime(
+            "%Y-%m-%d"
+        ),
+        "sales": np.arange(rows) % 7 + 10,
+        "store": ["east", "west"] * (rows // 2),
+    }).to_csv(data, index=False)
+    path, _ = saved_problem(tmp_path, "table", data)
+    started = client.post("/api/problems/start", json={"path": str(path)})
+    assert started.status_code == 201
+    source = started.json()["source"]
+    assert source["kind"] == "timeseries" and source["target"] is None
+
+    # 目的の列の無いレシピのまま, 食い違いなく確かめられる
+    recipe = client.get(f"/api/sources/{source['id']}/recipe").json()
+    assert recipe["task"] == "none"
+    checked = client.post(
+        f"/api/sources/{source['id']}/problem/check", json={"recipe": recipe}
+    ).json()
+    assert checked["conflicts"] == [] and checked["choices"] == []
 
 
 def test_other_roles(client: TestClient, tmp_path: Path) -> None:
