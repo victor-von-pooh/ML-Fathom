@@ -299,9 +299,10 @@ ml_quest.save_problem(problem, work / "pathfinder" / "problems" / "table")
 PY
 
 # 記録した軌跡の見本 (ML-EDA のテストの見本を写す. 守りの付いた Discrete の
-# 行動の軌跡と, Box の行動の軌跡. どちらも表と説明の JSON)
+# 行動の軌跡, Box の行動の軌跡と, 行動を選んだ確率の列を持つ軌跡. どれも表と
+# 説明の JSON)
 mkdir -p "$WORK/trajectories"
-cp ../ML-EDA/tests/data/trajectories/{guarded,box}.{csv,json} "$WORK/trajectories/"
+cp ../ML-EDA/tests/data/trajectories/{guarded,box,prob}.{csv,json} "$WORK/trajectories/"
 
 # データの置き場と ML-Pathfinder の置き場も作業用のディレクトリにし,
 # 決まったトークンで起動

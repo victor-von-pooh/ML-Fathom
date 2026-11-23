@@ -641,6 +641,8 @@ export interface TrajectorySummary {
   action_columns: string[]
   extra_columns: string[]
   guarded: boolean
+  /** 行動を選んだ確率の列 (action_prob) があるか */
+  with_action_prob: boolean
   length: TrajectoryStats
   return: TrajectoryStats
   unknown_returns: number
@@ -651,6 +653,8 @@ export interface TrajectorySummary {
     results: Record<string, number>
     reasons: { reason: string; count: number }[]
   } | null
+  /** 確率の列の空の数, 範囲 (0 より大きく 1 以下) の外の数と, 範囲の中の値の要約 */
+  action_prob: (TrajectoryStats & { missing: number; out_of_range: number }) | null
   per_episode: TrajectoryEpisode[]
   per_episode_truncated: boolean
   notes: string[]

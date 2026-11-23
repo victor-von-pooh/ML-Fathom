@@ -864,6 +864,27 @@ test('Box の行動の軌跡では要素ごとの統計を出し, 守りのタ�
   await expect(page.getByRole('tab', { name: '守り' })).toHaveCount(0)
 })
 
+test('行動を選んだ確率のある軌跡で, 確率の列の欠けと範囲の外の数を見る', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'データを追加' }).first().click()
+  await page
+    .getByLabel('ディレクトリのパス')
+    .fill(path.resolve(import.meta.dirname, '.work', 'trajectories'))
+  await page.getByRole('button', { name: '移動' }).click()
+  await page.getByRole('button', { name: /prob\.csv/ }).click()
+  await expect(page.getByLabel('読み込み', { exact: true })).toHaveValue('trajectory')
+  await page.getByRole('button', { name: '追加', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'prob.csv' })).toBeVisible()
+
+  // 確率の列: 守りで止めた 2 行は欠け, 範囲の外は無い
+  await page.getByRole('tab', { name: '観測と行動' }).click()
+  const card = page
+    .locator('section')
+    .filter({ has: page.getByRole('heading', { name: '行動を選んだ確率', exact: true }) })
+  await expect(card.getByText('欠け', { exact: true }).locator('..')).toContainText('2')
+  await expect(card.getByText(/^範囲の外/).locator('..')).toContainText('0')
+})
+
 test('作るものが表の問題の設定から始め, 書き戻してプロジェクトへ書き出す', async ({ page }) => {
   // 置き換えの確かめは既定で受ける (やり直しで前の書き出しが残っていても進めるように)
   page.on('dialog', (dialog) => void dialog.accept())
