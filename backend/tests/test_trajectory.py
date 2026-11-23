@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
 
+import ml_eda
+import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
 
@@ -222,3 +224,66 @@ def test_trajectory_errors(client: TestClient, tmp_path: Path) -> None:
     plain.write_text("a,b\n1,2\n3,4\n", "utf-8")
     sid = client.post("/api/sources", json={"path": str(plain)}).json()["id"]
     assert client.get(f"/api/sources/{sid}/trajectory").status_code == 422
+
+
+def test_detect_reads_once(
+    client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """
+    Parquet と JSON は見出しで軌跡かを見分け, 候補で読んだ要約を登録で
+    使い回すことを確かめる関数
+
+    Parameters
+    ----------
+    client: TestClient
+        クライアント
+    tmp_path: Path
+        pytest が用意する一時ディレクトリ
+    monkeypatch: pytest.MonkeyPatch
+        読んだ回数を数える差し替え
+
+    Returns
+    ----------
+    None
+    """
+    # 読んだ回数を数える
+    calls: list[Path] = []
+    original = ml_eda.load_trajectory
+
+    def counted(path: Path) -> ml_eda.Trajectory:
+        calls.append(Path(path))
+        return original(path)
+
+    monkeypatch.setattr(ml_eda, "load_trajectory", counted)
+
+    # 軌跡の Parquet は候補の先頭. 候補と登録と要約で 1 回だけ読む
+    table = tmp_path / "steps.parquet"
+    pd.DataFrame({
+        "episode": [0, 0], "step": [0, 1], "obs": [0.5, 0.25],
+        "action": [1, 0], "reward": [1.0, 1.0],
+        "terminated": [False, True], "truncated": [False, False],
+    }).to_parquet(table)
+    candidates = client.post("/api/detect", json={"path": str(table)}).json()
+    assert candidates[0]["loader"] == "trajectory"
+    created = client.post(
+        "/api/sources", json={"path": str(table), "loader": "trajectory"}
+    )
+    assert created.status_code == 201
+    summary = client.get(
+        f"/api/sources/{created.json()['id']}/trajectory"
+    ).json()
+    assert summary["format"] == "parquet" and summary["episodes"] == 1
+    assert len(calls) == 1
+
+    # 列の合わない Parquet と, 行の並びの JSON は読まずに候補から外す
+    calls.clear()
+    other = tmp_path / "other.parquet"
+    pd.DataFrame({"a": [1, 2]}).to_parquet(other)
+    rows = tmp_path / "rows.json"
+    rows.write_text(json.dumps([{"a": 1}, {"a": 2}]), "utf-8")
+    for path in (other, rows):
+        candidates = client.post(
+            "/api/detect", json={"path": str(path)}
+        ).json()
+        assert all(c["loader"] != "trajectory" for c in candidates)
+    assert calls == []

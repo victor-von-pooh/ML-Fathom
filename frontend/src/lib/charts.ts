@@ -3,15 +3,24 @@ import type { EChartsOption } from 'echarts'
 import type { Histogram, ValueCount } from '../api/types'
 import { formatNumber } from './format'
 
-/** ヒストグラムの棒グラフの設定 */
-export function histogramOption(histogram: Histogram, name: string): EChartsOption {
-  const labels = histogram.counts.map(
-    (_, index) =>
-      `${formatNumber(histogram.edges[index])} – ${formatNumber(histogram.edges[index + 1])}`,
-  )
+/**
+ * ヒストグラムの棒グラフの設定. values を渡すと, 区間の見出しを範囲でなくその値にして
+ * 軸に出す (1 つの整数ごとの区間)
+ */
+export function histogramOption(
+  histogram: Histogram,
+  name: string,
+  values?: string[],
+): EChartsOption {
+  const labels =
+    values ??
+    histogram.counts.map(
+      (_, index) =>
+        `${formatNumber(histogram.edges[index])} – ${formatNumber(histogram.edges[index + 1])}`,
+    )
   return {
     tooltip: { trigger: 'axis' },
-    xAxis: { type: 'category', data: labels, axisLabel: { show: false }, name },
+    xAxis: { type: 'category', data: labels, axisLabel: { show: values !== undefined }, name },
     yAxis: { type: 'value', name: '件数' },
     series: [{ type: 'bar', data: histogram.counts, barCategoryGap: '4%' }],
   }

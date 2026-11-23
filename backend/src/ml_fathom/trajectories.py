@@ -1,6 +1,6 @@
 import csv
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import ml_eda
 from fastapi import HTTPException
@@ -18,7 +18,8 @@ TRAJECTORY_SUFFIXES = (".csv", ".parquet", ".json")
 # 読み込みの候補の確からしさ (読めた軌跡は, 表として読む候補より先に)
 TRAJECTORY_SCORE = 0.95
 
-# CSV の見出しを確かめる大きさ (大きな表を候補を出すために全て読まない)
+# CSV と JSON の先頭を確かめる大きさ (大きなファイルを候補を出すために
+# 全て読まない)
 HEADER_BYTES = 64 << 10
 
 
@@ -52,36 +53,93 @@ def csv_header_fits(path: Path) -> bool:
     return fits
 
 
-def trajectory_candidate(path: Path) -> Optional[dict[str, Any]]:
+def parquet_header_fits(path: Path) -> bool:
     """
-    記録した軌跡として読めれば, 読み込みの候補を返す関数
+    Parquet のスキーマに, エピソードと歩の列があるかを返す関数
+
+    行を読まずに, ファイルの終わりのスキーマの列の名前だけを見る
 
     Parameters
     ----------
     path: Path
-        ファイル (表か説明)
+        Parquet のファイル
 
     Returns
     ----------
-    candidate: Optional[dict[str, Any]]
-        loader, kind, score. 軌跡として読めなければ None
+    fits: bool
+        スキーマに episode と step の列があるか (読めなければ False)
     """
-    # 読めるかは ML-EDA の load_trajectory で決める
-    suffix = path.suffix.lower()
-    if not path.is_file() or suffix not in TRAJECTORY_SUFFIXES:
-        return None
-    if suffix == ".csv" and not csv_header_fits(path):
-        return None
+    # pyarrow は ML-EDA の任意の依存 [parquet] (このアプリは all で入れる)
     try:
-        ml_eda.load_trajectory(path)
-    except (OSError, ValueError, ImportError):
-        return None
-    candidate = {
-        "loader": TRAJECTORY_LOADER, "kind": TRAJECTORY_KIND,
-        "score": TRAJECTORY_SCORE,
-    }
+        import pyarrow.parquet as pq
 
-    return candidate
+        names = set(pq.read_schema(path).names)
+    except Exception:  # 壊れたファイルは候補にしないだけ
+        return False
+    fits = {"episode", "step"} <= names
+
+    return fits
+
+
+def json_header_fits(path: Path) -> bool:
+    """
+    JSON の先頭が, 軌跡の説明 (版と表の名前を持つ辞書) に見えるかを返す
+    関数
+
+    読み込みの表の JSON (行の並び) を, 候補を出すために全て読まないよう
+    に, 先頭の小さな範囲だけを見る
+
+    Parameters
+    ----------
+    path: Path
+        JSON のファイル
+
+    Returns
+    ----------
+    fits: bool
+        辞書で始まり, format_version と file の鍵を含むか (読めなければ
+        False)
+    """
+    try:
+        with path.open("rb") as handle:
+            head = handle.read(HEADER_BYTES)
+    except OSError:
+        return False
+    text = head.decode("utf-8-sig", errors="replace").lstrip()
+    fits = (
+        text.startswith("{")
+        and '"format_version"' in text and '"file"' in text
+    )
+
+    return fits
+
+
+# 拡張子ごとの, 読む前の見出しの確かめ
+HEADER_CHECKS = {
+    ".csv": csv_header_fits,
+    ".parquet": parquet_header_fits,
+    ".json": json_header_fits,
+}
+
+
+def may_be_trajectory(path: Path) -> bool:
+    """
+    読む前の見出しだけで, 記録した軌跡でありうるかを返す関数
+
+    Parameters
+    ----------
+    path: Path
+        場所
+
+    Returns
+    ----------
+    fits: bool
+        表か説明のファイルで, 見出しが軌跡に合うか
+    """
+    check = HEADER_CHECKS.get(path.suffix.lower())
+    fits = path.is_file() and check is not None and check(path)
+
+    return fits
 
 
 def trajectory_files(path: Path) -> list[Path]:

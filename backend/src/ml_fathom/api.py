@@ -1,4 +1,5 @@
 import json
+import os
 import threading
 import time
 from collections import OrderedDict
@@ -31,8 +32,9 @@ from ml_fathom.store import SourceStore
 from ml_fathom.trajectories import (
     TRAJECTORY_KIND,
     TRAJECTORY_LOADER,
+    TRAJECTORY_SCORE,
+    may_be_trajectory,
     read_summary,
-    trajectory_candidate,
     trajectory_files,
 )
 
@@ -359,7 +361,8 @@ def load_source(source: dict[str, Any]) -> ml_eda.Data:
     # 記録した軌跡は表として読まず, 軌跡の要約だけを返す
     if source["loader"] == TRAJECTORY_LOADER:
         raise HTTPException(
-            422, "記録した軌跡は, 軌跡の分析 (trajectory) だけで扱います"
+            422, "記録した軌跡は表として読みません. 「データを追加」から"
+            "読み込み trajectory で登録し, 軌跡の分析で見てください"
         )
     # 覚えていれば使い, 無ければ読み込む
     key = source_key(source)
@@ -661,9 +664,15 @@ def candidates_of(path: Path) -> list[dict[str, Any]]:
     """
     # 軌跡の表は普通の表としても読めるので, 軌跡を先に並べる
     candidates: list[dict[str, Any]] = ml_eda.detect(path)
-    trajectory = trajectory_candidate(path)
-    if trajectory is not None:
-        candidates = [trajectory, *candidates]
+    if may_be_trajectory(path):
+        try:
+            trajectory_summary(path)
+        except HTTPException:
+            return candidates
+        candidates = [{
+            "loader": TRAJECTORY_LOADER, "kind": TRAJECTORY_KIND,
+            "score": TRAJECTORY_SCORE,
+        }, *candidates]
 
     return candidates
 
@@ -723,7 +732,7 @@ def create_source(request: Request, body: SourceCreate) -> dict[str, Any]:
     store = get_store(request)
     # 記録した軌跡は, 読めることを確かめて設定なしで登録する
     if loader == TRAJECTORY_LOADER:
-        read_summary(path)
+        trajectory_summary(path)
         source = store.add(
             path, body.name or path.name, loader, TRAJECTORY_KIND, {}
         )
@@ -948,14 +957,41 @@ def get_trajectory(request: Request, source_id: str) -> dict[str, Any]:
         raise HTTPException(
             422, f"{source['name']} は記録した軌跡ではありません"
         )
-    path = Path(source["path"])
+    summary = trajectory_summary(Path(source["path"]))
+
+    return summary
+
+
+def trajectory_summary(path: Path) -> dict[str, Any]:
+    """
+    記録した軌跡の要約を返す関数 (覚えていればそれを使う)
+
+    候補を出すときに読んだ結果を, 登録と画面でも使い回す
+
+    Parameters
+    ----------
+    path: Path
+        表か説明
+
+    Returns
+    ----------
+    summary: dict[str, Any]
+        ML-EDA の describe_trajectory の結果
+
+    Raises
+    ----------
+    HTTPException
+        無い場合は 404, 読めない場合は 422
+    """
+    # 表と隣の説明のどちらが変わっても読み直す
+    place = Path(os.path.abspath(path.expanduser()))
     key = json.dumps(
-        [source_key(source), [file_stamp(p) for p in trajectory_files(path)]]
+        [str(place), [file_stamp(p) for p in trajectory_files(place)]]
     )
     cached: Optional[dict[str, Any]] = TRAJECTORY_CACHE.get(key)
     if cached is not None:
         return cached
-    summary = read_summary(path)
+    summary = read_summary(place)
     TRAJECTORY_CACHE.put(key, summary)
 
     return summary

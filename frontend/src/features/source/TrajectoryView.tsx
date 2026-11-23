@@ -24,20 +24,17 @@ import {
 import { Chart } from '../../lib/chart'
 import { countsOption, histogramOption } from '../../lib/charts'
 import { formatCount, formatNumber, KIND_LABELS } from '../../lib/format'
-import { binValues, downloadAnalysis, END_LABELS, END_ORDER } from '../../lib/trajectory'
+import {
+  binValues,
+  downloadAnalysis,
+  END_LABELS,
+  END_ORDER,
+  guardLabel,
+  SOURCE_LABELS,
+} from '../../lib/trajectory'
 import { Stat } from './ColumnsTab'
 
 type TabId = 'overview' | 'elements' | 'guard' | 'episodes'
-
-/** 守りの結果の日本語の名前 (知らない結果はそのまま) */
-const GUARD_LABELS: Record<string, string> = {
-  ok: 'ok (そのまま)',
-  clipped: 'clipped (範囲に収めた)',
-  fallback: 'fallback (代わりの行動)',
-  stop: 'stop (止めた)',
-  handover: 'handover (引き継いだ)',
-  missing: '空',
-}
 
 /** 説明の値を短い文にする */
 function describeValue(value: unknown): string {
@@ -95,7 +92,10 @@ function Distribution({
         </div>
         <div className="min-w-0">
           {histogram ? (
-            <Chart label={`${title}のヒストグラム`} option={histogramOption(histogram, axis)} />
+            <Chart
+              label={`${title}のヒストグラム`}
+              option={histogramOption(histogram, axis, histogram.labels)}
+            />
           ) : (
             <p className="text-sm text-ink-3">描ける値がありません.</p>
           )}
@@ -127,7 +127,7 @@ function OverviewPanel({ summary }: { summary: TrajectorySummary }) {
     ['表の形式', summary.format],
     ['説明 (JSON)', summary.described ? 'あり' : 'なし'],
     ['説明の版', summary.format_version],
-    ['出どころ', summary.source],
+    ['出どころ', summary.source && (SOURCE_LABELS[summary.source] ?? summary.source)],
     ['環境', summary.env],
     ['エポック', summary.epoch],
     ['説明の文', summary.description],
@@ -186,7 +186,17 @@ function OverviewPanel({ summary }: { summary: TrajectorySummary }) {
 
 /** 観測か行動の要素ごとの統計の表 */
 function ElementTable({ caption, elements }: { caption: string; elements: TrajectoryElement[] }) {
-  const headers = ['型', '欠け', 'nan', '無限大', '最小', '最大', '平均', '標準偏差', '中央値']
+  const headers = [
+    '型',
+    '欠け',
+    'nan (数でない値)',
+    '無限大',
+    '最小',
+    '最大',
+    '平均',
+    '標準偏差',
+    '中央値',
+  ]
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-xs">
@@ -268,7 +278,7 @@ function ElementsPanel({ summary }: { summary: TrajectorySummary }) {
 function GuardPanel({ guard }: { guard: NonNullable<TrajectorySummary['guard']> }) {
   const results = Object.entries(guard.results)
     .sort((a, b) => b[1] - a[1])
-    .map(([result, count]) => ({ value: GUARD_LABELS[result] ?? result, count }))
+    .map(([result, count]) => ({ value: guardLabel(result), count }))
   return (
     <div className="space-y-4">
       <Card title="守りの結果ごとの行の数">

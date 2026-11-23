@@ -120,6 +120,9 @@ test('概要に数と分布と終わり方と説明を出し, 守りのタブを
   expect(screen.getByRole('img', { name: '報酬の和のヒストグラム' })).toBeInTheDocument()
   expect(screen.getByRole('img', { name: '終わり方ごとのエピソードの数' })).toBeInTheDocument()
   expect(screen.getByText('prob')).toBeInTheDocument()
+  // 出どころは関数の名前でなく日本語の言い換え
+  expect(screen.getByText('守り付きの評価')).toBeInTheDocument()
+  expect(screen.queryByText('evaluate_policy')).not.toBeInTheDocument()
   expect(screen.getByRole('tab', { name: '守り' })).toBeInTheDocument()
   // 切っていなければ, 先頭だけで描いた知らせは出さない
   expect(screen.queryByText(/先頭の .* 件のエピソードで描いています/)).not.toBeInTheDocument()

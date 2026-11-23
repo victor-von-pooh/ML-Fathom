@@ -805,7 +805,7 @@ test('記録した軌跡を登録し, 分布と行動の偏りと守りとエピ
   })
   await expect(page.getByRole('img', { name: '報酬の和のヒストグラム' })).toBeVisible()
   await expect(page.getByRole('img', { name: '終わり方ごとのエピソードの数' })).toBeVisible()
-  await expect(page.getByText('evaluate_policy')).toBeVisible()
+  await expect(page.getByText('守り付きの評価')).toBeVisible()
   // 表の分析の目的の列と前処理のタブは出さない
   await expect(page.getByLabel('目的の列')).toHaveCount(0)
   await expect(page.getByRole('tab', { name: '前処理と書き出し' })).toHaveCount(0)
