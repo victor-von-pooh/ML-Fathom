@@ -1,4 +1,5 @@
 import json
+import os
 import threading
 import time
 from collections import OrderedDict
@@ -28,6 +29,14 @@ from ml_fathom.jsonable import to_json
 from ml_fathom.samples import sample_target, write_samples
 from ml_fathom.settings import get_problems_dir
 from ml_fathom.store import SourceStore
+from ml_fathom.trajectories import (
+    TRAJECTORY_KIND,
+    TRAJECTORY_LOADER,
+    TRAJECTORY_SCORE,
+    may_be_trajectory,
+    read_summary,
+    trajectory_files,
+)
 
 router = APIRouter(prefix="/api")
 
@@ -131,6 +140,9 @@ PROFILE_CACHE = Cache(CACHE_SIZE * 4)
 # 多視点の撮影の 1 件の中身 (各枚の場所と姿勢. 1 枚ずつの要求で読み直さ
 # ないように)
 CAPTURE_CACHE = Cache(CACHE_SIZE * 4)
+
+# 記録した軌跡の要約
+TRAJECTORY_CACHE = Cache(CACHE_SIZE * 4)
 
 
 class SourceCreate(BaseModel):
@@ -346,6 +358,12 @@ def load_source(source: dict[str, Any]) -> ml_eda.Data:
     HTTPException
         読めない場合は 422
     """
+    # 記録した軌跡は表として読まず, 軌跡の要約だけを返す
+    if source["loader"] == TRAJECTORY_LOADER:
+        raise HTTPException(
+            422, "記録した軌跡は表として読みません. 「データを追加」から"
+            "読み込み trajectory で登録し, 軌跡の分析で見てください"
+        )
     # 覚えていれば使い, 無ければ読み込む
     key = source_key(source)
     data = DATA_CACHE.get(key)
@@ -618,9 +636,43 @@ def detect(body: DetectRequest) -> list[dict[str, Any]]:
         場所が無い場合は 404
     """
     try:
-        candidates: list[dict[str, Any]] = ml_eda.detect(body.path)
+        candidates = candidates_of(Path(body.path).expanduser())
     except FileNotFoundError as error:
         raise HTTPException(404, str(error)) from error
+
+    return candidates
+
+
+def candidates_of(path: Path) -> list[dict[str, Any]]:
+    """
+    ML-EDA の読み込みの候補に, 記録した軌跡の候補を加える関数
+
+    Parameters
+    ----------
+    path: Path
+        場所
+
+    Returns
+    ----------
+    candidates: list[dict[str, Any]]
+        読み込み, 種類, 確からしさ (軌跡として読めれば, その候補が先頭)
+
+    Raises
+    ----------
+    FileNotFoundError
+        場所が無い場合
+    """
+    # 軌跡の表は普通の表としても読めるので, 軌跡を先に並べる
+    candidates: list[dict[str, Any]] = ml_eda.detect(path)
+    if may_be_trajectory(path):
+        try:
+            trajectory_summary(path)
+        except HTTPException:
+            return candidates
+        candidates = [{
+            "loader": TRAJECTORY_LOADER, "kind": TRAJECTORY_KIND,
+            "score": TRAJECTORY_SCORE,
+        }, *candidates]
 
     return candidates
 
@@ -673,14 +725,21 @@ def create_source(request: Request, body: SourceCreate) -> dict[str, Any]:
         raise HTTPException(404, f"{path} がありません")
     loader = body.loader
     if loader is None:
-        candidates = ml_eda.detect(path)
+        candidates = candidates_of(path)
         if not candidates:
             raise HTTPException(422, f"{path.name} を読める読み込みがありません")
         loader = candidates[0]["loader"]
+    store = get_store(request)
+    # 記録した軌跡は, 読めることを確かめて設定なしで登録する
+    if loader == TRAJECTORY_LOADER:
+        trajectory_summary(path)
+        source = store.add(
+            path, body.name or path.name, loader, TRAJECTORY_KIND, {}
+        )
+        return source_view(source)
     draft = {"path": str(path), "loader": loader, "options": body.options}
     data = load_source(draft)
     # クラスのフォルダから読んだラベルは, 初めから目的の列にする
-    store = get_store(request)
     source = store.add(
         path, body.name or path.name, loader, data.kind, body.options
     )
@@ -868,6 +927,74 @@ def get_profile(request: Request, source_id: str) -> dict[str, Any]:
     PROFILE_CACHE.put(key, result)
 
     return result
+
+
+@router.get("/sources/{source_id}/trajectory")
+def get_trajectory(request: Request, source_id: str) -> dict[str, Any]:
+    """
+    記録した軌跡の要約を返す関数
+
+    Parameters
+    ----------
+    request: Request
+        リクエスト
+    source_id: str
+        データの ID
+
+    Returns
+    ----------
+    summary: dict[str, Any]
+        ML-EDA の describe_trajectory の結果
+
+    Raises
+    ----------
+    HTTPException
+        無い場合は 404, 軌跡でないか読めない場合は 422
+    """
+    # 表と隣の説明のどちらが変わっても読み直す
+    source = find_source(request, source_id)
+    if source["loader"] != TRAJECTORY_LOADER:
+        raise HTTPException(
+            422, f"{source['name']} は記録した軌跡ではありません"
+        )
+    summary = trajectory_summary(Path(source["path"]))
+
+    return summary
+
+
+def trajectory_summary(path: Path) -> dict[str, Any]:
+    """
+    記録した軌跡の要約を返す関数 (覚えていればそれを使う)
+
+    候補を出すときに読んだ結果を, 登録と画面でも使い回す
+
+    Parameters
+    ----------
+    path: Path
+        表か説明
+
+    Returns
+    ----------
+    summary: dict[str, Any]
+        ML-EDA の describe_trajectory の結果
+
+    Raises
+    ----------
+    HTTPException
+        無い場合は 404, 読めない場合は 422
+    """
+    # 表と隣の説明のどちらが変わっても読み直す
+    place = Path(os.path.abspath(path.expanduser()))
+    key = json.dumps(
+        [str(place), [file_stamp(p) for p in trajectory_files(place)]]
+    )
+    cached: Optional[dict[str, Any]] = TRAJECTORY_CACHE.get(key)
+    if cached is not None:
+        return cached
+    summary = read_summary(place)
+    TRAJECTORY_CACHE.put(key, summary)
+
+    return summary
 
 
 @router.get("/sources/{source_id}/rows")

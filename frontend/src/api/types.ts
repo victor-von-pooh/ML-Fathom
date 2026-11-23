@@ -576,3 +576,80 @@ export interface ItemPreview {
   items: ItemPreviewItem[]
   fit_rows: number
 }
+
+/** 記録した軌跡の値の要約 (ML-EDA の describe_trajectory の length, return) */
+export interface TrajectoryStats {
+  min: number | null
+  max: number | null
+  mean: number | null
+  std: number | null
+  median: number | null
+}
+
+/** 記録した軌跡の観測か行動の 1 つの要素 */
+export interface TrajectoryElement {
+  name: string
+  type: string
+  /** 空の数 (nan は値なので含まない) */
+  missing: number
+  nan: number
+  infinite: number
+  min: number | null
+  max: number | null
+  mean: number | null
+  std: number | null
+  median: number | null
+  /** 整数の列で, 異なる値が 50 以下なら値ごとの数 */
+  counts: { value: number; count: number }[] | null
+}
+
+/** 記録した軌跡のエピソードの終わり方 */
+export type TrajectoryEnd = 'terminated' | 'truncated' | 'stop' | 'handover' | 'open'
+
+/** 記録した軌跡の 1 つのエピソード */
+export interface TrajectoryEpisode {
+  episode: number
+  rows: number
+  length: number
+  /** 報酬の和 (有限でなければ null) */
+  return: number | null
+  end: TrajectoryEnd
+  seed: number | null
+}
+
+/** 記録した軌跡の要約 (ML-EDA の describe_trajectory) */
+export interface TrajectorySummary {
+  name: string
+  format: string
+  described: boolean
+  format_version: number | null
+  source: string | null
+  env: unknown
+  epoch: number | null
+  description: string | null
+  complete: boolean | null
+  dropped_episodes: number | null
+  observation_space: Record<string, unknown> | null
+  action_space: Record<string, unknown> | null
+  rows: number
+  episodes: number
+  steps: number
+  columns: { name: string; type: string }[]
+  observation_columns: string[]
+  action_columns: string[]
+  extra_columns: string[]
+  guarded: boolean
+  length: TrajectoryStats
+  return: TrajectoryStats
+  unknown_returns: number
+  ends: Record<TrajectoryEnd, number>
+  observations: TrajectoryElement[]
+  actions: TrajectoryElement[]
+  guard: {
+    results: Record<string, number>
+    reasons: { reason: string; count: number }[]
+  } | null
+  per_episode: TrajectoryEpisode[]
+  per_episode_truncated: boolean
+  notes: string[]
+}
