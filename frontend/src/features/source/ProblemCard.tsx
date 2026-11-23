@@ -26,11 +26,14 @@ const OPTIONS = {
  */
 export function ProblemCard({
   sourceId,
+  notes = [],
   recipe,
   latest,
   onWritten,
 }: {
   sourceId: string
+  /** 始めたときの ML-Quest の知らせ (作るものの落とす列と欠損, 画像の大きさなど) */
+  notes?: string[]
   /** 編集中のレシピ (打つたびに試さないよう, 少し待ったもの) */
   recipe: Recipe | null
   /** 待つ前の最新の編集中のレシピ (書き戻すのはこれ) */
@@ -100,6 +103,16 @@ export function ProblemCard({
         問題の設定 (ML-Pathfinder) で決めた状態から始めたデータです. ここで変えた選び方を,
         問題の設定と比べて書き戻せます. 列の使い方は自動では変えません.
       </p>
+      {notes.length > 0 && (
+        <section aria-label="始めたときの知らせ" className="mb-3">
+          <h3 className="text-xs font-semibold text-ink-2">始めたときの知らせ</h3>
+          <ul className="mt-1 list-disc pl-5 text-xs text-ink-2">
+            {notes.map((text) => (
+              <li key={text}>{text}</li>
+            ))}
+          </ul>
+        </section>
+      )}
       {check.isPending && check.fetchStatus !== 'idle' && (
         <Spinner label="問題の設定と比べています" />
       )}

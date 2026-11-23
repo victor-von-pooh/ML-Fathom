@@ -162,8 +162,8 @@ class SourceStore:
         self, source_id: str, changes: dict[str, Any]
     ) -> Optional[dict[str, Any]]:
         """
-        登録したデータの名前, 目的の列, 読み込みの設定, 始めた問題の設定,
-        プロジェクトへ書き出した場所を変える関数
+        登録したデータの名前, 目的の列, 読み込みの設定, 始めた問題の設定と
+        その知らせ, プロジェクトへ書き出した場所を変える関数
 
         Parameters
         ----------
@@ -180,7 +180,7 @@ class SourceStore:
         # 決まった項目だけを書き換える
         allowed = {
             "name", "target", "loader", "options", "kind", "problem",
-            "problem_created", "project_dataset",
+            "problem_created", "problem_notes", "project_dataset",
         }
         with self.lock:
             sources = self.read()

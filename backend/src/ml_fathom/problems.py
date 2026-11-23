@@ -36,6 +36,14 @@ SHAPE_ERRORS = (ValueError, TypeError, AttributeError, KeyError)
 # 問題の設定のファイルの拡張子
 SUFFIXES = (".yaml", ".yml")
 
+# 作るの受け持ちのうち登録したデータとレシピで書き出す正解の種類から, 合う
+# データの種類 (ML-EDA の Data.kind. 日時の列を見つけた表は timeseries に
+# なるが, 中身は表なので表を作る課題に使える)
+GENERATE_KINDS = {"image": ("image",), "table": ("table", "timeseries")}
+
+# 作るものの正解の種類の, 理由の文の名前
+KIND_NAMES = {"image": "画像", "table": "表"}
+
 # ML-Quest の書き出しの関数の名前から, ファイルの組の書き出しの画面の欄
 PAIR_FORMS = {
     "export_image_masks": "image_masks",
@@ -159,13 +167,64 @@ def read_problem(path: Path) -> dict[str, Any]:
     return problem
 
 
-def require_column(problem: dict[str, Any]) -> None:
+def is_generate(problem: dict[str, Any]) -> bool:
     """
-    受け持ちが列の予測 (予測するで, 正解が表の列) でなければ止める関数
+    受け持ちが画像か表の生成 (作るで, 正解の種類が画像か表) かを返す関数
+
+    Parameters
+    ----------
+    problem: dict[str, Any]
+        問題の設定 (版 2)
+
+    Returns
+    ----------
+    generate: bool
+        画像か表の生成の受け持ちか
+    """
+    # 受け持ちと正解の種類の答え (要らない問いの古い答えは除外)
+    part = ml_quest.PART
+    role = ml_quest.active_value(problem, f"{part}.role")
+    kind = ml_quest.active_value(problem, f"{part}.target.kind")
+    generate = role == "generate" and kind in GENERATE_KINDS
+
+    return generate
+
+
+def choice_text(choices: list[dict[str, Any]], value: Any) -> str:
+    """
+    ML-Quest の選択肢の値を, 画面の言葉と値の組の文にする関数
+
+    Parameters
+    ----------
+    choices: list[dict[str, Any]]
+        選択肢 (value と label)
+    value: Any
+        答えの値 (答えていなければ None)
+
+    Returns
+    ----------
+    text: str
+        「言葉」(値) の文 (答えていなければ未定, 選択肢に無ければ値のまま)
+    """
+    # 言葉は説明の括弧の前まで
+    if value is None:
+        text = "未定"
+        return text
+    labels = [str(item["label"]).split(" (")[0] for item in choices
+              if item["value"] == value]
+    text = f"「{labels[0]}」({value})" if labels else str(value)
+
+    return text
+
+
+def require_recipe(problem: dict[str, Any]) -> None:
+    """
+    受け持ちが, 登録したデータとレシピで書き出すもの (列の予測と, 画像か
+    表の生成) でなければ止める関数
 
     ML-Quest の版 2 の問題の設定は, 受け持ち (作る, 並べるなど) と正解の
     種類 (領域, 点群など) を持つ. 登録したデータのレシピの下書きと書き戻し
-    は列の予測だけ (ファイルの組の受け持ちは require_items)
+    は列の予測と画像か表の生成だけ (ファイルの組の受け持ちは require_items)
 
     Parameters
     ----------
@@ -179,20 +238,35 @@ def require_column(problem: dict[str, Any]) -> None:
     Raises
     ----------
     HTTPException
-        列の予測でない場合は 422 (受け持ちと正解の種類と, できることの文)
+        他の受け持ちは 422 (使えない受け持ちと正解の種類, 理由, 使える
+        受け持ちの文)
     """
-    # 受け持ちと正解の種類 (答えていなければ未定)
-    if is_column_part(problem):
+    # 使えない受け持ちと正解の種類を, 画面の選択肢と同じ言葉で
+    if is_column_part(problem) or is_generate(problem):
         return
     part = ml_quest.PART
-    role = ml_quest.get_value(problem, f"{part}.role") or "未定"
-    kind = ml_quest.get_value(problem, f"{part}.target.kind") or "未定"
+    role = ml_quest.active_value(problem, f"{part}.role")
+    kind = ml_quest.active_value(problem, f"{part}.target.kind")
+    if role == "effect" and ml_quest.active_value(
+        problem, f"{part}.autonomous"
+    ) is True:
+        why = ("方策は行動の結果を環境とのやり取りで集めるので, データの"
+               "分析の段階を通りません")
+    elif role == "predict" and ml_quest.active_value(
+        problem, f"{part}.method"
+    ) == "pretrained":
+        why = ("既製のモデルをそのまま使う予測は学習しないので, データの"
+               "分析の段階を通りません")
+    else:
+        why = "この受け持ちと正解の種類はまだ扱えません"
     raise HTTPException(
         422,
-        f"この問題の設定の受け持ちは {role} (正解の種類 {kind}) です. "
-        "問題の設定から始めることと書き戻しは, 今は予測する (predict) で"
-        "正解が表の列 (column), 画像の領域 (mask), 点群 (point_cloud) の"
-        "場合だけです. データは「データを追加」から入れて分析できます"
+        f"この問題の設定の受け持ち {choice_text(ml_quest.ROLES, role)} "
+        f"(正解の種類 {choice_text(ml_quest.TARGET_KINDS, kind)}) は, "
+        f"問題の設定から始めることと書き戻しに使えません ({why}). 使える"
+        "のは, 予測するで正解の種類が表の列, 画像の領域, 点群の場合と, "
+        "作るで正解の種類が画像か表の場合です. データは「データを追加」"
+        "から入れて分析できます"
     )
 
 
@@ -213,18 +287,18 @@ def require_items(problem: dict[str, Any]) -> None:
     Raises
     ----------
     HTTPException
-        列の予測なら 422 (データの画面から始める), 他は require_column と
-        同じ 422
+        列の予測と画像か表の生成なら 422 (データの画面から始める), 他は
+        require_recipe と同じ 422
     """
-    # 列の予測は登録したデータで始める
+    # 列の予測と画像か表の生成は登録したデータで始める
     if is_items_part(problem):
         return
-    if is_column_part(problem):
+    if is_column_part(problem) or is_generate(problem):
         raise HTTPException(
-            422, "この問題の設定は列の予測です. データの画面の「問題の設定"
-            "から始める」で始めてください"
+            422, "この問題の設定は列の予測か, 画像か表の生成です. データの"
+            "画面の「問題の設定から始める」で始めてください"
         )
-    require_column(problem)
+    require_recipe(problem)
 
 
 def linked_problem(
@@ -347,8 +421,8 @@ def trial_of(
     HTTPException
         レシピの形の誤りと, 書き戻せない答えは 422
     """
-    # 列の予測であることと, レシピの形を確かめてから
-    require_column(problem)
+    # レシピで書き出す受け持ちであることと, レシピの形を確かめてから
+    require_recipe(problem)
     try:
         checked = ml_eda.load_recipe(recipe)
         trial: dict[str, Any] = ml_quest.apply_recipe(problem, checked)
@@ -377,7 +451,7 @@ def start_from_problem(
     started: dict[str, Any]
         source (登録したデータ. ファイルの組の受け持ちでは None),
         problem (problem.yaml の場所), form (ファイルの組の書き出しの画面の
-        欄. 列の予測では None), notes (知らせの文の並び)
+        欄. 列の予測と画像か表の生成では None), notes (知らせの文の並び)
 
     Raises
     ----------
@@ -396,7 +470,7 @@ def start_from_problem(
             "notes": draft["notes"],
         }
         return started
-    require_column(problem)
+    require_recipe(problem)
     try:
         start = ml_quest.recipe_from(problem)
         recipe = ml_eda.load_recipe(start["recipe"])
@@ -411,7 +485,8 @@ def start_from_problem(
             "「手元のデータは」で入れてください)"
         )
 
-    # 読めること, 目的の列があることを確かめて登録し, レシピを保存
+    # 読めること, 目的の列があること (画像か表の生成は目的の列が無く,
+    # データの種類が正解の種類に合うこと) を確かめて登録し, レシピを保存
     data_path = Path(load["path"])
     if not data_path.exists():
         raise HTTPException(404, f"{data_path} がありません")
@@ -428,15 +503,27 @@ def start_from_problem(
         {"path": str(data_path), "loader": loader, "options": options}
     )
     target = recipe.get("target")
-    if target not in [str(name) for name in data.frame.columns]:
+    if is_generate(problem):
+        kind = ml_quest.active_value(problem, f"{ml_quest.PART}.target.kind")
+        name = KIND_NAMES[kind]
+        if data.kind not in GENERATE_KINDS[kind]:
+            raise HTTPException(
+                422, f"{data_path.name} は{name}のデータではありません. "
+                f"作るものが{name}の問題の設定には, ML-Pathfinder の「手元"
+                f"のデータは」で{name}のデータを入れてください"
+            )
+    elif target not in [str(name) for name in data.frame.columns]:
         raise HTTPException(
             422, f"目的の列 {target} がデータにありません"
         )
     store = get_store(request)
     source = store.add(data_path, problem["name"], loader, data.kind, options)
+    # 知らせ (作るものの落とす列と欠損, 画像の大きさなど) は画面の問題の
+    # 設定のカードに出し続けるので, 登録したデータに持つ
     source = store.update(source["id"], {
         "target": target, "problem": str(path),
         "problem_created": str(problem["created_at"]),
+        "problem_notes": [str(note) for note in start["notes"]],
     }) or source
     store.write_recipe(source["id"], recipe)
     started = {"source": source_view(source), "problem": str(path),
@@ -841,11 +928,11 @@ def problem_entry(path: Path) -> dict[str, Any]:
         project=project_record(problem)
     )
 
-    # 始めるときと同じ確かめ (列の予測はデータを入れてあること.
-    # ファイルの組の受け持ちはディレクトリを画面で選べる)
+    # 始めるときと同じ確かめ (列の予測と画像か表の生成はデータを入れて
+    # あること. ファイルの組の受け持ちはディレクトリを画面で選べる)
     try:
         if not is_items_part(problem):
-            require_column(problem)
+            require_recipe(problem)
         load = ml_quest.recipe_from(problem)["load"]
     except HTTPException as error:
         entry["reason"] = str(error.detail)

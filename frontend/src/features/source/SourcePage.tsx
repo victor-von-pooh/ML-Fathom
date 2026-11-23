@@ -166,6 +166,7 @@ export function SourcePage() {
             loader={source.loader}
             options={source.options}
             problem={source.problem}
+            problemNotes={source.problem_notes ?? []}
           />
         )}
       </div>

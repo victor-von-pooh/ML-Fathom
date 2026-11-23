@@ -863,3 +863,28 @@ test('Box の行動の軌跡では要素ごとの統計を出し, 守りのタ�
   await expect(page.getByRole('img', { name: /の値ごとの数/ })).toHaveCount(0)
   await expect(page.getByRole('tab', { name: '守り' })).toHaveCount(0)
 })
+
+test('作るものが表の問題の設定から始め, 書き戻してプロジェクトへ書き出す', async ({ page }) => {
+  // 置き換えの確かめは既定で受ける (やり直しで前の書き出しが残っていても進めるように)
+  page.on('dialog', (dialog) => void dialog.accept())
+
+  // 一覧から始めると, 目的の列の無いレシピで始まり, 始めたときの知らせが出る
+  await page.goto('/')
+  await page.getByRole('button', { name: '問題の設定から始める' }).click()
+  const stored = page.getByRole('list', { name: '保存した問題の設定' })
+  await stored.getByRole('button', { name: /合成の表のプロジェクト/ }).click()
+  await page.getByRole('button', { name: 'この問題の設定から始める' }).click()
+  await expect(page.getByRole('heading', { name: '合成の表のプロジェクト' })).toBeVisible()
+  await page.getByRole('tab', { name: '前処理と書き出し' }).click()
+  const notes = page.getByRole('region', { name: '始めたときの知らせ' })
+  await expect(notes.getByText(/drop_columns で落とし/)).toBeVisible({ timeout: 20_000 })
+  await expect(page.getByText('問題の設定との食い違いはありません.')).toBeVisible()
+
+  // 書き戻してから, 骨組みの読む場所 (outputs/dataset) へ書き出す
+  await page.getByRole('button', { name: '問題の設定に書き戻す' }).click()
+  await expect(page.getByText(/書き戻しました/)).toBeVisible()
+  const button = page.getByRole('button', { name: 'プロジェクトへ書き出す' })
+  await expect(page.getByText(/table_project\/outputs\/dataset$/)).toBeVisible()
+  await button.click()
+  await expect(page.getByText(/プロジェクトへ書き出しました/)).toBeVisible({ timeout: 20_000 })
+})
