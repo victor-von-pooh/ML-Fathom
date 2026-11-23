@@ -832,6 +832,11 @@ test('記録した軌跡を登録し, 分布と行動の偏りと守りとエピ
   await expect(episodes.getByRole('row')).toHaveCount(3)
   await expect(episodes.getByText('守りで止めた')).toHaveCount(2)
 
+  // 確率の列の無い表は, 方策を見積もれない理由を出す
+  await page.getByRole('tab', { name: '方策の見積もり' }).click()
+  await expect(page.getByRole('note')).toContainText('action_prob')
+  await expect(page.getByRole('button', { name: '見積もる' })).toHaveCount(0)
+
   // 分析を書き出すと, 要約の JSON を保存する
   const [download] = await Promise.all([
     page.waitForEvent('download'),
@@ -862,6 +867,43 @@ test('Box の行動の軌跡では要素ごとの統計を出し, 守りのタ�
   await expect(actions.getByRole('row', { name: /action_0/ })).toContainText('number')
   await expect(page.getByRole('img', { name: /の値ごとの数/ })).toHaveCount(0)
   await expect(page.getByRole('tab', { name: '守り' })).toHaveCount(0)
+})
+
+test('行動を選んだ確率のある軌跡で, 確率の列を見て, 決まった形の方策の良さを見積もる', async ({
+  page,
+}) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'データを追加' }).first().click()
+  await page
+    .getByLabel('ディレクトリのパス')
+    .fill(path.resolve(import.meta.dirname, '.work', 'trajectories'))
+  await page.getByRole('button', { name: '移動' }).click()
+  await page.getByRole('button', { name: /prob\.csv/ }).click()
+  await expect(page.getByLabel('読み込み', { exact: true })).toHaveValue('trajectory')
+  await page.getByRole('button', { name: '追加', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'prob.csv' })).toBeVisible()
+
+  // 確率の列: 守りで止めた 2 行は欠け, 範囲の外は無い
+  await page.getByRole('tab', { name: '観測と行動' }).click()
+  const card = page.locator('section').filter({ hasText: '行動を選んだ確率 (action_prob)' })
+  await expect(card.getByText('欠け', { exact: true }).locator('..')).toContainText('2')
+  await expect(card.getByText(/^範囲の外/).locator('..')).toContainText('0')
+
+  // 一様の方策: 記録の確率 0.7 と 0.3 から重みを付けて見積もる
+  await page.getByRole('tab', { name: '方策の見積もり' }).click()
+  await page.getByRole('button', { name: '見積もる' }).click()
+  const table = page.getByRole('table', { name: '見積もりの比べ' })
+  await expect(table.getByRole('row', { name: /重み付き/ })).toContainText('2', {
+    timeout: 20_000,
+  })
+  await expect(table.getByRole('row', { name: /普通の/ })).toContainText('1.7007')
+  await expect(page.getByText(/守りで止めた判断の行 \(2 行\)/)).toBeVisible()
+
+  // ε-greedy の方策は, 記録で最も多い行動 1 を選ぶ
+  await page.getByLabel('方策', { exact: true }).selectOption('epsilon_greedy')
+  await page.getByLabel('ε (一様に選ぶ確率)').fill('0.2')
+  await page.getByRole('button', { name: '見積もる' }).click()
+  await expect(page.getByText(/確率 0\.8 で行動 1/)).toBeVisible({ timeout: 20_000 })
 })
 
 test('作るものが表の問題の設定から始め, 書き戻してプロジェクトへ書き出す', async ({ page }) => {

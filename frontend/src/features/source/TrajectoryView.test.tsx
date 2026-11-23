@@ -1,10 +1,10 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, expect, test, vi } from 'vitest'
 
 import { api } from '../../api/client'
-import type { Source, TrajectorySummary } from '../../api/types'
+import type { Info, PolicyValueResult, Source, TrajectorySummary } from '../../api/types'
 import { TrajectoryView } from './TrajectoryView'
 
 // グラフは描かず, 名前だけを出す (jsdom では canvas を描けないため)
@@ -44,6 +44,7 @@ function summaryOf(overrides: Partial<TrajectorySummary> = {}): TrajectorySummar
     action_columns: ['action'],
     extra_columns: ['prob'],
     guarded: true,
+    with_action_prob: false,
     length: STATS,
     return: STATS,
     unknown_returns: 0,
@@ -82,6 +83,7 @@ function summaryOf(overrides: Partial<TrajectorySummary> = {}): TrajectorySummar
       results: { ok: 6, stop: 2 },
       reasons: [{ reason: '観測の要素 0 が範囲の外 (3)', count: 2 }],
     },
+    action_prob: null,
     per_episode: [
       { episode: 0, rows: 4, length: 3, return: 3, end: 'stop', seed: 7 },
       { episode: 1, rows: 4, length: 3, return: 3, end: 'stop', seed: 8 },
@@ -92,8 +94,9 @@ function summaryOf(overrides: Partial<TrajectorySummary> = {}): TrajectorySummar
   }
 }
 
-function renderView(summary: TrajectorySummary, tab = 'overview') {
+function renderView(summary: TrajectorySummary, tab = 'overview', policyValue = false) {
   vi.spyOn(api, 'trajectory').mockResolvedValue(summary)
+  vi.spyOn(api, 'info').mockResolvedValue({ policy_value: policyValue } as Info)
   const source = {
     id: 's1',
     name: 'guarded.csv',
@@ -178,4 +181,94 @@ test('分析を書き出すと要約の JSON を保存させる', async () => {
   expect(link.download).toBe('guarded.analysis.json')
   const written = JSON.parse(await create.mock.calls[0]![0].text()) as TrajectorySummary
   expect(written).toEqual(summary)
+})
+
+/** 確率の列のある軌跡の要約 */
+const WITH_PROB: Partial<TrajectorySummary> = {
+  with_action_prob: true,
+  action_prob: {
+    missing: 2,
+    out_of_range: 1,
+    min: 0.3,
+    max: 0.7,
+    mean: 0.5,
+    std: 0.2,
+    median: 0.5,
+  },
+}
+
+test('確率の列の有無を概要に出し, 観測と行動に欠けと範囲の外の数を出す', async () => {
+  renderView(summaryOf(WITH_PROB))
+  const tile = (await screen.findByText('行動を選んだ確率')).parentElement!
+  expect(tile).toHaveTextContent('あり')
+  fireEvent.click(screen.getByRole('tab', { name: '観測と行動' }))
+  const card = (await screen.findByText('行動を選んだ確率 (action_prob)')).closest('section')!
+  expect(within(card).getByText('欠け').nextSibling).toHaveTextContent('2')
+  expect(
+    within(card).getByText('範囲の外 (0 より大きく 1 以下でない値)').nextSibling,
+  ).toHaveTextContent('1')
+})
+
+test('確率の列が無い表は, 観測と行動で無いと知らせる', async () => {
+  renderView(summaryOf(), 'elements')
+  expect(await screen.findByText('表に行動を選んだ確率の列はありません.')).toBeInTheDocument()
+})
+
+test('ML-Found が無い場合は方策の見積もりのタブを出さない', async () => {
+  renderView(summaryOf(WITH_PROB), 'policy')
+  expect(await screen.findByText('エピソードの長さ')).toBeInTheDocument()
+  expect(screen.queryByRole('tab', { name: '方策の見積もり' })).not.toBeInTheDocument()
+})
+
+test('確率の列が無い表では, 見積もれない理由を出す', async () => {
+  renderView(summaryOf(), 'policy', true)
+  expect(await screen.findByRole('note')).toHaveTextContent('action_prob')
+  expect(screen.queryByRole('button', { name: '見積もる' })).not.toBeInTheDocument()
+})
+
+test('見積もる方策を選んで見積もり, 3 つの見積もりと有効なサンプルの数と知らせることを出す', async () => {
+  const result: PolicyValueResult = {
+    policy: { name: 'epsilon_greedy', n: 2, start: 0, action: 1, epsilon: 0.2 },
+    gamma: 0.9,
+    estimate: {
+      value: 1.855,
+      ordinary: 1.25,
+      per_decision: null,
+      behavior_value: 1.5,
+      episodes: 2,
+      steps: 6,
+      effective_sample_size: 1.8,
+      max_weight_share: 0.6,
+      zero_weight_episodes: 0,
+      underflow_episodes: 0,
+      notes: ['守りで止めた判断の行 (2 行) は重みに入れません'],
+    },
+  }
+  const estimate = vi.spyOn(api, 'policyValue').mockResolvedValue(result)
+  renderView(summaryOf(WITH_PROB), 'policy', true)
+  fireEvent.change(await screen.findByLabelText('方策'), {
+    target: { value: 'epsilon_greedy' },
+  })
+  fireEvent.change(screen.getByLabelText('ε (一様に選ぶ確率)'), { target: { value: '0.2' } })
+  const gamma = screen.getByLabelText('割引率 γ')
+
+  // 範囲の外の割引率では見積もれない
+  fireEvent.change(gamma, { target: { value: '1.5' } })
+  expect(screen.getByRole('button', { name: '見積もる' })).toBeDisabled()
+  fireEvent.change(gamma, { target: { value: '0.9' } })
+  fireEvent.click(screen.getByRole('button', { name: '見積もる' }))
+  await waitFor(() =>
+    expect(estimate).toHaveBeenCalledWith('s1', {
+      policy: 'epsilon_greedy',
+      epsilon: 0.2,
+      gamma: 0.9,
+    }),
+  )
+  const table = await screen.findByRole('table', { name: '見積もりの比べ' })
+  expect(within(table).getByRole('row', { name: /重み付き/ })).toHaveTextContent('1.855')
+  expect(within(table).getByRole('row', { name: /歩ごと/ })).toHaveTextContent('–')
+  expect(within(table).getByRole('row', { name: /記録した方策/ })).toHaveTextContent('1.5')
+  expect(screen.getByText('有効なサンプルの数').parentElement).toHaveTextContent('1.8')
+  expect(screen.getByText('守りで止めた判断の行 (2 行) は重みに入れません')).toBeInTheDocument()
+  expect(screen.getByText(/確率 0.8 で行動 1/)).toBeInTheDocument()
 })

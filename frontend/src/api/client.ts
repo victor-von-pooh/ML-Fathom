@@ -23,6 +23,8 @@ import type {
   PairSettings,
   ProjectPlace,
   TrajectorySummary,
+  PolicyKind,
+  PolicyValueResult,
 } from './types'
 
 /** API がエラーを返したときの例外 */
@@ -84,6 +86,8 @@ export const api = {
   deleteSource: (id: string) => request<void>(`/api/sources/${id}`, { method: 'DELETE' }),
   profile: (id: string) => request<Profile>(`/api/sources/${id}/profile`),
   trajectory: (id: string) => request<TrajectorySummary>(`/api/sources/${id}/trajectory`),
+  policyValue: (id: string, body: { policy: PolicyKind; epsilon: number; gamma: number }) =>
+    request<PolicyValueResult>(`/api/sources/${id}/policy_value`, json('POST', body)),
   rows: (
     id: string,
     params: { offset: number; limit: number; sort?: string; descending?: boolean; query?: string },

@@ -33,8 +33,9 @@ import {
   SOURCE_LABELS,
 } from '../../lib/trajectory'
 import { Stat } from './ColumnsTab'
+import { PolicyValuePanel } from './PolicyValuePanel'
 
-type TabId = 'overview' | 'elements' | 'guard' | 'episodes'
+type TabId = 'overview' | 'elements' | 'guard' | 'episodes' | 'policy'
 
 /** 説明の値を短い文にする */
 function describeValue(value: unknown): string {
@@ -141,13 +142,18 @@ function OverviewPanel({ summary }: { summary: TrajectorySummary }) {
   ]
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">
         <StatTile label="エピソード" value={formatCount(summary.episodes)} />
         <StatTile label="行" value={formatCount(summary.rows)} />
         <StatTile label="環境を進めた歩数" value={formatCount(summary.steps)} hint="報酬のある行" />
         <StatTile label="長さの平均" value={formatNumber(summary.length.mean)} />
         <StatTile label="報酬の和の平均" value={formatNumber(summary.return.mean)} />
         <StatTile label="守り" value={summary.guarded ? 'あり' : 'なし'} />
+        <StatTile
+          label="行動を選んだ確率"
+          value={summary.with_action_prob ? 'あり' : 'なし'}
+          hint="action_prob の列"
+        />
       </div>
       <Card title={`気付き (${summary.notes.length} 件)`}>
         <Notes notes={summary.notes} />
@@ -242,6 +248,35 @@ function ElementTable({ caption, elements }: { caption: string; elements: Trajec
   )
 }
 
+/** 行動を選んだ確率の列の有無と, 欠けと範囲の外の数 */
+function ActionProbCard({ summary }: { summary: TrajectorySummary }) {
+  const prob = summary.action_prob
+  return (
+    <Card title="行動を選んだ確率 (action_prob)">
+      {prob === null ? (
+        <p className="text-sm text-ink-3">表に行動を選んだ確率の列はありません.</p>
+      ) : (
+        <>
+          <div className="grid gap-x-6 md:grid-cols-2">
+            <Stat label="欠け" value={formatNumber(prob.missing)} />
+            <Stat
+              label="範囲の外 (0 より大きく 1 以下でない値)"
+              value={formatNumber(prob.out_of_range)}
+            />
+            <Stat label="最小" value={formatNumber(prob.min)} />
+            <Stat label="最大" value={formatNumber(prob.max)} />
+            <Stat label="平均" value={formatNumber(prob.mean)} />
+            <Stat label="中央値" value={formatNumber(prob.median)} />
+          </div>
+          <p className="mt-2 text-xs text-ink-3">
+            欠けは空の値の数です (守りで止めた行は確率が空). 最小から中央値は範囲の中の値で求めます.
+          </p>
+        </>
+      )}
+    </Card>
+  )
+}
+
 /** 観測と行動: 要素ごとの統計と, 行動の値ごとの数 */
 function ElementsPanel({ summary }: { summary: TrajectorySummary }) {
   const counted = summary.actions.filter((item) => item.counts !== null)
@@ -267,6 +302,7 @@ function ElementsPanel({ summary }: { summary: TrajectorySummary }) {
           </div>
         ))}
       </Card>
+      <ActionProbCard summary={summary} />
       <Card title={`観測 (${summary.observations.length} 要素)`}>
         <ElementTable caption="観測の要素ごとの統計" elements={summary.observations} />
       </Card>
@@ -369,12 +405,15 @@ export function TrajectoryView({ source }: { source: Source }) {
     queryKey: ['trajectory', source.id],
     queryFn: () => api.trajectory(source.id),
   })
+  // 方策の見積もりは, 任意の依存の ML-Found がある場合だけ出す
+  const info = useQuery({ queryKey: ['info'], queryFn: api.info, staleTime: Infinity })
   const data = summary.data
   const items: TabItem<TabId>[] = [
     { id: 'overview', label: '概要と気付き', count: data?.notes.length },
     { id: 'elements', label: '観測と行動' },
     ...(data?.guard ? [{ id: 'guard' as const, label: '守り' }] : []),
     { id: 'episodes', label: 'エピソード', count: data?.episodes },
+    ...(info.data?.policy_value ? [{ id: 'policy' as const, label: '方策の見積もり' }] : []),
   ]
   const requested = (search.get('tab') as TabId | null) ?? 'overview'
   const tab = items.some((item) => item.id === requested) ? requested : 'overview'
@@ -414,6 +453,7 @@ export function TrajectoryView({ source }: { source: Source }) {
         {data && tab === 'elements' && <ElementsPanel summary={data} />}
         {data && tab === 'guard' && data.guard && <GuardPanel guard={data.guard} />}
         {data && tab === 'episodes' && <EpisodesPanel summary={data} />}
+        {data && tab === 'policy' && <PolicyValuePanel sourceId={source.id} summary={data} />}
       </div>
     </>
   )

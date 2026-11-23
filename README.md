@@ -39,7 +39,7 @@
 - **列と関係**: 列ごとの型と分布, 目的の列の分布と, 目的の列との関連の強さ, 数値の列の相関
 - **時系列**: 時刻の間隔と抜け, 系列のグラフ, 自己相関から見た周期の候補
 - **1 件ずつの中身**: 画像は並べて, 点群は 3D で回して, 撮影はカメラの配置と深度を, 音声は再生と波形で見る. 大きさや周波数のばらつきと読めないファイルの数も出す
-- **記録した軌跡**: 強化学習の方策を走らせた記録 (ML-Found の評価の軌跡など) の, エピソードの数と長さ, 報酬の和の分布, 終わり方, 行動の偏り, 観測の要素ごとの統計, 守りの結果と理由, エピソードごとの一覧. 「分析を書き出す」で要約を JSON で保存する
+- **記録した軌跡**: 強化学習の方策を走らせた記録 (ML-Found の評価の軌跡など) の, エピソードの数と長さ, 報酬の和の分布, 終わり方, 行動の偏り, 観測の要素ごとの統計, 守りの結果と理由, 行動を選んだ確率の列の欠けと範囲の外の数, エピソードごとの一覧. 「分析を書き出す」で要約を JSON で保存する. ML-Found を入れれば, 記録から決まった形の方策 (一様, 記録で最も多い行動の ε-greedy) の良さを重点サンプリングで見積もる
 
 ### 前処理を組み立てて書き出す
 
@@ -70,6 +70,8 @@ make setup   # submodule, Python と Node.js の依存
 make serve   # 画面をビルドして http://127.0.0.1:8767 で起動 (Ctrl+C で止める)
 ```
 
+記録した軌跡から方策の良さを見積もる場合は, ML-Found と PyTorch も入れる (`cd backend && uv sync --extra policy`). 入れなくても他の機能は使える.
+
 端末に出る `ML-Fathom を開く: http://127.0.0.1:8767/api/auth?token=...` の URL をブラウザで開く (トークンは起動ごとに変わる. 環境変数 `ML_FATHOM_TOKEN` で決められる). ポートは `make serve PORT=8800` のように変えられる. 置き場は `~/.ml-fathom/` (環境変数 `ML_FATHOM_HOME` で変えられる). 問題の設定の一覧は ML-Pathfinder の置き場 `~/.ml-pathfinder/` を読む (ML-Pathfinder と同じ環境変数 `ML_PATHFINDER_HOME` で変えられる).
 
 まず「見本のデータを入れる」を押すと, 表, 時系列, 画像, 文, 点群の見本で全ての画面を試せる. 書き出したデータセットは学習のスクリプトで次のように読む.
@@ -94,7 +96,7 @@ train_loader = DataLoader(TensorDataset(*dataset.tensors("train")), batch_size=6
 make dev-backend    # API (変更を自動で読み直す. 開く URL を出す)
 make dev-frontend   # 画面 (別の端末で)
 make check          # lint, 型検査, テスト
-cd frontend && pnpm e2e   # 画面の通しのテスト
+cd frontend && pnpm e2e   # 画面の通しのテスト (方策の見積もりも確かめるので, uv sync --extra policy の後に)
 ```
 
 README の画面の例は, 画面の通しのテストの見本で起動したアプリを撮って作る (`cd frontend && pnpm build && bash e2e/serve.sh` の後, 別の端末で `cd frontend && node e2e/shots.mts`. 1600x900 の PNG を `docs/images/` に書く).
@@ -105,6 +107,7 @@ README の画面の例は, 画面の通しのテストの見本で起動した�
 | `frontend/` | 画面 (TypeScript, React, Vite, ECharts) |
 | `ML-EDA/` | submodule (データの分析のライブラリ) |
 | `ML-Quest/` | submodule (問題の設定から始めるため) |
+| `ML-Found/` | submodule (記録した軌跡から方策の良さを見積もるため. 任意の依存 `policy`) |
 | `docs/` | 操作ガイド, 設計, README の画面の例 (`images/`) |
 
 ## ライセンス
