@@ -12,6 +12,8 @@ export interface Source {
   exists: boolean
   /** 問題の設定から始めた場合の problem.yaml の場所 */
   problem?: string | null
+  /** 問題の設定から始めたときの ML-Quest の知らせ (作るものの落とす列, 画像の大きさなど) */
+  problem_notes?: string[]
   /** プロジェクトへ書き出した場所 */
   project_dataset?: string | null
 }

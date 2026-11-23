@@ -258,6 +258,46 @@ problem["project"] = {"path": str(project),
 ml_quest.save_problem(problem, work / "pathfinder" / "problems" / "masks")
 PY
 
+# ML-Pathfinder の置き場に, 作るものが表の問題の設定 (ID の列を持つ客の表を
+# 入れ, ML-Quest で骨組みのプロジェクトを作った記録付き)
+uv run python - "$WORK" <<'PY'
+import sys
+from pathlib import Path
+
+import ml_quest
+import numpy as np
+import pandas as pd
+from ml_quest.examples import example_problem
+
+work = Path(sys.argv[1])
+rng = np.random.default_rng(4)
+rows = 80
+pd.DataFrame({
+    "customer_id": [f"u{index:03d}" for index in range(rows)],
+    "age": rng.normal(40, 10, rows).round(1),
+    "visits": rng.integers(0, 10, rows),
+    "city": rng.choice(["a", "b", "c"], rows),
+}).to_csv(work / "customers.csv", index=False)
+problem = example_problem("総菜の作る量")
+problem["ml"]["parts"] = [{}]
+for key in ("decision", "basis", "current"):
+    problem["action"].pop(key, None)
+answers = [("role", "generate"), ("unit", "row"), ("output", "table"),
+           ("target.source", "self"), ("target.kind", "table"),
+           ("method", "scratch"), ("what", "客の表に似た行"),
+           ("item", "客の 1 行"), ("baseline", "手で作る"),
+           ("evaluation.metric", "column_distance"),
+           ("evaluation.link", "近いほど元の表の代わりに使える")]
+for key, value in answers:
+    problem = ml_quest.answer(problem, f"ml.parts.0.{key}", value)
+problem = ml_quest.attach_data(problem, work / "customers.csv")
+problem["name"] = "合成の表のプロジェクト"
+project = work / "table_project"
+ml_quest.make_project(problem, project)
+problem = ml_quest.record_project(problem, project)
+ml_quest.save_problem(problem, work / "pathfinder" / "problems" / "table")
+PY
+
 # 記録した軌跡の見本 (ML-EDA のテストの見本を写す. 守りの付いた Discrete の
 # 行動の軌跡と, Box の行動の軌跡. どちらも表と説明の JSON)
 mkdir -p "$WORK/trajectories"

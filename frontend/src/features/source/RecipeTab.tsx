@@ -274,6 +274,7 @@ export function RecipeTab({
   loader,
   options,
   problem,
+  problemNotes = [],
 }: {
   sourceId: string
   sourceName: string
@@ -290,6 +291,8 @@ export function RecipeTab({
   options: Record<string, unknown>
   /** 問題の設定から始めた場合の problem.yaml の場所 */
   problem?: string | null
+  /** 問題の設定から始めたときの知らせ */
+  problemNotes?: string[]
 }) {
   const media = ITEM_KINDS.includes(kind)
   const [addingItem, setAddingItem] = useState('')
@@ -425,6 +428,7 @@ export function RecipeTab({
         {problem && (
           <ProblemCard
             sourceId={sourceId}
+            notes={problemNotes}
             recipe={pending.recipe}
             latest={recipe}
             onWritten={() => {

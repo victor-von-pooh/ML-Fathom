@@ -421,7 +421,8 @@ def test_version1_file(client: TestClient, tmp_path: Path) -> None:
 
 def test_not_column_role(client: TestClient, tmp_path: Path) -> None:
     """
-    列の予測でもファイルの組でもない受け持ちの問題の設定は, 始めるのと
+    列の予測, ファイルの組, 画像か表の生成のどれでもない受け持ちの問題の
+    設定は, 始めるのと
     書き戻しで理由を返すことを確かめる関数
 
     Parameters
