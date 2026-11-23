@@ -33,9 +33,8 @@ import {
   SOURCE_LABELS,
 } from '../../lib/trajectory'
 import { Stat } from './ColumnsTab'
-import { PolicyValuePanel } from './PolicyValuePanel'
 
-type TabId = 'overview' | 'elements' | 'guard' | 'episodes' | 'policy'
+type TabId = 'overview' | 'elements' | 'guard' | 'episodes'
 
 /** 説明の値を短い文にする */
 function describeValue(value: unknown): string {
@@ -152,7 +151,7 @@ function OverviewPanel({ summary }: { summary: TrajectorySummary }) {
         <StatTile
           label="行動を選んだ確率"
           value={summary.with_action_prob ? 'あり' : 'なし'}
-          hint="action_prob の列"
+          hint="確率の列"
         />
       </div>
       <Card title={`気付き (${summary.notes.length} 件)`}>
@@ -252,7 +251,7 @@ function ElementTable({ caption, elements }: { caption: string; elements: Trajec
 function ActionProbCard({ summary }: { summary: TrajectorySummary }) {
   const prob = summary.action_prob
   return (
-    <Card title="行動を選んだ確率 (action_prob)">
+    <Card title="行動を選んだ確率">
       {prob === null ? (
         <p className="text-sm text-ink-3">表に行動を選んだ確率の列はありません.</p>
       ) : (
@@ -269,7 +268,8 @@ function ActionProbCard({ summary }: { summary: TrajectorySummary }) {
             <Stat label="中央値" value={formatNumber(prob.median)} />
           </div>
           <p className="mt-2 text-xs text-ink-3">
-            欠けは空の値の数です (守りで止めた行は確率が空). 最小から中央値は範囲の中の値で求めます.
+            確率の列 (action_prob) の欠けは空の値の数です (守りで止めた行は確率が空).
+            最小から中央値は範囲の中の値で求めます.
           </p>
         </>
       )}
@@ -405,15 +405,12 @@ export function TrajectoryView({ source }: { source: Source }) {
     queryKey: ['trajectory', source.id],
     queryFn: () => api.trajectory(source.id),
   })
-  // 方策の見積もりは, 任意の依存の ML-Found がある場合だけ出す
-  const info = useQuery({ queryKey: ['info'], queryFn: api.info, staleTime: Infinity })
   const data = summary.data
   const items: TabItem<TabId>[] = [
     { id: 'overview', label: '概要と気付き', count: data?.notes.length },
     { id: 'elements', label: '観測と行動' },
     ...(data?.guard ? [{ id: 'guard' as const, label: '守り' }] : []),
     { id: 'episodes', label: 'エピソード', count: data?.episodes },
-    ...(info.data?.policy_value ? [{ id: 'policy' as const, label: '方策の見積もり' }] : []),
   ]
   const requested = (search.get('tab') as TabId | null) ?? 'overview'
   const tab = items.some((item) => item.id === requested) ? requested : 'overview'
@@ -453,7 +450,6 @@ export function TrajectoryView({ source }: { source: Source }) {
         {data && tab === 'elements' && <ElementsPanel summary={data} />}
         {data && tab === 'guard' && data.guard && <GuardPanel guard={data.guard} />}
         {data && tab === 'episodes' && <EpisodesPanel summary={data} />}
-        {data && tab === 'policy' && <PolicyValuePanel sourceId={source.id} summary={data} />}
       </div>
     </>
   )

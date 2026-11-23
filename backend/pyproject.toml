@@ -18,12 +18,6 @@ dependencies = [
     "uvicorn>=0.32"
 ]
 
-[project.optional-dependencies]
-# 記録した軌跡から方策の良さを見積もる場合 (ML-Found の
-# estimate_policy_value. ML-Found は PyTorch を使うので任意にし, 無くても
-# 他の機能は使える)
-policy = ["ml-found", "torch>=2.2"]
-
 [project.scripts]
 ml-fathom = "ml_fathom.cli:main"
 
@@ -39,15 +33,7 @@ dev = [
 
 [tool.uv.sources]
 ml-eda = { path = "../ML-EDA", editable = true }
-ml-found = { path = "../ML-Found", editable = true }
 ml-quest = { path = "../ML-Quest", editable = true }
-# Linux (CI) では CUDA の無い軽い PyTorch を使う
-torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
-
-[[tool.uv.index]]
-name = "pytorch-cpu"
-url = "https://download.pytorch.org/whl/cpu"
-explicit = true
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/ml_fathom"]

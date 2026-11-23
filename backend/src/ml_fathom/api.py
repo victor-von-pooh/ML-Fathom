@@ -26,7 +26,6 @@ from ml_fathom.items import (
     points_response,
 )
 from ml_fathom.jsonable import to_json
-from ml_fathom.policy_value import estimate, policy_value_available
 from ml_fathom.samples import sample_target, write_samples
 from ml_fathom.settings import get_problems_dir
 from ml_fathom.store import SourceStore
@@ -162,14 +161,6 @@ class SourceUpdate(BaseModel):
 
 class DetectRequest(BaseModel):
     path: str
-
-
-class PolicyValueRequest(BaseModel):
-    policy: Literal["uniform", "epsilon_greedy"] = Field(
-        description="見積もる方策の形"
-    )
-    epsilon: float = Field(0.1, ge=0.0, le=1.0)
-    gamma: float = Field(1.0, ge=0.0, le=1.0)
 
 
 class RecipeBody(BaseModel):
@@ -558,8 +549,7 @@ def get_info() -> dict[str, Any]:
     ----------
     info: dict[str, Any]
         loaders, steps, item_steps (引数の上限付き), pair_steps (ファイルの
-        組の書き出しの項目ごとの中身の手順), kinds, 版, policy_value
-        (方策の見積もりを使えるか)
+        組の書き出しの項目ごとの中身の手順), kinds, 版
     """
     info = {
         "loaders": ml_eda.describe_loaders(),
@@ -568,7 +558,6 @@ def get_info() -> dict[str, Any]:
         "pair_steps": pair_steps(),
         "kinds": list(ml_eda.KINDS),
         "version": ml_eda.__version__,
-        "policy_value": policy_value_available(),
     }
 
     return info
@@ -1006,47 +995,6 @@ def trajectory_summary(path: Path) -> dict[str, Any]:
     TRAJECTORY_CACHE.put(key, summary)
 
     return summary
-
-
-@router.post("/sources/{source_id}/policy_value")
-def post_policy_value(
-    request: Request, source_id: str, body: PolicyValueRequest
-) -> dict[str, Any]:
-    """
-    記録した軌跡から, 選んだ方策の良さを見積もる関数
-
-    Parameters
-    ----------
-    request: Request
-        リクエスト
-    source_id: str
-        データの ID
-    body: PolicyValueRequest
-        見積もる方策の形, epsilon, 割引率
-
-    Returns
-    ----------
-    result: dict[str, Any]
-        方策の説明と, ML-Found の estimate_policy_value の結果
-
-    Raises
-    ----------
-    HTTPException
-        無い場合は 404, 軌跡でないか見積もれない場合は 422
-    """
-    # 要約で確率の列と行動の空間を確かめてから見積もる
-    source = find_source(request, source_id)
-    if source["loader"] != TRAJECTORY_LOADER:
-        raise HTTPException(
-            422, f"{source['name']} は記録した軌跡ではありません"
-        )
-    path = Path(source["path"])
-    result = estimate(
-        path, trajectory_summary(path), body.policy, body.epsilon,
-        body.gamma
-    )
-
-    return result
 
 
 @router.get("/sources/{source_id}/rows")

@@ -125,8 +125,6 @@ export interface Info {
   pair_steps: PairSteps
   kinds: string[]
   version: string
-  /** 方策の見積もり (任意の依存の ML-Found) を使えるか */
-  policy_value: boolean
 }
 
 export interface Candidate {
@@ -660,27 +658,4 @@ export interface TrajectorySummary {
   per_episode: TrajectoryEpisode[]
   per_episode_truncated: boolean
   notes: string[]
-}
-
-/** 見積もる方策の形 (一様に選ぶか, 記録で最も多い行動を ε-greedy で選ぶ) */
-export type PolicyKind = 'uniform' | 'epsilon_greedy'
-
-/** 記録した軌跡からの方策の見積もり (ML-Found の estimate_policy_value) */
-export interface PolicyValueResult {
-  policy: { name: PolicyKind; n: number; start: number; action?: number; epsilon?: number }
-  gamma: number
-  estimate: {
-    /** 重み付きの重点サンプリング (決まらなければ null) */
-    value: number | null
-    ordinary: number | null
-    per_decision: number | null
-    behavior_value: number
-    episodes: number
-    steps: number
-    effective_sample_size: number
-    max_weight_share: number | null
-    zero_weight_episodes: number
-    underflow_episodes: number
-    notes: string[]
-  }
 }
