@@ -782,3 +782,84 @@ test('表として読んだデータで時刻の分割を選ぶと, 日時の列
   await split.selectOption('random')
   await expect(hint).toHaveCount(0)
 })
+
+test('記録した軌跡を登録し, 分布と行動の偏りと守りとエピソードを見て, 分析を書き出す', async ({
+  page,
+}) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'データを追加' }).first().click()
+  await page
+    .getByLabel('ディレクトリのパス')
+    .fill(path.resolve(import.meta.dirname, '.work', 'trajectories'))
+  await page.getByRole('button', { name: '移動' }).click()
+  await page.getByRole('button', { name: /guarded\.csv/ }).click()
+  // 軌跡の表は普通の表としても読めるが, 軌跡の読み込みが先に出る
+  await expect(page.getByLabel('読み込み', { exact: true })).toHaveValue('trajectory')
+  await page.getByRole('button', { name: '追加', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'guarded.csv' })).toBeVisible()
+  await expect(page.getByText(/^記録した軌跡 · /)).toBeVisible()
+
+  // 概要: 数, 長さと報酬の和の分布, 終わり方, 説明
+  await expect(page.getByRole('img', { name: 'エピソードの長さのヒストグラム' })).toBeVisible({
+    timeout: 20_000,
+  })
+  await expect(page.getByRole('img', { name: '報酬の和のヒストグラム' })).toBeVisible()
+  await expect(page.getByRole('img', { name: '終わり方ごとのエピソードの数' })).toBeVisible()
+  await expect(page.getByText('evaluate_policy')).toBeVisible()
+  // 表の分析の目的の列と前処理のタブは出さない
+  await expect(page.getByLabel('目的の列')).toHaveCount(0)
+  await expect(page.getByRole('tab', { name: '前処理と書き出し' })).toHaveCount(0)
+
+  // 観測と行動: 守りで止めた行は行動の欠けに数え, Discrete の行動は値ごとの数を描く
+  await page.getByRole('tab', { name: '観測と行動' }).click()
+  const actions = page.getByRole('table', { name: '行動の要素ごとの統計' })
+  await expect(
+    actions
+      .getByRole('row', { name: /action/ })
+      .getByRole('cell')
+      .nth(1),
+  ).toHaveText('2')
+  await expect(page.getByRole('img', { name: 'action の値ごとの数' })).toBeVisible()
+
+  // 守り: 結果と理由ごとの数
+  await page.getByRole('tab', { name: '守り' }).click()
+  await expect(page.getByRole('img', { name: '守りの結果ごとの行の数' })).toBeVisible()
+  await expect(page.getByRole('cell', { name: '観測の要素 0 が範囲の外 (3)' })).toBeVisible()
+
+  // エピソードごとの一覧
+  await page.getByRole('tab', { name: /エピソード/ }).click()
+  const episodes = page.getByRole('table', { name: /エピソードごと/ })
+  await expect(episodes.getByRole('row')).toHaveCount(3)
+  await expect(episodes.getByText('守りで止めた')).toHaveCount(2)
+
+  // 分析を書き出すと, 要約の JSON を保存する
+  const [download] = await Promise.all([
+    page.waitForEvent('download'),
+    page.getByRole('button', { name: '分析を書き出す' }).click(),
+  ])
+  expect(download.suggestedFilename()).toBe('guarded.analysis.json')
+  const saved = await download.path()
+  const { readFile } = await import('node:fs/promises')
+  const written = JSON.parse(await readFile(saved, 'utf-8')) as Record<string, unknown>
+  expect(written.episodes).toBe(2)
+  expect(written.ends).toMatchObject({ stop: 2 })
+})
+
+test('Box の行動の軌跡では要素ごとの統計を出し, 守りのタブを出さない', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'データを追加' }).first().click()
+  await page
+    .getByLabel('ディレクトリのパス')
+    .fill(path.resolve(import.meta.dirname, '.work', 'trajectories'))
+  await page.getByRole('button', { name: '移動' }).click()
+  // 説明の JSON を選んでも, その表を軌跡として読む
+  await page.getByRole('button', { name: /box\.json/ }).click()
+  await expect(page.getByLabel('読み込み', { exact: true })).toHaveValue('trajectory')
+  await page.getByRole('button', { name: '追加', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'box.json' })).toBeVisible()
+  await page.getByRole('tab', { name: '観測と行動' }).click()
+  const actions = page.getByRole('table', { name: '行動の要素ごとの統計' })
+  await expect(actions.getByRole('row', { name: /action_0/ })).toContainText('number')
+  await expect(page.getByRole('img', { name: /の値ごとの数/ })).toHaveCount(0)
+  await expect(page.getByRole('tab', { name: '守り' })).toHaveCount(0)
+})

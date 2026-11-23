@@ -75,6 +75,7 @@ export const KIND_LABELS: Record<string, string> = {
   pointcloud: '点群',
   capture: '多視点の撮影',
   audio: '音声',
+  trajectory: '記録した軌跡',
 }
 
 /** タスクの日本語の名前 */

@@ -9,7 +9,7 @@ import { formatNumber, formatPercent, TYPE_LABELS } from '../../lib/format'
 import { Findings } from './Findings'
 
 /** 統計の 1 行 */
-function Stat({ label, value }: { label: string; value: string }) {
+export function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex justify-between gap-3 border-b border-line py-1 text-sm last:border-0">
       <span className="text-ink-3">{label}</span>

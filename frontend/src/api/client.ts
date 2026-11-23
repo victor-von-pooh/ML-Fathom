@@ -22,6 +22,7 @@ import type {
   ProblemWritten,
   PairSettings,
   ProjectPlace,
+  TrajectorySummary,
 } from './types'
 
 /** API がエラーを返したときの例外 */
@@ -82,6 +83,7 @@ export const api = {
   ) => request<Source>(`/api/sources/${id}`, json('PATCH', body)),
   deleteSource: (id: string) => request<void>(`/api/sources/${id}`, { method: 'DELETE' }),
   profile: (id: string) => request<Profile>(`/api/sources/${id}/profile`),
+  trajectory: (id: string) => request<TrajectorySummary>(`/api/sources/${id}/trajectory`),
   rows: (
     id: string,
     params: { offset: number; limit: number; sort?: string; descending?: boolean; query?: string },
