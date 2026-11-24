@@ -15,6 +15,7 @@ import { RecipeTab } from './RecipeTab'
 import { RelationsTab } from './RelationsTab'
 import { SamplesTab } from './SamplesTab'
 import { TimeSeriesTab } from './TimeSeriesTab'
+import { ReactionsView } from './ReactionsView'
 import { TrajectoryView } from './TrajectoryView'
 
 type TabId = 'overview' | 'columns' | 'relations' | 'timeseries' | 'samples' | 'data' | 'recipe'
@@ -30,8 +31,8 @@ export function SourcePage() {
   const profile = useQuery({
     queryKey: ['profile', id, source?.target ?? null],
     queryFn: () => api.profile(id),
-    // 記録した軌跡は表として分析せず, 軌跡の要約を出す
-    enabled: source !== undefined && source.kind !== 'trajectory',
+    // 記録した軌跡と並べるの反応の表は表として分析せず, それぞれの要約を出す
+    enabled: source !== undefined && source.kind !== 'trajectory' && source.kind !== 'reactions',
     // 目的の列を変えて分析し直す間も, 前の結果を出したままにする
     placeholderData: keepPreviousData,
   })
@@ -60,6 +61,7 @@ export function SourcePage() {
   if (sources.isPending) return <Spinner />
   if (!source) return <ErrorBox error={new Error(`データ ${id} がありません`)} />
   if (source.kind === 'trajectory') return <TrajectoryView key={source.id} source={source} />
+  if (source.kind === 'reactions') return <ReactionsView key={source.id} source={source} />
   const data = profile.data
   const items: TabItem<TabId>[] = [
     { id: 'overview', label: '概要と気付き', count: data?.findings.length },

@@ -909,3 +909,44 @@ test('作るものが表の問題の設定から始め, 書き戻してプロジ
   await button.click()
   await expect(page.getByText(/プロジェクトへ書き出しました/)).toBeVisible({ timeout: 20_000 })
 })
+
+test('並べるの問題の設定から始め, 反応の表の偏りを見てプロジェクトへ写す', async ({ page }) => {
+  // 骨組みが入れたデータを写しているので, 置き換えの確かめを受ける
+  page.on('dialog', (dialog) => void dialog.accept())
+
+  // 一覧から始めると, レシピを持たない反応の表の分析の画面が開く
+  await page.goto('/')
+  await page.getByRole('button', { name: '問題の設定から始める' }).click()
+  const stored = page.getByRole('list', { name: '保存した問題の設定' })
+  await stored.getByRole('button', { name: /推薦のプロジェクト/ }).click()
+  await page.getByRole('button', { name: 'この問題の設定から始める' }).click()
+  await expect(page.getByRole('heading', { name: '推薦のプロジェクト' })).toBeVisible()
+  await expect(page.getByRole('tab', { name: '前処理と書き出し' })).toHaveCount(0)
+
+  // 概要に除いた行の気付き, 読んだ列, 日時の時刻の範囲が出る
+  await expect(page.getByText('利用者, 品物か時刻の欠けた 2 行を除きました')).toBeVisible({
+    timeout: 20_000,
+  })
+  await expect(
+    page.getByText(/反応の強さ \(qty\) が 0 以下か数でない \d+ 行を除きました/),
+  ).toBeVisible()
+  const time = page.locator('section', { has: page.getByRole('heading', { name: '時刻の範囲' }) })
+  await expect(time.getByText('日時')).toBeVisible()
+  await expect(time.getByText(/^2025-01-01 \d\d:00:00$/)).toBeVisible()
+
+  // 偏りに人気の偏りと多い品物が出る
+  await page.getByRole('tab', { name: '偏り' }).click()
+  const popular = page.getByRole('table', { name: '反応の多い品物' })
+  await expect(popular.getByRole('row')).toHaveCount(11)
+  await expect(
+    page.getByRole('img', { name: '利用者ごとの反応の数の区切りごとの数' }),
+  ).toBeVisible()
+
+  // 骨組みの読む場所 (data/reactions.csv) へ, ファイル 1 つのまま写す
+  await page.getByRole('tab', { name: '書き出し' }).click()
+  await expect(page.getByText(/rank_project\/data\/reactions\.csv$/)).toBeVisible()
+  await page.getByRole('button', { name: 'プロジェクトへ書き出す' }).click()
+  await expect(page.getByRole('status')).toContainText('プロジェクトへ書き出しました', {
+    timeout: 20_000,
+  })
+})

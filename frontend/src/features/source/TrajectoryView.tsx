@@ -46,7 +46,7 @@ function describeValue(value: unknown): string {
 }
 
 /** 気付き (ML-EDA の notes) の一覧 */
-function Notes({ notes }: { notes: string[] }) {
+export function Notes({ notes }: { notes: string[] }) {
   if (notes.length === 0) {
     return <p className="text-sm text-good-text">読むときと要約で気付いたことはありません.</p>
   }
