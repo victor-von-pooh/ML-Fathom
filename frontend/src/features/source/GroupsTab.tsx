@@ -143,20 +143,23 @@ function ExportCard({
   const [idColumn, setIdColumn] = useState('')
   const [method, setMethod] = useState<'random' | 'none'>('random')
   const [valid, setValid] = useState(0.2)
+  // 行を見分ける列は群を作る列の他から選ぶ (群を作る列に入れた列は「なし」に戻して見せ,
+  // 送る値も見せる値にそろえる)
+  const ids = candidates.filter((column) => !columns.includes(column))
+  const chosenId = ids.includes(idColumn) ? idColumn : ''
+  // 変数は書き出したときの群の数 (使い方の文に使う) と, 群を作る列と群の数の選び方
+  const selection = `${JSON.stringify(columns)}:${k}`
   const exporter = useMutation({
-    mutationFn: () =>
+    mutationFn: (_exported: { k: number; selection: string }) =>
       api.exportGroups(source.id, {
         columns,
-        id: idColumn || null,
+        id: chosenId || null,
         split: { method, valid, test: 0, seed: 0 },
         name,
         overwrite,
       }),
   })
   const reset = () => exporter.reset()
-  // 行を見分ける列は群を作る列の他から選ぶ
-  const ids = candidates.filter((column) => !columns.includes(column))
-  const chosenId = ids.includes(idColumn) ? idColumn : ''
   const reason =
     columns.length === 0
       ? '群を作る列を 1 つ以上選んでください'
@@ -164,7 +167,9 @@ function ExportCard({
         ? '検証用の割合は 0 以上 1 未満にしてください'
         : null
   const reasonId = useId()
-  const done = exporter.data
+  // 上の群を作る列か群の数を変えたら, 前の書き出しの結果を出さない (どの選び方で書き出した
+  // かを取り違えないように)
+  const done = exporter.variables?.selection === selection ? exporter.data : undefined
   return (
     <Card title="群分けの表を書き出す">
       <p className="text-sm text-ink-2">
@@ -265,7 +270,7 @@ function ExportCard({
         className="mt-3"
         disabled={exporter.isPending || !name || reason !== null}
         aria-describedby={reason ? reasonId : undefined}
-        onClick={() => exporter.mutate()}
+        onClick={() => exporter.mutate({ k, selection })}
       >
         {exporter.isPending ? '書き出し中…' : '群分けの表を書き出す'}
       </Button>
@@ -292,7 +297,7 @@ function ExportCard({
           )}
           <p className="text-xs text-ink-3">学習のスクリプトでの読み方:</p>
           <pre className="overflow-auto rounded bg-surface-2 p-2 text-xs">
-            {groupUsage(done.path, k)}
+            {groupUsage(done.path, exporter.variables?.k ?? k)}
           </pre>
         </div>
       )}

@@ -208,6 +208,16 @@ test('群分けの表は正解なしと列の項目を出し, 正解の出どこ
           formats: null,
           steps: null,
         },
+        {
+          name: 'when',
+          kind: 'future_kind',
+          role: 'input',
+          units: null,
+          convention: null,
+          shape: null,
+          formats: null,
+          steps: null,
+        },
       ],
       splits: { train: 72, valid: 18 },
       items: 90,
@@ -221,6 +231,8 @@ test('群分けの表は正解なしと列の項目を出し, 正解の出どこ
   expect(card.getByText('まとめる · 正解なし')).toBeInTheDocument()
   expect(card.getByText('数の値')).toBeInTheDocument()
   expect(card.getByText('種類の値')).toBeInTheDocument()
+  expect(card.getByText('その他の値')).toBeInTheDocument()
+  expect(card.queryByText('future_kind')).not.toBeInTheDocument()
   expect(card.queryByText('正解の出どころ')).not.toBeInTheDocument()
   expect(card.getByText(/欠けた値のある行が 5 行/)).toBeInTheDocument()
 })

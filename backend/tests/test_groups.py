@@ -281,6 +281,12 @@ def test_export_groups_errors(client: TestClient, tmp_path: Path) -> None:
     assert repeated.status_code == 422
     assert "同じ値" in repeated.json()["detail"]
 
+    # 検証用の割合が範囲の外 (0 未満か 1 以上) は断る
+    for valid in (-0.1, 1.0):
+        assert client.post(
+            url, json={**base, "split": {"method": "random", "valid": valid}}
+        ).status_code == 422
+
     # グループごとの分割は受け付けない
     assert client.post(
         url, json={**base, "split": {"method": "group"}}

@@ -169,7 +169,7 @@ function ItemsCard({ item }: { item: ItemsDataset }) {
                       ({entry.role === 'target' ? '正解' : '入力'})
                     </span>
                   </td>
-                  <td className="pr-2">{ENTRY_KIND_LABELS[entry.kind] ?? entry.kind}</td>
+                  <td className="pr-2">{ENTRY_KIND_LABELS[entry.kind] ?? 'その他の値'}</td>
                   <td className="pr-2">{entry.units ?? '—'}</td>
                   <td className={stepped ? 'break-all pr-2' : 'break-all'}>
                     <span className="font-mono">{conventionText(entry.convention)}</span>

@@ -8,7 +8,10 @@ const ROW_KEYS = new Set(['group', 'rows', 'share', 'stability'])
 /** 群を作る列の候補にしない型 (行を見分ける列, 文, 日時, 値が 1 つか空の列) */
 const SKIPPED_TYPES = new Set(['id', 'text', 'datetime', 'constant', 'empty'])
 
-/** 画面で作れる群の数の範囲 (上限はバックエンドの MAX_GROUPS と同じ) */
+/**
+ * 画面で作れる群の数の範囲. 上限はバックエンドの backend/src/ml_fathom/groups.py の
+ * MAX_GROUPS と同じ値にする (変えるときは両方を変える)
+ */
 export const MIN_GROUPS = 2
 export const MAX_GROUPS = 50
 
@@ -32,7 +35,7 @@ export function summaryColumns(rows: GroupRow[]): string[] {
   return Object.keys(first).filter((key) => !ROW_KEYS.has(key))
 }
 
-/** 群の名前 (群の番号はそのまま. 全ての行の行は「全体」) */
+/** 群の名前 (群の番号はそのまま. 全ての行をまとめた行は「全体」) */
 export function groupLabel(group: GroupRow['group']): string {
   return typeof group === 'number' ? `群 ${group}` : group
 }

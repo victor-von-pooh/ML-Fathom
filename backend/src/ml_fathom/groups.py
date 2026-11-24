@@ -15,7 +15,8 @@ from ml_fathom.jsonable import to_json
 router = APIRouter(prefix="/api")
 
 # 画面から作れる群の数の上限 (k-means を置き方を変えて繰り返し, 作り直して
-# 安定性も数えるので, 大きな数で手元の計算機を長く使わないように)
+# 安定性も数えるので, 大きな数で手元の計算機を長く使わないように. 画面の
+# frontend/src/lib/groups.ts の MAX_GROUPS と同じ値にする. 変えるときは両方)
 MAX_GROUPS = 50
 
 # 群を作る列の数の上限 (画面で選べる数. 符号化した行の幅の上限は ML-EDA

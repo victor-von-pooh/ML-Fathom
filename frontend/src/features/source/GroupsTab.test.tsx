@@ -175,3 +175,50 @@ test('同じ名前があれば置き換えの案内を添える', async () => {
     '「同じ名前があれば置き換える」に印を付けてください',
   )
 })
+
+test('行を見分ける列を群を作る列にも入れると, 見せる値と送る値を「なし」にそろえる', async () => {
+  const exporter = vi.spyOn(api, 'exportGroups').mockResolvedValue({
+    path: '/home/datasets/customers_groups',
+    info: {},
+    notes: [],
+  })
+  renderTab()
+  const id = screen.getByLabelText('行を見分ける列')
+  fireEvent.change(id, { target: { value: 'member' } })
+  expect(id).toHaveValue('member')
+
+  // member を群を作る列に入れると, 行を見分ける列の候補から外れて「なし」に戻る
+  const fields = within(screen.getByRole('group', { name: '群を作る列' }))
+  fireEvent.click(fields.getByRole('checkbox', { name: /member/ }))
+  expect(id).toHaveValue('')
+  fireEvent.click(screen.getByRole('button', { name: '群分けの表を書き出す' }))
+  await waitFor(() =>
+    expect(exporter).toHaveBeenCalledWith(
+      's1',
+      expect.objectContaining({ columns: ['member', 'spend', 'region'], id: null }),
+    ),
+  )
+})
+
+test('書き出した後に群を作る列か群の数を変えると結果を消し, 読み方の群の数は書き出したときの値', async () => {
+  vi.spyOn(api, 'exportGroups').mockResolvedValue({
+    path: '/home/datasets/customers_groups',
+    info: {},
+    notes: [],
+  })
+  renderTab()
+  fireEvent.change(screen.getByLabelText('群の数'), { target: { value: '4' } })
+  fireEvent.click(screen.getByRole('button', { name: '群分けの表を書き出す' }))
+  expect(await screen.findByText(/describe_groups\(dataset, k=4\)/)).toBeInTheDocument()
+
+  // 群の数を変えると書き出しの結果を消す
+  fireEvent.change(screen.getByLabelText('群の数'), { target: { value: '5' } })
+  expect(screen.queryByText(/書き出しました/)).not.toBeInTheDocument()
+
+  // もう一度書き出し, 列を外すと消す
+  fireEvent.click(screen.getByRole('button', { name: '群分けの表を書き出す' }))
+  expect(await screen.findByText(/describe_groups\(dataset, k=5\)/)).toBeInTheDocument()
+  const fields = within(screen.getByRole('group', { name: '群を作る列' }))
+  fireEvent.click(fields.getByRole('checkbox', { name: /region/ }))
+  expect(screen.queryByText(/書き出しました/)).not.toBeInTheDocument()
+})
