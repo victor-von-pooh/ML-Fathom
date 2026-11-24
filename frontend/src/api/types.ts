@@ -736,3 +736,52 @@ export interface ReactionsExportResult {
   /** 骨組みが除く行の数 */
   dropped: number
 }
+
+/**
+ * 群の要約の 1 行 (ML-EDA の describe_groups の groups. ML-Quest のまとめるの骨組みの
+ * evaluations/group_summary.json の行と同じ形). 群を作った列ごとの要約は列の名前の鍵で,
+ * 数の列は平均, 他の列は最も多い値と割合の文 (行の無い群は null)
+ */
+export interface GroupRow {
+  /** k-means では 0 から始まる群の番号. 最後の全ての行の行は「全体」 */
+  group: number | string
+  rows: number
+  share: number | null
+  /** 作り直した群のうち最も重なる群との Jaccard 係数の平均 (全体と行の無い群は null) */
+  stability: number | null
+  [column: string]: number | string | null
+}
+
+/** 学習に通さずに作った群の要約 (ML-EDA の describe_groups) */
+export interface GroupSummary {
+  method: 'kmeans' | 'labels'
+  k: number
+  rows: number
+  columns: { numeric: string[]; categorical: string[] }
+  /** 符号化した行の幅 */
+  width: number
+  seed: number | null
+  groups: GroupRow[]
+  /** 種を変えて作り直した群との調整ランド指数の平均と最も低い値 */
+  stability: { method: string; repeats: number; ari: number | null; ari_min: number | null } | null
+  silhouette: number | null
+  source: Record<string, unknown>
+  notes: string[]
+}
+
+/** 群を作る要求 */
+export interface GroupRequest {
+  columns: string[]
+  k: number
+  seed: number
+}
+
+/** 群分けの表の書き出しの要求 (ML-EDA の export_group_rows) */
+export interface GroupExport {
+  columns: string[]
+  /** 行を見分ける列 (無ければ行の位置) */
+  id: string | null
+  split: { method: 'random' | 'none'; valid: number; test: number; seed: number }
+  name: string
+  overwrite: boolean
+}

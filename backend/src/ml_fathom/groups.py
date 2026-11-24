@@ -1,0 +1,150 @@
+from typing import Annotated, Any, Literal, Optional
+
+import ml_eda
+from fastapi import APIRouter, HTTPException, Request
+from pydantic import BaseModel, ConfigDict, Field
+
+from ml_fathom.api import (
+    EXPORT_LOCK,
+    find_source,
+    get_store,
+    load_source,
+)
+from ml_fathom.jsonable import to_json
+
+router = APIRouter(prefix="/api")
+
+# 画面から作れる群の数の上限 (k-means を置き方を変えて繰り返し, 作り直して
+# 安定性も数えるので, 大きな数で手元の計算機を長く使わないように. 画面の
+# frontend/src/lib/groups.ts の MAX_GROUPS と同じ値にする. 変えるときは両方)
+MAX_GROUPS = 50
+
+# 群を作る列の数の上限 (画面で選べる数. 符号化した行の幅の上限は ML-EDA
+# が持つ)
+MAX_COLUMNS = 200
+
+# 誤りとして理由を返す ML-EDA の例外 (列の誤り, 群の数の誤りなど)
+INPUT_ERRORS = (ValueError, TypeError, KeyError)
+
+
+class GroupRequest(BaseModel):
+    # 知らない欄は断る (取り違えた欄を黙って捨てないため)
+    model_config = ConfigDict(extra="forbid")
+    columns: list[str] = Field(
+        min_length=1, max_length=MAX_COLUMNS, description="群を作る列"
+    )
+    k: int = Field(ge=2, le=MAX_GROUPS, description="群の数")
+    seed: Annotated[
+        int, Field(ge=0, description="k-means の乱数の種")
+    ] = 0
+
+
+class GroupSplit(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    method: Literal["random", "none"] = "random"
+    valid: Annotated[float, Field(ge=0, lt=1)] = 0.2
+    test: Annotated[float, Field(ge=0, lt=1)] = 0.0
+    seed: Annotated[int, Field(ge=0)] = 0
+
+
+class GroupExport(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    columns: list[str] = Field(
+        min_length=1, max_length=MAX_COLUMNS, description="群を作る列"
+    )
+    id: Optional[str] = Field(None, description="行を見分ける列")
+    split: GroupSplit = GroupSplit()
+    name: str
+    overwrite: bool = False
+
+
+@router.post("/sources/{source_id}/groups")
+def describe(
+    request: Request, source_id: str, body: GroupRequest
+) -> dict[str, Any]:
+    """
+    学習に通さず, 選んだ列を k-means で分けた群の要約を返す関数
+
+    Parameters
+    ----------
+    request: Request
+        リクエスト
+    source_id: str
+        データの ID
+    body: GroupRequest
+        群を作る列, 群の数, 乱数の種
+
+    Returns
+    ----------
+    summary: dict[str, Any]
+        ML-EDA の describe_groups の結果
+
+    Raises
+    ----------
+    HTTPException
+        データが無ければ 404, 表でないか, 列と群の数の誤りは 422
+    """
+    # 読み込み済みの表を渡し, 読み直さない
+    data = load_source(find_source(request, source_id))
+    try:
+        summary: dict[str, Any] = to_json(ml_eda.describe_groups(
+            data, columns=body.columns, k=body.k, seed=body.seed
+        ))
+    except INPUT_ERRORS as error:
+        raise HTTPException(
+            422, f"群を作れません: {error}"
+        ) from error
+
+    return summary
+
+
+@router.post("/sources/{source_id}/export_groups")
+def export_groups(
+    request: Request, source_id: str, body: GroupExport
+) -> dict[str, Any]:
+    """
+    群を作る列 (と行を見分ける列) を, 群分けの表として版 2 のデータセットに
+    書き出す関数
+
+    Parameters
+    ----------
+    request: Request
+        リクエスト
+    source_id: str
+        データの ID
+    body: GroupExport
+        群を作る列, 行を見分ける列, 分割, 名前, 置き換えるか
+
+    Returns
+    ----------
+    result: dict[str, Any]
+        書き出した場所, dataset.yaml の中身, 注意
+
+    Raises
+    ----------
+    HTTPException
+        データが無ければ 404, 名前と列と分割の誤りは 422, 既にある場合は
+        409
+    """
+    # 置き場の datasets の下に書き出す
+    store = get_store(request)
+    data = load_source(find_source(request, source_id))
+    split = body.split.model_dump()
+    try:
+        target = store.dataset_dir(body.name)
+        with EXPORT_LOCK:
+            info = ml_eda.export_group_rows(
+                data, target, body.columns, id=body.id or None, split=split,
+                name=body.name, overwrite=body.overwrite
+            )
+    except FileExistsError as error:
+        detail = str(error) if body.overwrite else f"{body.name} は既にあります"
+        raise HTTPException(409, detail) from error
+    except INPUT_ERRORS as error:
+        raise HTTPException(422, str(error)) from error
+    result = {
+        "path": str(target), "info": to_json(info),
+        "notes": [str(note) for note in info.get("notes") or []],
+    }
+
+    return result

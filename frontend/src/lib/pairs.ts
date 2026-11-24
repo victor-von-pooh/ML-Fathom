@@ -28,6 +28,8 @@ export const ENTRY_KIND_LABELS: Record<string, string> = {
   point_cloud: '点群',
   capture: '多視点の撮影',
   boxes: '物の箱',
+  value: '数の値',
+  class: '種類の値',
 }
 
 /** 文を辞書にした結果 (誤りがあれば error) */

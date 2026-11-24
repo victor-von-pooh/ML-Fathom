@@ -176,3 +176,63 @@ test('版 3 は項目と中身の手順と出どころ, 版 1 は表, 知らな�
   expect(future.getByText('読めない版')).toBeInTheDocument()
   expect(future.getByText(/読める版 \(1, 2, 3\) ではありません/)).toBeInTheDocument()
 })
+
+test('群分けの表は正解なしと列の項目を出し, 正解の出どころを出さない', async () => {
+  vi.spyOn(api, 'datasets').mockResolvedValue([
+    {
+      form: 'items',
+      name: 'customers_groups',
+      path: '/home/datasets/customers_groups',
+      format_version: 2,
+      created_at: '2026-11-20T10:00:00+09:00',
+      role: 'group',
+      target: { kind: 'none', entries: [], origin: { type: 'unknown' } },
+      entries: [
+        {
+          name: 'spend',
+          kind: 'value',
+          role: 'input',
+          units: null,
+          convention: null,
+          shape: null,
+          formats: null,
+          steps: null,
+        },
+        {
+          name: 'region',
+          kind: 'class',
+          role: 'input',
+          units: null,
+          convention: null,
+          shape: null,
+          formats: null,
+          steps: null,
+        },
+        {
+          name: 'when',
+          kind: 'future_kind',
+          role: 'input',
+          units: null,
+          convention: null,
+          shape: null,
+          formats: null,
+          steps: null,
+        },
+      ],
+      splits: { train: 72, valid: 18 },
+      items: 90,
+      normalization: null,
+      notes: ['群を作る列に欠けた値のある行が 5 行あります'],
+    },
+  ])
+  renderPage()
+  const card = within((await screen.findByText('customers_groups')).closest('section')!)
+  expect(card.getByText('版 2 · 群分けの表')).toBeInTheDocument()
+  expect(card.getByText('まとめる · 正解なし')).toBeInTheDocument()
+  expect(card.getByText('数の値')).toBeInTheDocument()
+  expect(card.getByText('種類の値')).toBeInTheDocument()
+  expect(card.getByText('その他の値')).toBeInTheDocument()
+  expect(card.queryByText('future_kind')).not.toBeInTheDocument()
+  expect(card.queryByText('正解の出どころ')).not.toBeInTheDocument()
+  expect(card.getByText(/欠けた値のある行が 5 行/)).toBeInTheDocument()
+})

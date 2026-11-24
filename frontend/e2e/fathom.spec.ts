@@ -950,3 +950,41 @@ test('並べるの問題の設定から始め, 反応の表の偏りを見てプ
     timeout: 20_000,
   })
 })
+
+test('正解の無い表で群を作る列と群の数を選び, 群の要約を見て群分けの表を書き出す', async ({
+  page,
+}) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'データを追加' }).first().click()
+  await page.getByLabel('ディレクトリのパス').fill(path.dirname(TABLE))
+  await page.getByRole('button', { name: '移動' }).click()
+  await page.getByRole('button', { name: /segments\.csv/ }).click()
+  await page.getByRole('button', { name: '追加', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'segments.csv' })).toBeVisible()
+
+  // 群分けのタブで, 初めは数と種類の列を選び, 会員の番号は外している
+  await page.getByRole('tab', { name: '群分け' }).click({ timeout: 20_000 })
+  const fields = page.getByRole('group', { name: '群を作る列' })
+  await expect(fields.getByRole('checkbox', { name: /spend/ })).toBeChecked()
+  await expect(fields.getByRole('checkbox', { name: /region/ })).toBeChecked()
+  await expect(fields.getByRole('checkbox', { name: /member/ })).not.toBeChecked()
+  await page.getByLabel('群の数').fill('3')
+  await page.getByRole('button', { name: '群を作る' }).click()
+
+  // 3 つの群が 40 行ずつで, 種を変えても同じ群になる
+  const table = page.getByRole('table', { name: '群ごとの行の数, 割合, 安定性と列の特徴' })
+  await expect(table.getByRole('row')).toHaveCount(5, { timeout: 20_000 })
+  await expect(table.getByRole('row').last()).toContainText('全体')
+  await expect(table.getByText('40', { exact: true })).toHaveCount(3)
+  await expect(page.getByText('調整ランド指数 (安定性)').locator('..')).toContainText('1')
+
+  // 会員の番号で行を見分けて書き出し, 一覧に群分けの表として並ぶ
+  await page.getByLabel('行を見分ける列').selectOption('member')
+  await page.getByLabel('データセットの名前').fill('segments_groups')
+  await page.getByRole('button', { name: '群分けの表を書き出す' }).click()
+  await expect(page.getByRole('status')).toContainText('書き出しました', { timeout: 20_000 })
+  await page.getByRole('link', { name: 'データセット' }).click()
+  const card = page.locator('section', { has: page.getByText('segments_groups', { exact: true }) })
+  await expect(card.getByText('版 2 · 群分けの表')).toBeVisible()
+  await expect(card.getByText('まとめる · 正解なし')).toBeVisible()
+})
