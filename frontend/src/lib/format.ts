@@ -76,6 +76,7 @@ export const KIND_LABELS: Record<string, string> = {
   capture: '多視点の撮影',
   audio: '音声',
   trajectory: '記録した軌跡',
+  reactions: '反応の表',
 }
 
 /** タスクの日本語の名前 */

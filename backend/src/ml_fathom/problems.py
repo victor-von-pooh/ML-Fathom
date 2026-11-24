@@ -23,6 +23,16 @@ from ml_fathom.api import (
     source_view,
 )
 from ml_fathom.jsonable import to_json
+from ml_fathom.reactions import (
+    REACTIONS_KIND,
+    copy_reactions,
+    data_place,
+    describe,
+    file_state,
+    is_rank,
+    rank_answers,
+    read_reactions,
+)
 from ml_fathom.settings import get_problems_dir
 
 router = APIRouter(prefix="/api")
@@ -63,6 +73,12 @@ class ProjectExport(BaseModel):
     recipe: dict[str, Any]
     overwrite: bool = Field(
         False, description="前に書き出したデータセットを置き換えるか"
+    )
+
+
+class ReactionsExport(BaseModel):
+    overwrite: bool = Field(
+        False, description="前に置いた反応の表を置き換えるか"
     )
 
 
@@ -247,15 +263,22 @@ def require_recipe(problem: dict[str, Any]) -> None:
     part = ml_quest.PART
     role = ml_quest.active_value(problem, f"{part}.role")
     kind = ml_quest.active_value(problem, f"{part}.target.kind")
+    if is_rank(problem):
+        raise HTTPException(
+            422, "並べるの問題の設定はレシピを持ちません (反応の表をファイル "
+            "1 つのまま骨組みに渡し, 分割は骨組みが時刻で行うため). 反応の表"
+            "の分析の画面から, そのままプロジェクトへ書き出してください"
+        )
     if role == "effect" and ml_quest.active_value(
         problem, f"{part}.autonomous"
     ) is True:
         why = ("方策は行動の結果を環境とのやり取りで集めるので, データの"
                "分析の段階を通りません")
-    elif role == "predict" and ml_quest.active_value(
+    elif role in ("predict", "rank") and ml_quest.active_value(
         problem, f"{part}.method"
     ) == "pretrained":
-        why = ("既製のモデルをそのまま使う予測は学習しないので, データの"
+        name = "予測" if role == "predict" else "並べる"
+        why = (f"既製のモデルをそのまま使う{name}は学習しないので, データの"
                "分析の段階を通りません")
     else:
         why = "この受け持ちと正解の種類はまだ扱えません"
@@ -265,8 +288,8 @@ def require_recipe(problem: dict[str, Any]) -> None:
         f"(正解の種類 {choice_text(ml_quest.TARGET_KINDS, kind)}) は, "
         f"問題の設定から始めることと書き戻しに使えません ({why}). 使える"
         "のは, 予測するで正解の種類が表の列, 画像の領域, 点群の場合と, "
-        "作るで正解の種類が画像か表の場合です. データは「データを追加」"
-        "から入れて分析できます"
+        "作るで正解の種類が画像か表の場合と, 並べるで学習する場合です. "
+        "データは「データを追加」から入れて分析できます"
     )
 
 
@@ -293,10 +316,10 @@ def require_items(problem: dict[str, Any]) -> None:
     # 列の予測と画像か表の生成は登録したデータで始める
     if is_items_part(problem):
         return
-    if is_column_part(problem) or is_generate(problem):
+    if is_column_part(problem) or is_generate(problem) or is_rank(problem):
         raise HTTPException(
-            422, "この問題の設定は列の予測か, 画像か表の生成です. データの"
-            "画面の「問題の設定から始める」で始めてください"
+            422, "この問題の設定は列の予測か, 画像か表の生成か, 並べるです. "
+            "データの画面の「問題の設定から始める」で始めてください"
         )
     require_recipe(problem)
 
@@ -470,6 +493,9 @@ def start_from_problem(
             "notes": draft["notes"],
         }
         return started
+    if is_rank(problem):
+        started = start_rank(request, path, problem)
+        return started
     require_recipe(problem)
     try:
         start = ml_quest.recipe_from(problem)
@@ -528,6 +554,113 @@ def start_from_problem(
     store.write_recipe(source["id"], recipe)
     started = {"source": source_view(source), "problem": str(path),
                "form": None, "notes": start["notes"]}
+
+    return started
+
+
+def rank_reason(problem: dict[str, Any]) -> Optional[str]:
+    """
+    並べるの問題の設定から始められない理由を返す関数
+
+    Parameters
+    ----------
+    problem: dict[str, Any]
+        問題の設定 (並べるで学習する受け持ち)
+
+    Returns
+    ----------
+    reason: Optional[str]
+        骨組みを書き出せない理由 (ML-Quest の project_error) か, データを
+        入れていない旨 (始められれば None)
+    """
+    # 骨組みを書き出せること (入れたデータが表か, 出力の形が順位かも)
+    try:
+        error = ml_quest.project_error(problem)
+    except SHAPE_ERRORS as reason:
+        error = str(reason)
+    if error:
+        reason_text: Optional[str] = f"問題の設定を渡せません: {error}"
+    elif data_place(problem) is None:
+        reason_text = (
+            "データが入っていません (ML-Pathfinder の「手元のデータは」で"
+            "入れてください)"
+        )
+    else:
+        reason_text = None
+
+    return reason_text
+
+
+def start_rank(
+    request: Request, path: Path, problem: dict[str, Any]
+) -> dict[str, Any]:
+    """
+    並べるの問題の設定から, 入れた反応の表を登録する関数
+
+    並べるはレシピを持たないので, レシピは保存しない. 読み方は問題の設定の
+    手元のデータの読み方 (骨組みの学習のスクリプトと同じ)
+
+    Parameters
+    ----------
+    request: Request
+        リクエスト
+    path: Path
+        problem.yaml
+    problem: dict[str, Any]
+        問題の設定 (並べるで学習する受け持ち)
+
+    Returns
+    ----------
+    started: dict[str, Any]
+        source (登録したデータ), problem, form (None), notes (空)
+
+    Raises
+    ----------
+    HTTPException
+        データが無ければ 404, 渡せないか, 反応の表として読めなければ 422
+    """
+    # 骨組みを書き出せて, データを入れてあること
+    reason = rank_reason(problem)
+    place = data_place(problem)
+    if reason or place is None:
+        raise HTTPException(422, reason)
+    data_path = Path(place["path"])
+    if not data_path.exists():
+        raise HTTPException(404, f"{data_path} がありません")
+    if not data_path.is_file():
+        raise HTTPException(
+            422, f"{data_path.name} はファイルではありません. 並べるの反応の"
+            "表はファイル 1 つで入れてください"
+        )
+
+    # 読み込みの候補 (読み方が無ければ, 骨組みの load_data と同じく候補の
+    # 先頭) で読み, 問題の設定の列で反応の表として読めること
+    loader = place["loader"]
+    if not loader:
+        candidates = ml_eda.detect(data_path)
+        if not candidates:
+            raise HTTPException(
+                422, f"{data_path.name} を読める読み込みがありません"
+            )
+        loader = candidates[0]["loader"]
+    options = place["options"]
+    data = load_source(
+        {"path": str(data_path), "loader": loader, "options": options}
+    )
+    read_reactions(data, rank_answers(problem))
+    store = get_store(request)
+    source = store.add(
+        data_path, problem["name"], loader, REACTIONS_KIND, options
+    )
+    source = store.update(source["id"], {
+        "problem": str(path),
+        "problem_created": str(problem["created_at"]),
+        "problem_notes": [],
+    }) or source
+    started: dict[str, Any] = {
+        "source": source_view(source), "problem": str(path), "form": None,
+        "notes": [],
+    }
 
     return started
 
@@ -930,6 +1063,10 @@ def problem_entry(path: Path) -> dict[str, Any]:
 
     # 始めるときと同じ確かめ (列の予測と画像か表の生成はデータを入れて
     # あること. ファイルの組の受け持ちはディレクトリを画面で選べる)
+    if is_rank(problem):
+        entry["reason"] = rank_reason(problem)
+        entry["startable"] = entry["reason"] is None
+        return entry
     try:
         if not is_items_part(problem):
             require_recipe(problem)
@@ -1112,12 +1249,14 @@ def get_project(request: Request, source_id: str) -> dict[str, Any]:
     """
     # 記録と書き出し先の様子
     _, _, problem = linked_problem(request, source_id)
-    result = project_place(project_record(problem))
+    result = project_place(project_record(problem), single=is_rank(problem))
 
     return result
 
 
-def project_place(record: Optional[dict[str, str]]) -> dict[str, Any]:
+def project_place(
+    record: Optional[dict[str, str]], single: bool = False
+) -> dict[str, Any]:
     """
     プロジェクトの記録から, 書き出し先とその様子を返す関数
 
@@ -1125,12 +1264,15 @@ def project_place(record: Optional[dict[str, str]]) -> dict[str, Any]:
     ----------
     record: Optional[dict[str, str]]
         問題の設定のプロジェクトの記録
+    single: bool = False
+        書き出し先がファイル 1 つ (並べるの反応の表) か
 
     Returns
     ----------
     result: dict[str, Any]
-        project, dataset, state (missing, dataset, occupied. 書き出し先が
-        無ければ None), ready (書き出せるか), reason (書き出せない理由)
+        project, dataset, state (missing, dataset, occupied. ファイル 1 つ
+        では dataset の代わりに file. 書き出し先が無ければ None), ready
+        (書き出せるか), reason (書き出せない理由)
     """
     # 書き出せない理由も画面に出す
     result: dict[str, Any] = {
@@ -1143,11 +1285,12 @@ def project_place(record: Optional[dict[str, str]]) -> dict[str, Any]:
     except HTTPException as error:
         result["reason"] = str(error.detail)
         return result
-    state = place_state(target)
+    state = file_state(target) if single else place_state(target)
     result["state"] = state
     if state == "occupied":
         result["reason"] = (
-            f"{target} はデータセットではないので置き換えません"
+            f"{target} はファイルではないので置き換えません" if single
+            else f"{target} はデータセットではないので置き換えません"
         )
     else:
         result["ready"] = True
@@ -1188,6 +1331,7 @@ def export_project(
     # の間に変わらないように, 書き出しと同じ鍵の中で確かめる)
     check_recipe_limits(body.recipe)
     source, _, problem = linked_problem(request, source_id)
+    require_recipe(problem)
     record = project_record(problem)
     data = load_source(source)
     try:
@@ -1222,6 +1366,153 @@ def export_project(
     result = {
         "path": str(target), "info": to_json(info),
         "hints": model_hints(target, info),
+    }
+
+    return result
+
+
+def linked_rank(
+    request: Request, source_id: str
+) -> tuple[dict[str, Any], Path, dict[str, Any]]:
+    """
+    並べるの問題の設定から始めたデータと, 問題の設定を返す関数
+
+    Parameters
+    ----------
+    request: Request
+        リクエスト
+    source_id: str
+        データの ID
+
+    Returns
+    ----------
+    linked: tuple[dict[str, Any], Path, dict[str, Any]]
+        登録したデータ, problem.yaml の場所, 問題の設定
+
+    Raises
+    ----------
+    HTTPException
+        問題の設定から始めていなければ 404, 並べるでなくなっていれば 422
+    """
+    # 始めた後に受け持ちを答え直した場合も断る
+    linked = linked_problem(request, source_id)
+    if not is_rank(linked[2]):
+        raise HTTPException(
+            422, "この問題の設定は並べるで学習する受け持ちではありません. "
+            "問題の設定から始め直してください"
+        )
+
+    return linked
+
+
+@router.get("/sources/{source_id}/reactions")
+def get_reactions(request: Request, source_id: str) -> dict[str, Any]:
+    """
+    並べるの問題の設定の列で, 反応の表の要約を返す関数
+
+    Parameters
+    ----------
+    request: Request
+        リクエスト
+    source_id: str
+        データの ID
+
+    Returns
+    ----------
+    result: dict[str, Any]
+        name (問題の設定の名前), path (problem.yaml), k (並べる件数の答え),
+        summary (ML-EDA の describe_reactions の結果)
+
+    Raises
+    ----------
+    HTTPException
+        問題の設定から始めていなければ 404, 並べるでないか反応の表として
+        読めなければ 422
+    """
+    # 読み込み済みの表を渡し, 読み直さない
+    source, path, problem = linked_rank(request, source_id)
+    answers = rank_answers(problem)
+    reactions = read_reactions(load_source(source), answers)
+    result = {
+        "name": problem.get("name"), "path": str(path), "k": answers["k"],
+        "summary": describe(reactions),
+    }
+
+    return result
+
+
+@router.post("/sources/{source_id}/export_reactions")
+def export_reactions(
+    request: Request, source_id: str, body: ReactionsExport
+) -> dict[str, Any]:
+    """
+    反応の表をファイル 1 つのまま, 問題の設定のプロジェクトの骨組みが読む
+    場所 (config の data.dataset) に写す関数
+
+    前処理はかけない (並べるはレシピを持たず, 分割は骨組みが時刻で行う)
+
+    Parameters
+    ----------
+    request: Request
+        リクエスト
+    source_id: str
+        データの ID
+    body: ReactionsExport
+        前に置いた反応の表を置き換えるか
+
+    Returns
+    ----------
+    result: dict[str, Any]
+        path (書き出した場所), copied (写したか. 書き出し先が登録した表
+        そのものなら False), reactions (骨組みが反応とみなす行の数),
+        dropped (骨組みが除く行の数)
+
+    Raises
+    ----------
+    HTTPException
+        記録が無い, 反応の表として読めない, 拡張子が書き出し先と違う,
+        書けない場合は 422, プロジェクトが無ければ 404, ファイルでない
+        ものがあるか, 置き換えを指定せずにファイルがある場合は 409
+    """
+    # 骨組みが読めること (列, 時刻) を写す前に確かめる
+    source, _, problem = linked_rank(request, source_id)
+    record = project_record(problem)
+    data_path = Path(source["path"])
+    summary = describe(
+        read_reactions(load_source(source), rank_answers(problem))
+    )
+
+    # 書き出し先と, 置き換えてよいか (確かめと写しの間に変わらないように,
+    # 写しと同じ鍵の中で確かめる). 骨組みは問題の設定の読み方で読むので,
+    # 拡張子が違えば (読み方を決めていないときの候補が変わるので) 写さない
+    try:
+        with EXPORT_LOCK:
+            target = export_place(record)
+            state = file_state(target)
+            if state == "occupied":
+                raise HTTPException(
+                    409, f"{target} はファイルではないので置き換えません"
+                )
+            if state == "file" and not body.overwrite:
+                raise HTTPException(
+                    409, f"{target} には既にファイルがあります. 置き換えて"
+                    "よいかを確かめてから書き出してください"
+                )
+            if target.suffix.lower() != data_path.suffix.lower():
+                raise HTTPException(
+                    422, f"書き出し先 {target.name} と反応の表 "
+                    f"{data_path.name} の拡張子が違います. ML-Pathfinder で"
+                    "プロジェクトを作り直してください"
+                )
+            copied = copy_reactions(data_path, target)
+    except OSError as error:
+        raise HTTPException(
+            422, f"反応の表を書き出せません: {error}"
+        ) from error
+    result = {
+        "path": str(target), "copied": copied,
+        "reactions": summary["reactions"],
+        "dropped": summary["dropped"]["total"],
     }
 
     return result

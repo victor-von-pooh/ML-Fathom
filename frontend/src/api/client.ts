@@ -22,6 +22,8 @@ import type {
   ProblemWritten,
   PairSettings,
   ProjectPlace,
+  ReactionsExportResult,
+  ReactionsResult,
   TrajectorySummary,
 } from './types'
 
@@ -84,6 +86,12 @@ export const api = {
   deleteSource: (id: string) => request<void>(`/api/sources/${id}`, { method: 'DELETE' }),
   profile: (id: string) => request<Profile>(`/api/sources/${id}/profile`),
   trajectory: (id: string) => request<TrajectorySummary>(`/api/sources/${id}/trajectory`),
+  reactions: (id: string) => request<ReactionsResult>(`/api/sources/${id}/reactions`),
+  exportReactions: (id: string, overwrite: boolean) =>
+    request<ReactionsExportResult>(
+      `/api/sources/${id}/export_reactions`,
+      json('POST', { overwrite }),
+    ),
   rows: (
     id: string,
     params: { offset: number; limit: number; sort?: string; descending?: boolean; query?: string },

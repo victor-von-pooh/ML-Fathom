@@ -435,16 +435,18 @@ def test_other_roles(client: TestClient, tmp_path: Path) -> None:
     assert "「効果を見積もる」(effect)" in detail and "方策" in detail
     assert "使えません" in detail and "データを追加" in detail
 
-    # 並べる
+    # 既製のモデルをそのまま使う並べる
     rank = ml_quest.answer(
         example_problem("総菜の作る量"), f"{PART}.role", "rank"
     )
+    rank = ml_quest.answer(rank, f"{PART}.method", "pretrained")
     ml_quest.save_problem(rank, tmp_path / "rank")
     response = client.post(
         "/api/problems/start", json={"path": str(tmp_path / "rank")}
     )
     assert response.status_code == 422
-    assert "「並べる」(rank)" in response.json()["detail"]
+    detail = response.json()["detail"]
+    assert "「並べる」(rank)" in detail and "学習しない" in detail
 
     # 作るでも正解の種類が文なら断る
     text = ml_quest.answer(generate_problem("table"), f"{PART}.output", "text")

@@ -51,8 +51,12 @@ export interface ProblemList {
 export interface ProjectPlace {
   project: string | null
   dataset: string | null
-  /** missing は無い, dataset は前に書き出したもの, occupied はデータセットでないもの */
-  state: 'missing' | 'dataset' | 'occupied' | null
+  /**
+   * missing は無い, dataset は前に書き出したもの, occupied はデータセットでないもの.
+   * 並べるの反応の表 (ファイル 1 つ) では dataset の代わりに file (前に置いたファイル) で,
+   * occupied はファイルでないもの
+   */
+  state: 'missing' | 'dataset' | 'file' | 'occupied' | null
   ready: boolean
   reason: string | null
 }
@@ -658,4 +662,77 @@ export interface TrajectorySummary {
   per_episode: TrajectoryEpisode[]
   per_episode_truncated: boolean
   notes: string[]
+}
+
+/** 利用者ごとか品物ごとの反応の数の要約 (ML-EDA の describe_reactions の per_user, per_item) */
+export interface ReactionCounts {
+  min: number | null
+  max: number | null
+  mean: number | null
+  std: number | null
+  median: number | null
+  /** 1 回だけの数 */
+  once: number
+  /** 区切りごとの数 (to は含み, 最後は null) */
+  bins: { from: number; to: number | null; count: number }[]
+}
+
+/** 並べるの反応の表の要約 (ML-EDA の describe_reactions) */
+export interface ReactionsSummary {
+  columns: { user: string; item: string; time: string; reaction: string | null }
+  source: Record<string, unknown>
+  /** 除く前の行の数 */
+  rows: number
+  /** 残した反応の数 */
+  reactions: number
+  dropped: { missing: number; unreadable_time: number; not_positive: number; total: number }
+  users: number
+  items: number
+  pairs: number
+  repeated: number
+  density: number | null
+  per_user: ReactionCounts
+  per_item: ReactionCounts
+  popularity: {
+    top_items: number
+    top_share: number | null
+    gini: number | null
+    popular: { item: string | number | boolean; reactions: number }[]
+  }
+  time: {
+    kind: 'number' | 'datetime'
+    min: number | string | null
+    max: number | string | null
+    distinct: number
+  }
+  reaction: {
+    min: number | null
+    max: number | null
+    mean: number | null
+    std: number | null
+    median: number | null
+  } | null
+  notes: string[]
+}
+
+/** 並べるの問題の設定の列で読んだ反応の表 */
+export interface ReactionsResult {
+  /** 問題の設定の名前 */
+  name: string | null
+  /** problem.yaml の場所 */
+  path: string
+  /** 利用者ごとに並べる件数の答え */
+  k: number | null
+  summary: ReactionsSummary
+}
+
+/** 反応の表をプロジェクトへ写した結果 */
+export interface ReactionsExportResult {
+  path: string
+  /** 写したか (書き出し先が登録した表そのものなら false) */
+  copied: boolean
+  /** 骨組みが反応とみなす行の数 */
+  reactions: number
+  /** 骨組みが除く行の数 */
+  dropped: number
 }

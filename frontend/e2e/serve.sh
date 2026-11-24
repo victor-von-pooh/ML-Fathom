@@ -298,6 +298,54 @@ problem = ml_quest.record_project(problem, project)
 ml_quest.save_problem(problem, work / "pathfinder" / "problems" / "table")
 PY
 
+# ML-Pathfinder の置き場に, 並べるで学習する問題の設定 (会員と品の反応の表を
+# 入れ, ML-Quest で骨組みのプロジェクトを作った記録付き. 反応の強さ 0 の行と
+# 会員の欠けた行を含む)
+uv run python - "$WORK" <<'PY'
+import sys
+from pathlib import Path
+
+import ml_quest
+import numpy as np
+import pandas as pd
+from ml_quest.examples import example_problem
+
+work = Path(sys.argv[1])
+rng = np.random.default_rng(5)
+rows = 300
+frame = pd.DataFrame({
+    "member": [f"m{value:02d}" for value in rng.integers(0, 30, rows)],
+    "item_id": [f"i{value:02d}"
+                for value in np.minimum(rng.geometric(0.2, rows), 25)],
+    "ts": pd.date_range("2025-01-01", periods=rows, freq="h").strftime(
+        "%Y-%m-%d %H:%M:%S"
+    ),
+    "qty": rng.integers(0, 3, rows),
+})
+frame.loc[:1, "member"] = None
+frame.to_csv(work / "reactions.csv", index=False)
+problem = example_problem("総菜の作る量")
+problem["ml"]["parts"] = [{}]
+for key in ("decision", "basis", "current"):
+    problem["action"].pop(key, None)
+problem = ml_quest.answer(problem, "information.columns", list(frame.columns))
+answers = [("role", "rank"), ("unit", "query"), ("output", "ranking"),
+           ("target.source", "feedback"), ("method", "scratch"),
+           ("what", "会員ごとに勧める品"), ("item", "会員ごとの品の並び"),
+           ("baseline", "人気順"), ("evaluation.metric", "ndcg"),
+           ("evaluation.link", "上位に買う品が来るほど売上が増える"),
+           ("rank.user", "member"), ("rank.item", "item_id"),
+           ("rank.time", "ts"), ("rank.reaction", "qty"), ("rank.k", 5)]
+for key, value in answers:
+    problem = ml_quest.answer(problem, f"ml.parts.0.{key}", value)
+problem = ml_quest.attach_data(problem, work / "reactions.csv")
+problem["name"] = "推薦のプロジェクト"
+project = work / "rank_project"
+ml_quest.make_project(problem, project)
+problem = ml_quest.record_project(problem, project)
+ml_quest.save_problem(problem, work / "pathfinder" / "problems" / "rank")
+PY
+
 # 記録した軌跡の見本 (ML-EDA のテストの見本を写す. 守りの付いた Discrete の
 # 行動の軌跡, Box の行動の軌跡と, 行動を選んだ確率の列を持つ軌跡. どれも表と
 # 説明の JSON)
