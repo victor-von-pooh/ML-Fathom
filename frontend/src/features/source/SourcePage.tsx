@@ -8,6 +8,7 @@ import { KIND_LABELS } from '../../lib/format'
 import { untargetedDraft } from '../../lib/recipe'
 import { ColumnsTab } from './ColumnsTab'
 import { DataTab } from './DataTab'
+import { GroupsTab } from './GroupsTab'
 import { OverviewTab } from './OverviewTab'
 import { LoaderOptions } from './LoaderOptions'
 import { ReadAsControl } from './ReadAsControl'
@@ -18,7 +19,11 @@ import { TimeSeriesTab } from './TimeSeriesTab'
 import { ReactionsView } from './ReactionsView'
 import { TrajectoryView } from './TrajectoryView'
 
-type TabId = 'overview' | 'columns' | 'relations' | 'timeseries' | 'samples' | 'data' | 'recipe'
+type TabId =
+  'overview' | 'columns' | 'relations' | 'timeseries' | 'samples' | 'groups' | 'data' | 'recipe'
+
+// 群分け (正解の無い表) の群を作れる種類 (ML-EDA の describe_groups が読むもの)
+const GROUP_KINDS = new Set(['table', 'timeseries'])
 
 /** 1 つのデータの分析と前処理 */
 export function SourcePage() {
@@ -69,6 +74,7 @@ export function SourcePage() {
     { id: 'relations', label: '関係' },
     ...(data?.timeseries ? [{ id: 'timeseries' as const, label: '時系列' }] : []),
     ...(data?.summary.has_items ? [{ id: 'samples' as const, label: '中身を見る' }] : []),
+    ...(data && GROUP_KINDS.has(source.kind) ? [{ id: 'groups' as const, label: '群分け' }] : []),
     { id: 'data', label: '表の中身' },
     { id: 'recipe', label: '前処理と書き出し' },
   ]
@@ -143,6 +149,13 @@ export function SourcePage() {
           <TimeSeriesTab series={data.timeseries} />
         )}
         {data && tab === 'samples' && <SamplesTab key={source.id} source={source} profile={data} />}
+        {data && tab === 'groups' && (
+          <GroupsTab
+            key={`${source.id}:${JSON.stringify(source.options)}`}
+            source={source}
+            profile={data}
+          />
+        )}
         {tab === 'data' && <DataTab sourceId={id} />}
         {data && tab === 'recipe' && source.kind === 'capture' && (
           <p className="rounded-xl border border-line bg-surface p-4 text-sm text-ink-2">

@@ -346,6 +346,28 @@ problem = ml_quest.record_project(problem, project)
 ml_quest.save_problem(problem, work / "pathfinder" / "problems" / "rank")
 PY
 
+# 群分けの表 (正解の無い 1 行 1 人の客の表. 使った額, 回数, 地域で 3 つの
+# はっきりした群に分かれ, 会員の番号で行を見分ける)
+uv run python - "$WORK/segments.csv" <<'PY'
+import sys
+
+import numpy as np
+import pandas as pd
+
+rng = np.random.default_rng(6)
+size = 40
+pd.DataFrame({
+    "member": [f"m{index:03d}" for index in range(size * 3)],
+    "spend": np.concatenate([
+        rng.normal(center, 1.0, size) for center in (5.0, 50.0, 95.0)
+    ]).round(2),
+    "visits": np.concatenate([
+        rng.normal(center, 0.5, size) for center in (1.0, 8.0, 15.0)
+    ]).round(1),
+    "region": ["east"] * size + ["west"] * size + ["north"] * size,
+}).to_csv(sys.argv[1], index=False)
+PY
+
 # 記録した軌跡の見本 (ML-EDA のテストの見本を写す. 守りの付いた Discrete の
 # 行動の軌跡, Box の行動の軌跡と, 行動を選んだ確率の列を持つ軌跡. どれも表と
 # 説明の JSON)

@@ -126,13 +126,15 @@ function ItemsCard({ item }: { item: ItemsDataset }) {
   const note = originNote(origin)
   const settings = origin.settings ?? {}
   const stepped = item.entries.some((entry) => entry.steps && entry.steps.length > 0)
+  // 群分けの表は正解を持たず, 入力の項目は表の列 (正解の出どころと座標の決まりは無い)
+  const grouped = item.role === 'group'
   return (
     <Card
       title={<span className="font-mono">{item.name}</span>}
       actions={
         <span className="flex gap-1">
           {item.project !== undefined && <Badge>プロジェクト</Badge>}
-          <Badge>{`版 ${String(item.format_version)} · ファイルの組`}</Badge>
+          <Badge>{`版 ${String(item.format_version)} · ${grouped ? '群分けの表' : 'ファイルの組'}`}</Badge>
         </span>
       }
     >
@@ -140,9 +142,11 @@ function ItemsCard({ item }: { item: ItemsDataset }) {
         <dt className="text-ink-3">受け持ちと正解</dt>
         <dd>
           {item.role ? (ROLE_LABELS[item.role] ?? item.role) : '—'} ·{' '}
-          {item.target.kind
-            ? `${ENTRY_KIND_LABELS[item.target.kind] ?? item.target.kind} (${item.target.kind})`
-            : '—'}
+          {grouped
+            ? '正解なし'
+            : item.target.kind
+              ? `${ENTRY_KIND_LABELS[item.target.kind] ?? item.target.kind} (${item.target.kind})`
+              : '—'}
         </dd>
         <dt className="text-ink-3">項目</dt>
         <dd>
@@ -165,7 +169,7 @@ function ItemsCard({ item }: { item: ItemsDataset }) {
                       ({entry.role === 'target' ? '正解' : '入力'})
                     </span>
                   </td>
-                  <td className="pr-2">{entry.kind}</td>
+                  <td className="pr-2">{ENTRY_KIND_LABELS[entry.kind] ?? entry.kind}</td>
                   <td className="pr-2">{entry.units ?? '—'}</td>
                   <td className={stepped ? 'break-all pr-2' : 'break-all'}>
                     <span className="font-mono">{conventionText(entry.convention)}</span>
@@ -191,15 +195,21 @@ function ItemsCard({ item }: { item: ItemsDataset }) {
         <dd>
           {splitText(item.splits, ' 件')} (全て {formatNumber(item.items)} 件)
         </dd>
-        <dt className="text-ink-3">正解の出どころ</dt>
-        <dd>
-          {ORIGIN_LABELS[origin.type] ?? origin.type} ({origin.type})
-          {origin.name && <span className="ml-1 font-mono">{origin.name}</span>}
-          {Object.keys(settings).length > 0 && (
-            <div className="font-mono text-xs break-all text-ink-2">{JSON.stringify(settings)}</div>
-          )}
-          {note && <p className="mt-1 text-xs text-warning-text">{note}</p>}
-        </dd>
+        {!grouped && (
+          <>
+            <dt className="text-ink-3">正解の出どころ</dt>
+            <dd>
+              {ORIGIN_LABELS[origin.type] ?? origin.type} ({origin.type})
+              {origin.name && <span className="ml-1 font-mono">{origin.name}</span>}
+              {Object.keys(settings).length > 0 && (
+                <div className="font-mono text-xs break-all text-ink-2">
+                  {JSON.stringify(settings)}
+                </div>
+              )}
+              {note && <p className="mt-1 text-xs text-warning-text">{note}</p>}
+            </dd>
+          </>
+        )}
         {item.normalization && (
           <>
             <dt className="text-ink-3">正規化</dt>

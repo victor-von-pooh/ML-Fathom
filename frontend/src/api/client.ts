@@ -3,6 +3,9 @@ import type {
   CaptureCloudExport,
   DatasetSummary,
   ExportResult,
+  GroupExport,
+  GroupRequest,
+  GroupSummary,
   ImageMaskExport,
   Info,
   Listing,
@@ -92,6 +95,10 @@ export const api = {
       `/api/sources/${id}/export_reactions`,
       json('POST', { overwrite }),
     ),
+  groups: (id: string, body: GroupRequest) =>
+    request<GroupSummary>(`/api/sources/${id}/groups`, json('POST', body)),
+  exportGroups: (id: string, body: GroupExport) =>
+    request<PairExportResult>(`/api/sources/${id}/export_groups`, json('POST', body)),
   rows: (
     id: string,
     params: { offset: number; limit: number; sort?: string; descending?: boolean; query?: string },
