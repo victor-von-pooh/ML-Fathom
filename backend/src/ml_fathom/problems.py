@@ -160,7 +160,7 @@ class PairsExport(BaseModel):
     overwrite: bool = Field(
         False, description="前に書き出したデータセットを置き換えるか"
     )
-    # 問題の設定に書き戻さない欄 (外を写すかは書き出しのたびに利用者が選ぶもの)
+    # 問題の設定に書き戻さない欄 (外を写すかは書き出しのたびに選ぶもの)
     follow_links: bool = Field(
         False, description="入力と正解のディレクトリの外を指すリンクの先も"
         "写すか"
