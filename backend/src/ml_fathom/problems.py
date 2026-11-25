@@ -583,6 +583,30 @@ def start_from_problem(
     return started
 
 
+def project_reason(problem: dict[str, Any]) -> Optional[str]:
+    """
+    問題の設定から骨組みを書き出せない理由を返す関数
+
+    Parameters
+    ----------
+    problem: dict[str, Any]
+        問題の設定
+
+    Returns
+    ----------
+    reason: Optional[str]
+        ML-Quest の project_error の文 (書き出せれば None)
+    """
+    # 形の崩れた問題の設定も理由の文にする
+    try:
+        error = ml_quest.project_error(problem)
+    except SHAPE_ERRORS as shape:
+        error = str(shape)
+    reason = f"問題の設定を渡せません: {error}" if error else None
+
+    return reason
+
+
 def skeleton_reason(problem: dict[str, Any]) -> Optional[str]:
     """
     並べるかまとめるの問題の設定から始められない理由を返す関数
@@ -599,19 +623,12 @@ def skeleton_reason(problem: dict[str, Any]) -> Optional[str]:
         入れていない旨 (始められれば None)
     """
     # 骨組みを書き出せること (入れたデータが表か, 出力の形が順位か群かも)
-    try:
-        error = ml_quest.project_error(problem)
-    except SHAPE_ERRORS as reason:
-        error = str(reason)
-    if error:
-        reason_text: Optional[str] = f"問題の設定を渡せません: {error}"
-    elif data_place(problem) is None:
+    reason_text = project_reason(problem)
+    if reason_text is None and data_place(problem) is None:
         reason_text = (
             "データが入っていません (ML-Pathfinder の「手元のデータは」で"
             "入れてください)"
         )
-    else:
-        reason_text = None
 
     return reason_text
 
@@ -1816,6 +1833,10 @@ def export_group_project(
     data = load_source(source)
     answers = group_answers(problem)
     check_group_columns(data, answers)
+    # 始めた後に答え直した場合も, 始めるのと同じ ML-Quest の確かめで断る
+    reason = project_reason(problem)
+    if reason:
+        raise HTTPException(422, reason)
     target, copied = copy_to_project(
         project_record(problem), Path(source["path"]), body.overwrite,
         "群分けの表"

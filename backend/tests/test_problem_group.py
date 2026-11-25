@@ -9,13 +9,14 @@ import numpy as np
 import pandas as pd
 import pytest
 import yaml
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from ml_quest import example_problem
 
 from ml_fathom import problems
 from ml_fathom.api import STAMPS
 from ml_fathom.app import create_app
-from ml_fathom.groups import group_answers
+from ml_fathom.groups import check_group_columns, group_answers
 
 # テストで使うトークン
 TOKEN = "test-token"
@@ -196,8 +197,8 @@ def skeleton_reader(project: Path) -> Any:
     read: Any
         骨組みの read_rows (path と config を受け取る)
     """
-    # 読み方の定数 (LOADER, OPTIONS), 群の要約の列と関数の定義だけ
-    names = ("LOADER", "OPTIONS", "SUMMARY_COLUMNS")
+    # 読み方の定数 (LOADER, OPTIONS), 使えない列の名前と関数の定義だけ
+    names = ("LOADER", "OPTIONS", "TAKEN_COLUMNS", "ASSIGNED_COLUMNS")
     tree = ast.parse((project / "train.py").read_text("utf-8"))
     nodes = [
         node for node in tree.body
@@ -208,7 +209,7 @@ def skeleton_reader(project: Path) -> Any:
             isinstance(node, ast.FunctionDef) and node.name == "read_rows"
         )
     ]
-    assert len(nodes) == 4
+    assert len(nodes) == 5
     scope: dict[str, Any] = {
         "pd": pd, "load_data": ml_eda.load_data, "Path": Path, "Any": Any,
         "Optional": Optional,
@@ -391,7 +392,7 @@ def test_group_refusals(client: TestClient, tmp_path: Path) -> None:
     assert "income" in response.json()["detail"]
     assert not target.exists()
 
-    # 群の要約の列と同じ名前の列は, 骨組みが止めるので写さない
+    # 群を作るのに使えない名前 (GROUP_TAKEN) は, 骨組みが止めるので写さない
     problem["ml"]["parts"][0]["group"]["columns"] = ["spend", "rows"]
     ml_quest.save_problem(problem, path)
     frame = pd.read_csv(source["path"])
@@ -402,6 +403,19 @@ def test_group_refusals(client: TestClient, tmp_path: Path) -> None:
     response = client.post(f"{url}/export_group_project", json={})
     assert response.status_code == 422
     assert "群の要約の列" in response.json()["detail"]
+
+    # 群の割り当ての表の列と同じ名前の行を見分ける列も写さない
+    problem["ml"]["parts"][0]["group"]["columns"] = ["spend", "visits"]
+    problem["ml"]["parts"][0]["group"]["id"] = "split"
+    ml_quest.save_problem(problem, path)
+    frame["split"] = [f"r{number}" for number in range(len(frame))]
+    frame.to_csv(source["path"], index=False)
+    STAMPS.clear()
+    response = client.post(f"{url}/export_group_project", json={})
+    assert response.status_code == 422
+    assert "行を見分ける列 split" in response.json()["detail"]
+    assert not target.exists()
+    problem["ml"]["parts"][0]["group"]["id"] = "customer"
 
     # 受け持ちが変われば答えを返さず, 書き出しも断る
     problem["ml"]["parts"][0]["role"] = "predict"
@@ -501,6 +515,145 @@ def test_group_start_refusals(
     assert response.status_code == 422
     assert "image" in response.json()["detail"]
     assert client.get("/api/sources").json() == []
+
+
+@pytest.mark.parametrize("columns, key, word", [
+    (["spend", "id"], None, "群を作る列 id"),
+    (["spend", "split"], None, "群を作る列 split"),
+    (["spend", "share"], None, "群を作る列 share"),
+    (["spend"], "group", "行を見分ける列 group"),
+    (["spend"], "split", "行を見分ける列 split"),
+])
+def test_group_column_names(
+    columns: list[str], key: Optional[str], word: str
+) -> None:
+    """
+    骨組みが使えない名前の群を作る列と行を見分ける列を, ML-Quest の
+    決まり (GROUP_TAKEN と GROUP_ASSIGNED) で断ることを確かめる関数
+
+    Parameters
+    ----------
+    columns: list[str]
+        群を作る列
+    key: Optional[str]
+        行を見分ける列
+    word: str
+        理由に出る言葉
+
+    Returns
+    ----------
+    None
+    """
+    # 表には全ての列があり, 名前だけが誤り
+    names = set(columns) | ({key} if key else set()) | {"customer"}
+    data: Any = SimpleNamespace(
+        frame=pd.DataFrame({name: [1, 2] for name in sorted(names)})
+    )
+    with pytest.raises(HTTPException) as error:
+        check_group_columns(data, {"columns": columns, "id": key})
+    assert error.value.status_code == 422
+    assert word in str(error.value.detail)
+
+    # ML-Quest の決まりの外の名前 (行を見分ける列の id など) は通す
+    check_group_columns(data, {"columns": ["spend"], "id": "customer"})
+    data.frame["id"] = 0
+    check_group_columns(data, {"columns": ["spend"], "id": "id"})
+
+
+def test_group_start_column_names(
+    client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """
+    答えた行を見分ける列が骨組みの使えない名前のまとめるの問題の設定は,
+    ML-Quest の確かめと群分けのタブの確かめの両方で始めないことを確かめる
+    関数
+
+    Parameters
+    ----------
+    client: TestClient
+        クライアント
+    tmp_path: Path
+        一時ディレクトリ
+    monkeypatch: pytest.MonkeyPatch
+        ML-Quest の確かめの差し替え
+
+    Returns
+    ----------
+    None
+    """
+    # 行を見分ける列を group にした表と答え
+    path = problem_place(tmp_path)
+    raw = write_rows(tmp_path / "raw")
+    frame = pd.read_csv(raw).rename(columns={"customer": "group"})
+    frame.to_csv(raw, index=False)
+    problem = group_problem()
+    columns = ["group", "spend", "visits", "region"]
+    problem = ml_quest.answer(problem, "information.columns", columns)
+    problem = ml_quest.answer(problem, f"{PART}.group.id", "group")
+    problem = ml_quest.attach_data(problem, str(raw))
+    ml_quest.save_problem(problem, path)
+
+    # ML-Quest の確かめが先に止める
+    response = client.post("/api/problems/start", json={"path": str(path)})
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    assert detail.startswith("問題の設定を渡せません")
+    assert "行を見分ける列 group" in detail
+    assert client.get("/api/sources").json() == []
+
+    # ML-Quest の確かめを通っても (config を手で直した場合など), 群分けの
+    # タブの確かめが止める
+    monkeypatch.setattr(ml_quest, "project_error", lambda problem: None)
+    response = client.post("/api/problems/start", json={"path": str(path)})
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    assert "行を見分けるのに使えません" in detail
+    assert "ML-Pathfinder" in detail
+    assert client.get("/api/sources").json() == []
+
+
+def test_group_export_reanswered(
+    client: TestClient, tmp_path: Path
+) -> None:
+    """
+    始めた後に ML-Quest の確かめで誤りになる答えに直した場合は, 写さずに
+    前に写した表を残すことを確かめる関数
+
+    Parameters
+    ----------
+    client: TestClient
+        クライアント
+    tmp_path: Path
+        一時ディレクトリ
+
+    Returns
+    ----------
+    None
+    """
+    # 始めて, 置き換えて写せる
+    path, project = saved_problem(tmp_path, group_problem())
+    source = client.post(
+        "/api/problems/start", json={"path": str(path)}
+    ).json()["source"]
+    url = f"/api/sources/{source['id']}"
+    assert client.post(
+        f"{url}/export_group_project", json={"overwrite": True}
+    ).status_code == 200
+    target = project / skeleton_config(project).data.dataset
+    target.write_text("customer,spend\n", "utf-8")
+
+    # 行を見分ける列を群を作る列の 1 つに答え直すと, 置き換えの印でも断る
+    problem = ml_quest.load_problem(path / "problem.yaml")
+    problem["ml"]["parts"][0]["group"]["id"] = "spend"
+    ml_quest.save_problem(problem, path)
+    response = client.post(
+        f"{url}/export_group_project", json={"overwrite": True}
+    )
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    assert detail.startswith("問題の設定を渡せません")
+    assert "spend" in detail
+    assert target.read_text("utf-8") == "customer,spend\n"
 
 
 @pytest.mark.parametrize("value, expected", [
