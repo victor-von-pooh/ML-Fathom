@@ -1,5 +1,7 @@
 import datetime as dt
 import hashlib
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Literal, Optional
 
@@ -30,6 +32,7 @@ from ml_fathom.groups import (
     is_group,
 )
 from ml_fathom.jsonable import to_json
+from ml_fathom.places import Parent, pinned_parent
 from ml_fathom.reactions import (
     REACTIONS_KIND,
     copy_file,
@@ -1086,9 +1089,10 @@ def export_problem_pairs(body: PairsExport) -> dict[str, Any]:
 
     # 書き出し先と, 置き換えてよいか (書き出しと同じ鍵の中で)
     try:
-        with EXPORT_LOCK:
-            target = export_place(project_record(problem))
-            state = place_state(target)
+        with EXPORT_LOCK, pinned_export(project_record(problem)) as (
+            target, parent
+        ):
+            state = place_state(parent.place)
             if state == "occupied":
                 raise HTTPException(
                     409, f"{target} はデータセットではないので置き換えません"
@@ -1098,7 +1102,7 @@ def export_problem_pairs(body: PairsExport) -> dict[str, Any]:
                     409, f"{target} には既にデータセットがあります. 置き換え"
                     "てよいかを確かめてから書き出してください"
                 )
-            info = pair_call(settings, target, body.overwrite)
+            info = pair_call(settings, parent.place, body.overwrite)
     except HTTPException:
         raise
     except FileExistsError as error:
@@ -1503,6 +1507,41 @@ def export_place(record: Optional[dict[str, str]]) -> Path:
     return target
 
 
+@contextmanager
+def pinned_export(
+    record: Optional[dict[str, str]]
+) -> Iterator[tuple[Path, Parent]]:
+    """
+    書き出し先を確かめ, 書く直前に親を一段ずつ作って開く関数
+
+    export_place の確かめと書き込みの間に途中の場所がリンクに替わっても,
+    プロジェクトの外に書かないように, 書く直前に親の実体を比べ直し, 途中を
+    リンクをたどらずに開く (pinned_parent). 開いた親に対して書くのは
+    copy_file だけで, ML-EDA には開いた親の実体のパスを渡す
+
+    Parameters
+    ----------
+    record: Optional[dict[str, str]]
+        問題の設定のプロジェクトの記録
+
+    Yields
+    ----------
+    places: tuple[Path, Parent]
+        書き出し先 (記録のまま. 結果と理由の文に使う) と, 開いた親
+
+    Raises
+    ----------
+    HTTPException
+        export_place と pinned_parent の誤り (書き出し先がプロジェクトの外,
+        途中がリンクに替わったなどは 422, プロジェクトが無ければ 404)
+    """
+    # 確かめた記録には場所 (project.path) がある
+    target = export_place(record)
+    root = Path((record or {})["path"])
+    with pinned_parent(root, target) as parent:
+        yield target, parent
+
+
 @router.get("/sources/{source_id}/project")
 def get_project(request: Request, source_id: str) -> dict[str, Any]:
     """
@@ -1612,9 +1651,8 @@ def export_project(
     record = project_record(problem)
     data = load_source(source)
     try:
-        with EXPORT_LOCK:
-            target = export_place(record)
-            state = place_state(target)
+        with EXPORT_LOCK, pinned_export(record) as (target, parent):
+            state = place_state(parent.place)
             if state == "occupied":
                 raise HTTPException(
                     409, f"{target} はデータセットではないので置き換えません"
@@ -1625,7 +1663,7 @@ def export_project(
                     "てよいかを確かめてから書き出してください"
                 )
             info = ml_eda.export_dataset(
-                data, body.recipe, target, name=target.name,
+                data, body.recipe, parent.place, name=target.name,
                 overwrite=body.overwrite
             )
     except FileExistsError as error:
@@ -1685,9 +1723,8 @@ def copy_to_project(
     """
     # 書き出し先の様子と拡張子を確かめてから写す
     try:
-        with EXPORT_LOCK:
-            target = export_place(record)
-            state = file_state(target)
+        with EXPORT_LOCK, pinned_export(record) as (target, parent):
+            state = file_state(parent.place)
             if state == "occupied":
                 raise HTTPException(
                     409, f"{target} はファイルではないので置き換えません"
@@ -1703,7 +1740,7 @@ def copy_to_project(
                     f"{data_path.name} の拡張子が違います. ML-Pathfinder で"
                     "プロジェクトを作り直してください"
                 )
-            done = copy_file(data_path, target)
+            done = copy_file(data_path, parent)
     except OSError as error:
         raise HTTPException(
             422, f"{what}を書き出せません: {error}"

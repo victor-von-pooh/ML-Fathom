@@ -1,5 +1,6 @@
 import copy
 import hashlib
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -373,6 +374,56 @@ def test_export_refusals(client: TestClient, tmp_path: Path) -> None:
     response = client.post(url, json=body)
     assert response.status_code == 409
     assert "データセットではない" in response.json()["detail"]
+    assert current(path) == before
+
+
+@pytest.mark.parametrize("when, word", [
+    ("check", "外を指すように替わった"), ("walk", "シンボリックリンク"),
+], ids=["check", "walk"])
+def test_export_swapped(
+    client: TestClient, tmp_path: Path,
+    swap_after_check: Callable[[Path, Path, str], None]
+, when: str, word: str
+) -> None:
+    """
+    確かめの後に書き出し先の途中が外を指すリンクに替わっても, 理由付きの
+    422 で断り, 外にも書きかけにも何も残さず, 書き戻さないことを確かめる
+    関数
+
+    Parameters
+    ----------
+    client: TestClient
+        クライアント
+    tmp_path: Path
+        一時ディレクトリ
+    swap_after_check: Callable[[Path, Path, str], None]
+        確かめの後に途中の場所をリンクに替える差し替え
+    when: str
+        替える時 (check は確かめの後, walk は途中を一段ずつ開く間)
+    word: str
+        断りの文に入る言葉
+
+    Returns
+    ----------
+    None
+    """
+    # 書き出し先 outputs/dataset の outputs を, 確かめの後に替える
+    path = write_kind_problem(tmp_path, "mask")
+    draft = client.get(
+        "/api/problems/pairs", params={"path": str(path)}
+    ).json()
+    before = current(path)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    swap_after_check(tmp_path / "project" / "outputs", outside, when)
+
+    # 理由付きで断り, 外に書かず, 問題の設定も変えない
+    body = export_body(path, draft)
+    body["overwrite"] = True
+    refused = client.post("/api/problems/pairs/export", json=body)
+    assert refused.status_code == 422
+    assert word in refused.json()["detail"]
+    assert list(outside.iterdir()) == []
     assert current(path) == before
 
 
