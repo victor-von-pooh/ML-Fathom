@@ -5,15 +5,23 @@ export type UnlabeledMode = 'drop' | 'keep' | 'normal'
 
 /**
  * 目的の列の欠けた行の扱いを変えたレシピ (ML-EDA の split.unlabeled).
- * 落とすは既定と同じなので項目を消す (項目の無いレシピと見分けない).
- * 真偽は残すか落とすか
+ * 落とすは既定と同じなので項目を消す (項目の無いレシピと見分けない)
  */
-export function withUnlabeled(recipe: Recipe, mode: boolean | UnlabeledMode): Recipe {
-  const chosen: UnlabeledMode = mode === true ? 'keep' : mode === false ? 'drop' : mode
+export function withUnlabeled(recipe: Recipe, mode: UnlabeledMode): Recipe {
   const split: Recipe['split'] = { ...recipe.split }
-  if (chosen === 'drop') delete split.unlabeled
-  else split.unlabeled = chosen
+  if (mode === 'drop') delete split.unlabeled
+  else split.unlabeled = mode
   return { ...recipe, split }
+}
+
+/**
+ * 行の id の列の候補. 分析で欠けも同じ値も無い列だけ (ML-EDA が他の列を誤りにする).
+ * 目的の列は除く
+ */
+export function rowIdColumns(columns: Record<string, ColumnInfo>, target: string | null): string[] {
+  return Object.entries(columns)
+    .filter(([name, info]) => name !== target && info.missing === 0 && info.unique === info.count)
+    .map(([name]) => name)
 }
 
 /**
@@ -85,7 +93,7 @@ export function anomalyTotals(summary: AnomalySummary): AnomalyTotals {
  */
 export function fitUnlabeled(recipe: Recipe, target: string | null): Recipe {
   if (target || recipe.split.unlabeled === undefined) return recipe
-  return withUnlabeled(recipe, false)
+  return withUnlabeled(recipe, 'drop')
 }
 
 /**
@@ -111,7 +119,7 @@ export function canKeepUnlabeled(
 export function untargetedDraft(draft: Recipe | null, saved: Recipe | null): Recipe | null {
   const base = draft ?? saved
   if (!base || base.split.unlabeled === undefined) return null
-  return withUnlabeled(base, false)
+  return withUnlabeled(base, 'drop')
 }
 
 /**

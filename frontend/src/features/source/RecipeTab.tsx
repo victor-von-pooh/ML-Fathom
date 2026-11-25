@@ -21,6 +21,7 @@ import { defaultDatasetName, formatNumber, TASK_LABELS } from '../../lib/format'
 import { findDecisions, withAutoItems } from '../../lib/decisions'
 import {
   ANOMALY_KINDS,
+  rowIdColumns,
   anomalyOf,
   canKeepUnlabeled,
   fitUnlabeled,
@@ -437,8 +438,9 @@ export function RecipeTab({
   // 異常の検知は表と時系列だけで, 分割は無作為だけ (ML-EDA の異常の検知の表の決まり)
   const anomaly = recipe.task === 'anomaly'
   const anomalyKind = ANOMALY_KINDS.includes(kind)
-  // 行の id の列の候補 (目的の列は選べない)
-  const idColumns = columns.filter((column) => column !== target)
+  // 行の id の列の候補. 分析で欠けも同じ値も無い列だけ (ML-EDA が他の列を誤りにする).
+  // 目的の列は選べない
+  const idColumns = rowIdColumns(profile.columns, target)
   // 時刻で分ける分割を, 時刻の列の無い読み方 (表) で選んだか. 日時の型の列があれば読み方を案内する
   const timeSplit =
     ['time', 'group_time'].includes(recipe.split.method) && !profile.overview.roles?.time
@@ -664,12 +666,12 @@ export function RecipeTab({
                       profile.overview.sampled ? ' (間引いて分析した行で)' : ''
                     }. `}
                   {anomaly
-                    ? '異常の行にだけ印を付けた表は, 正常と見なします (正解は 0 になり, 正常の行と同じく分けます). 残すと学習に使わず, 度合いを出して人が確かめる行にできます.'
+                    ? '「正常と見なす」は, 正解の列が空の行を正常 (正解 0) として扱い, 正常の行と同じく学習用, 検証用, テスト用に分けます. 異常の行にだけ 1 を入れた表で選びます. 空の行を学習に使わずに別に取っておく場合は「unlabeled の分割に残す」を選びます.'
                     : '半教師あり学習や異常の検知のように, 正解の無い行も学習に使う場合は残します. train, valid, test の中身は変わらず, 残した行には学習用で当てはめた前処理をかけます.'}
                 </p>
               </>
             )}
-            {/* 行の id の列は異常の検知だけ (人の確認の記録が 1 行を指す. ML-EDA のレシピの id) */}
+            {/* 行の id の列は異常の検知だけ (度合いを出した行を元の表と突き合わせる. ML-EDA のレシピの id) */}
             {anomaly && (
               <>
                 <label htmlFor="row-id" className="text-ink-3">
@@ -682,18 +684,20 @@ export function RecipeTab({
                   onChange={(event) => update(withRowId(recipe, event.target.value))}
                   className="h-8 rounded border border-line bg-surface px-2 font-mono min-w-0 max-w-full"
                 >
-                  <option value="">なし (行の位置の row_id)</option>
+                  <option value="">なし (行の順番の番号 row_id を付ける)</option>
                   {idColumns.map((column) => (
                     <option key={column}>{column}</option>
                   ))}
-                  {/* 今のデータに無い列も, 選んだままと分かるように出す */}
+                  {/* 候補でない列 (今のデータに無い, 欠けか同じ値がある) も, 選んだままと分かるように出す */}
                   {recipe.id && !idColumns.includes(recipe.id) && (
                     <option value={recipe.id}>{recipe.id}</option>
                   )}
                 </select>
                 <p id="row-id-help" className="col-span-2 text-xs text-ink-3">
-                  人の確認の記録が 1 行を指すための列です (欠けも同じ値も無い列).
-                  学習に使う列から除き, 書き出す全ての分割に元の値のまま置きます.{' '}
+                  1 行ごとの番号 (ID) の列です. 学習には使わず,
+                  書き出す全ての分割にそのまま残すので,
+                  異常らしいと出た行を元の表の行と突き合わせられます.
+                  候補は欠けも同じ値も無い列だけです.{' '}
                   {target
                     ? '目的の列は異常の正解の列 (異常は 1 か真, 正常は 0 か偽) です.'
                     : '目的の列が無いので, 全ての行を正常と見なします.'}

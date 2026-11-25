@@ -77,11 +77,11 @@ GENERATE_KINDS = {"image": ("image",), "table": ("table", "timeseries")}
 KIND_NAMES = {"image": "画像", "table": "表"}
 
 # まとめるの問題の設定から始められる表の種類 (群分けのタブが読むもの. 日時
-# の列を見つけた表は timeseries になる)
+# の列を見つけた表も中身は表なので timeseries も)
 GROUP_KINDS = ("table", "timeseries")
 
 # 異常の検知の問題の設定から始められる表の種類 (ML-EDA の異常の検知が読む
-# もの. 日時の列を見つけた表は timeseries になる)
+# もの. 日時の列を見つけた表も中身は表なので timeseries も)
 ANOMALY_KINDS = ("table", "timeseries")
 
 # ML-Quest の書き出しの関数の名前から, ファイルの組の書き出しの画面の欄
@@ -769,8 +769,8 @@ def check_anomaly_start(
     HTTPException
         表か時系列でない場合と, 正解の列か行の id の列が表に無い場合は 422
     """
-    # ML-EDA の異常の検知は表と時系列だけ. 正解の列と行の id の列は答えた
-    # ときだけレシピにある
+    # ML-EDA の異常の検知が読む種類 (表と時系列). 正解の列と行の id の列
+    # (答えたときだけレシピにある)
     if data.kind not in ANOMALY_KINDS:
         raise HTTPException(
             422, f"{data_path.name} は表ではありません (種類 {data.kind}). "
@@ -1425,9 +1425,9 @@ def problem_entry(path: Path) -> dict[str, Any]:
         project=project_record(problem)
     )
 
-    # 始めるときと同じ確かめ (列の予測, 画像か表の生成と異常の検知は
-    # データを入れてあること. ファイルの組の受け持ちはディレクトリを画面
-    # で選べる)
+    # 始めるときと同じ確かめ (列の予測, 画像か表の生成と異常の検知では
+    # データを入れてあること. ファイルの組の受け持ちではディレクトリを
+    # 画面で選ぶので不要)
     if is_rank(problem) or is_group(problem):
         entry["reason"] = skeleton_reason(problem)
         entry["startable"] = entry["reason"] is None

@@ -35,9 +35,10 @@ export function AnomalyRows({ summary }: { summary: AnomalySummary }) {
         {summary.labeled
           ? `正解の欠けた行: ${UNLABELED_TEXT[summary.unlabeled]}. `
           : '正解の列が無いので, 全ての行を正常と見なします. '}
-        異常の割合は, 正常の行 (正解が正常と, 正常と見なした行) と異常の行に対する異常の行の割合です
-        (正解なしの行は数えません). 学習用 (train) は正常の行だけです. 行の id の列:{' '}
-        <span className="font-mono">{summary.id}</span>
+        異常の割合は, 正常の行 (正解が正常の行と, 正常と見なした行)
+        と異常の行を合わせた数に対する異常の行の割合です (正解の列が空のまま unlabeled
+        の分割に残した「正解なし」の行は数えません). 学習用 (train) は正常の行だけです. 行の id
+        の列: <span className="font-mono">{summary.id}</span>
       </p>
       <div className="overflow-x-auto">
         <table className="text-xs">

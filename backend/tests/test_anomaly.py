@@ -23,7 +23,7 @@ NORMAL = 90
 ANOMALIES = 10
 
 # ML-Quest が異常の検知の問題の設定を扱えるか (扱えなければ, ML-Quest の
-# 本物の問題の設定で通す確かめを飛ばす)
+# 本物の問題の設定で通す確かめは飛ばし, 止まることの確かめ)
 QUEST_ANOMALY = any(
     item["value"] == "anomaly" for item in ml_quest.TARGET_KINDS
 )
@@ -69,7 +69,7 @@ def write_readings(root: Path, labeled: bool = True) -> Path:
     path: Path
         CSV のファイル (reading_id, temp, vibration, is_anomaly)
     """
-    # 決まった乱数. 異常の行は振動が大きい
+    # 決まった乱数. 異常の行は振動の大きい行
     rng = np.random.default_rng(0)
     rows = NORMAL + ANOMALIES
     broken = np.arange(rows) >= NORMAL
@@ -442,6 +442,52 @@ def test_start_not_table(
     assert client.get("/api/sources").json() == []
 
 
+@pytest.mark.skipif(QUEST_ANOMALY,
+                    reason="ML-Quest が異常の検知の問題の設定を扱う")
+def test_start_before_quest(
+    client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """
+    ML-Quest が異常の検知を受けられない場合, 差し替えずに始めると理由を
+    付けて 422 で止まり, 一覧でも始められないことを確かめる関数
+
+    Parameters
+    ----------
+    client: TestClient
+        クライアント
+    tmp_path: Path
+        一時ディレクトリ
+    monkeypatch: pytest.MonkeyPatch
+        置き場の環境変数と問題の設定の読み込みの差し替え
+
+    Returns
+    ----------
+    None
+    """
+    # 表を入れた異常の検知の問題の設定 (ML-Quest の答えの確かめを通さずに
+    # 書いたもの. 読み込みだけを差し替え, recipe_from は本物)
+    data = write_readings(tmp_path / "raw")
+    problem = anomaly_part(ml_quest.example_problem("解約の引き止め"))
+    problem.update(name="センサの異常", created_at="2000-01-01T00:00:00")
+    problem["data"] = {"source": str(data), "loader": "csv", "options": {}}
+    path = tmp_path / "pathfinder" / "problems" / "sensor" / "problem.yaml"
+    path.parent.mkdir(parents=True)
+    path.write_text(yaml.safe_dump(problem, allow_unicode=True), "utf-8")
+    monkeypatch.setenv("ML_PATHFINDER_HOME", str(tmp_path / "pathfinder"))
+    monkeypatch.setattr(problems, "read_problem", lambda _: problem)
+
+    # 始めると 422 で, データは登録しない
+    started = client.post("/api/problems/start", json={"path": str(path)})
+    assert started.status_code == 422
+    assert "問題の設定を渡せません" in started.json()["detail"]
+    assert client.get("/api/sources").json() == []
+
+    # 一覧でも始められず, 理由がある
+    listed = client.get("/api/problems").json()["problems"]
+    assert [item["startable"] for item in listed] == [False]
+    assert "問題の設定を渡せません" in listed[0]["reason"]
+
+
 def quest_problem(tmp_path: Path, data: Path) -> tuple[Path, Path]:
     """
     ML-Quest で異常の検知の問題の設定を作り, データを入れてプロジェクトを
@@ -513,7 +559,7 @@ def test_quest_anomaly(
     ----------
     None
     """
-    # 一覧で始められ, 正解の列を目的の列にして始まる
+    # 一覧で始められることと, 正解の列を目的の列にした始まり
     monkeypatch.setenv("ML_PATHFINDER_HOME", str(tmp_path / "pathfinder"))
     path, project = quest_problem(tmp_path, write_readings(tmp_path / "raw"))
     listed = client.get("/api/problems").json()["problems"]
@@ -539,7 +585,7 @@ def test_quest_anomaly(
     problem = ml_quest.load_problem(path / "problem.yaml")
     assert ml_quest.get_value(problem, "data.recipe")["task"] == "anomaly"
 
-    # プロジェクトへ書き出すと異常の検知の表で, 学習用は正常の行だけ
+    # プロジェクトへの書き出しは異常の検知の表で, 学習用は正常の行だけ
     exported = client.post(f"{url}/export_project", json={"recipe": recipe})
     assert exported.status_code == 200
     dataset = ml_eda.load_dataset(Path(exported.json()["path"]))

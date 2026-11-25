@@ -10,6 +10,7 @@ import {
   itemLimitErrors,
   splitLabel,
   untargetedDraft,
+  rowIdColumns,
   usageSnippet,
   withRowId,
   withTask,
@@ -35,19 +36,19 @@ const column = (missing: number): ColumnInfo =>
   }) as ColumnInfo
 
 test('残すを選ぶと split.unlabeled を keep にし, 落とすで項目を消す', () => {
-  const kept = withUnlabeled(recipe, true)
+  const kept = withUnlabeled(recipe, 'keep')
   expect(kept.split).toEqual({ ...recipe.split, unlabeled: 'keep' })
   // 元のレシピは変えない
   expect(recipe.split.unlabeled).toBeUndefined()
   // 落とすに戻すと元のレシピと同じ (編集中の印が消える)
-  expect(withUnlabeled(kept, false)).toEqual(recipe)
+  expect(withUnlabeled(kept, 'drop')).toEqual(recipe)
   // 保存したレシピに書いた drop も, 落とすを選び直すと消える (既定と同じ)
   const dropped: Recipe = { ...recipe, split: { ...recipe.split, unlabeled: 'drop' } }
-  expect(withUnlabeled(dropped, false).split.unlabeled).toBeUndefined()
+  expect(withUnlabeled(dropped, 'drop').split.unlabeled).toBeUndefined()
 })
 
 test('目的の列が無いと split.unlabeled を消し, あればそのまま', () => {
-  const kept = withUnlabeled(recipe, true)
+  const kept = withUnlabeled(recipe, 'keep')
   expect(fitUnlabeled(kept, 'y')).toBe(kept)
   expect(fitUnlabeled(kept, null).split).toEqual(recipe.split)
   expect(fitUnlabeled(recipe, null)).toBe(recipe)
@@ -59,7 +60,7 @@ test('目的の列が欠けた行の無いデータでは, 残すを選べない
   // 間引いて分析した場合と, 列の分析が無い場合は分からないので選べる
   expect(canKeepUnlabeled(recipe, column(0), true)).toBe(true)
   expect(canKeepUnlabeled(recipe, undefined, false)).toBe(true)
-  expect(canKeepUnlabeled(withUnlabeled(recipe, true), column(0), false)).toBe(true)
+  expect(canKeepUnlabeled(withUnlabeled(recipe, 'keep'), column(0), false)).toBe(true)
   expect(canKeepUnlabeled({ ...recipe, target: null }, column(3), false)).toBe(false)
 })
 
@@ -69,7 +70,7 @@ test('分割の名前は unlabeled にだけ正解なしと添える', () => {
 })
 
 test('目的の列を外すと, 編集中か保存したレシピから split.unlabeled を消した下書きにする', () => {
-  const kept = withUnlabeled(recipe, true)
+  const kept = withUnlabeled(recipe, 'keep')
   // 編集中のレシピがあればそれから (他の編集は残す)
   const edited: Recipe = { ...kept, steps: [{ op: 'standardize', columns: 'auto' }] }
   expect(untargetedDraft(edited, kept)).toEqual({ ...edited, split: recipe.split })
@@ -212,4 +213,17 @@ test('異常の検知の使い方の例は, 学習用が正常の行だけであ
   expect(snippet).toContain('train は正常の行だけ')
   expect(snippet).toContain('dataset.info["anomaly"]["rows"]')
   expect(snippet).not.toContain('クラスの数')
+})
+
+test('行の id の列の候補は, 目的の列でなく欠けも同じ値も無い列だけ', () => {
+  const info = (count: number, missing: number, unique: number): ColumnInfo =>
+    ({ ...column(missing), count, unique }) as ColumnInfo
+  const columns = {
+    reading_id: info(10, 0, 10),
+    temp: info(10, 0, 7),
+    note: info(9, 1, 9),
+    label: info(10, 0, 10),
+  }
+  expect(rowIdColumns(columns, 'label')).toEqual(['reading_id'])
+  expect(rowIdColumns(columns, null)).toEqual(['reading_id', 'label'])
 })

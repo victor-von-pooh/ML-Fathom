@@ -28,16 +28,23 @@ const RECIPE: Recipe = {
   split: { method: 'random', valid: 0.2, test: 0.1, seed: 0, unlabeled: 'normal' },
 }
 
-const column = (missing: number): ColumnInfo =>
-  ({ type: 'numeric', dtype: 'float64', count: 100, missing, unique: 1 }) as unknown as ColumnInfo
+const column = (missing: number, unique = 1): ColumnInfo =>
+  ({
+    type: 'numeric',
+    dtype: 'float64',
+    count: 100 - missing,
+    missing,
+    unique,
+  }) as unknown as ColumnInfo
 
 /** 行の id, 数の列, 異常の正解の列の表の分析 */
 const PROFILE = {
   summary: { kind: 'table', rows: 100, roles: {}, has_items: false },
   overview: { roles: {}, sampled: false },
   columns: {
-    reading_id: column(0),
-    temp: column(0),
+    reading_id: column(0, 100),
+    temp: column(0, 80),
+    serial: column(0, 100),
     is_anomaly: column(90),
   },
   correlations: { columns: [], pearson: [], spearman: [] },
@@ -101,8 +108,12 @@ test('異常の検知では, 行の id の列と正常と見なすを選べ, 分
   renderTab()
   const rowId = (await screen.findByLabelText('行の id の列')) as HTMLSelectElement
   expect(rowId.value).toBe('reading_id')
-  // 目的の列 (異常の正解の列) は行の id の列に選べない
-  expect(Array.from(rowId.options).map((option) => option.value)).not.toContain('is_anomaly')
+  // 候補は欠けも同じ値も無い列だけ (目的の列と, 同じ値のある temp は出さない)
+  expect(Array.from(rowId.options).map((option) => option.value)).toEqual([
+    '',
+    'reading_id',
+    'serial',
+  ])
   const unlabeled = screen.getByLabelText('正解の欠けた行') as HTMLSelectElement
   expect(unlabeled.value).toBe('normal')
   const split = screen.getByLabelText('分割') as HTMLSelectElement

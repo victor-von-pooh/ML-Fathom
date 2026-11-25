@@ -49,7 +49,8 @@ function Footer({ item }: { item: DatasetSummary }) {
 function outputsText(model: ModelInputs): string {
   if (model.outputs === null) return 'なし (タスクを決めていません)'
   if (model.task === 'classification') return `${model.outputs} (クラスの数)`
-  if (model.task === 'anomaly') return `${model.outputs} (作り直す, 学習に使う列の数)`
+  if (model.task === 'anomaly')
+    return `${model.outputs} (モデルが入力を作り直す値の数. 学習に使う列の数と同じ)`
   return `${model.outputs} (値)`
 }
 

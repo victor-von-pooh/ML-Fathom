@@ -36,7 +36,7 @@ export function ModelHintsView({
       '出力の幅',
       String(hints.outputs),
       anomaly
-        ? '最後の nn.Linear の out_features (自己符号化器が作り直す, 学習に使う列の数)'
+        ? '最後の nn.Linear の out_features (自己符号化器のモデルが入力を作り直す値の数. 学習に使う列の数と同じ)'
         : hints.outputs === 1
           ? '最後の nn.Linear の out_features (値を 1 つ)'
           : '最後の nn.Linear の out_features (クラスの数)',

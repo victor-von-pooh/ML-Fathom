@@ -277,6 +277,6 @@ test('異常の検知のデータセットは, 正解の数と異常の割合と
   expect(card.getByText('異常の行 10')).toBeInTheDocument()
   expect(card.getByText('異常の割合 10.0%')).toBeInTheDocument()
   expect(card.getByText('正常と見なした行 62')).toBeInTheDocument()
-  expect(card.getByText(/2 \(作り直す, 学習に使う列の数\)/)).toBeInTheDocument()
+  expect(card.getByText(/2 \(モデルが入力を作り直す値の数/)).toBeInTheDocument()
   expect(card.getByRole('table').textContent).toContain('14')
 })
