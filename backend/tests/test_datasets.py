@@ -379,6 +379,73 @@ def test_capture_clouds_export(client: TestClient, tmp_path: Path) -> None:
     assert entries["cloud"]["shape"] == [50, 3]
 
 
+def test_pairs_follow_links(client: TestClient, tmp_path: Path) -> None:
+    """
+    ファイルの組の書き出しが, 外を指すリンクの先を既定では写さず注意に
+    出し, follow_links が真なら写すことを確かめる関数
+
+    Parameters
+    ----------
+    client: TestClient
+        クライアント
+    tmp_path: Path
+        pytest が用意する一時ディレクトリ
+
+    Returns
+    ----------
+    None
+    """
+    # 画像と点群を 1 つずつ外に動かし, 元の場所に外を指すリンクを置く
+    outside = tmp_path / "shared"
+    outside.mkdir()
+    masks = write_image_masks(tmp_path / "pairs", count=6)
+    image = masks["images"] / "sample_000.png"
+    image.rename(outside / image.name)
+    image.symlink_to(outside / image.name)
+    shapes = write_shape_captures(tmp_path / "shapes", views=4, points=200)
+    cloud = sorted(shapes["clouds"].iterdir())[0]
+    cloud.rename(outside / cloud.name)
+    cloud.symlink_to(outside / cloud.name)
+    bodies = {
+        "image_masks": {
+            "images": str(masks["images"]), "masks": str(masks["masks"]),
+            "split": {"valid": 0.0, "test": 0.0, "seed": 0},
+        },
+        "capture_clouds": {
+            "captures": str(shapes["captures"]),
+            "clouds": str(shapes["clouds"]),
+            "split": {"valid": 0.0, "test": 0.0, "seed": 0},
+        },
+    }
+    counts = {"image_masks": 6, "capture_clouds": len(shapes["shapes"])}
+    for form, body in bodies.items():
+        # 既定は除いて, 数と例を注意に出す
+        skipped = client.post(
+            f"/api/datasets/{form}", json={**body, "name": f"{form}_skip"}
+        )
+        assert skipped.status_code == 200, skipped.text
+        result = skipped.json()
+        assert result["info"]["splits"]["train"]["items"] == counts[form] - 1
+        assert any("外を指すリンク" in note for note in result["notes"])
+
+        # 選べば写し, 写したものはデータセットの中の普通のファイル
+        followed = client.post(f"/api/datasets/{form}", json={
+            **body, "name": f"{form}_follow", "follow_links": True,
+        })
+        assert followed.status_code == 200, followed.text
+        result = followed.json()
+        assert result["info"]["splits"]["train"]["items"] == counts[form]
+        assert not any("外を指すリンク" in note for note in result["notes"])
+        target = Path(result["path"])
+        assert target.parent == tmp_path / "home" / "datasets"
+        assert not any(path.is_symlink() for path in target.rglob("*"))
+
+    # 真偽でない値は 422
+    assert client.post("/api/datasets/image_masks", json={
+        **bodies["image_masks"], "name": "wrong", "follow_links": "maybe",
+    }).status_code == 422
+
+
 def test_list_unreadable(client: TestClient, tmp_path: Path) -> None:
     """
     知らない版と壊れたデータセット, 外を指すリンクの dataset.yaml が,

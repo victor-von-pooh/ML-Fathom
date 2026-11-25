@@ -60,6 +60,8 @@ interface CommonFields {
   method: '' | 'random' | 'group' | 'none'
   /** 正解の無い件を除くか, unlabeled の分割に書くか (ML-EDA の split.unlabeled) */
   unlabeled: 'drop' | 'keep'
+  /** 外を指すリンクの先も写すか (ML-EDA の follow_links. 問題の設定には書き戻さない) */
+  followLinks: boolean
   valid: string
   test: string
   seed: string
@@ -74,6 +76,7 @@ const INITIAL: CommonFields = {
   overwrite: false,
   method: '',
   unlabeled: 'drop',
+  followLinks: false,
   valid: '0.2',
   test: '0',
   seed: '0',
@@ -184,6 +187,8 @@ function commonBody(
       name: fields.originName.trim() || null,
       settings: settings.value ?? {},
     },
+    // 写さない (false) は既定と同じなので渡さない
+    ...(fields.followLinks ? { follow_links: true } : {}),
   }
   return { body, errors }
 }
@@ -202,6 +207,42 @@ function Row({ id, label, children }: { id: string; label: string; children: Rea
 
 const inputClass = 'h-8 rounded border border-line bg-surface px-2 font-mono'
 const areaClass = 'min-h-16 rounded border border-line bg-surface px-2 py-1 font-mono text-xs'
+
+/** 外を指すリンクの先も写すかの欄 (入力と正解のディレクトリの欄の下) */
+function LinksField({
+  prefix,
+  fields,
+  setFields,
+}: {
+  prefix: string
+  fields: CommonFields
+  setFields: (fields: CommonFields) => void
+}) {
+  return (
+    <>
+      <span />
+      <label className="flex items-center gap-1 text-xs">
+        <input
+          type="checkbox"
+          checked={fields.followLinks}
+          aria-describedby={`${prefix}-links-note`}
+          onChange={(event) => setFields({ ...fields, followLinks: event.target.checked })}
+        />
+        外を指すリンクの先も写す
+      </label>
+      <p id={`${prefix}-links-note`} className="col-start-2 text-xs text-ink-3">
+        {fields.followLinks
+          ? 'ディレクトリの外を指すリンクの先 (共有の保存先など) も, データセットの中に写します. 書き出し先は変わりません.'
+          : 'ディレクトリの外を指すリンクの先は写さず, 数と例を書き出しの注意に書きます.'}
+      </p>
+    </>
+  )
+}
+
+/** 書き出しの注意に外を指すリンクで除いた件があるか (ML-EDA の notes の文で見分ける) */
+function skippedLinks(notes: string[]): boolean {
+  return notes.some((note) => note.includes('外を指すリンク'))
+}
 
 /** 分割, グループ, 正解の出どころの欄 */
 function CommonCard({
@@ -557,6 +598,12 @@ function ExportCard({
                     <li key={note}>{note}</li>
                   ))}
                 </ul>
+                {!fields.followLinks && skippedLinks(result.notes) && (
+                  <p className="text-xs text-ink-3">
+                    外を指すリンクの先も写すなら,
+                    「外を指すリンクの先も写す」に印を付けて書き出し直してください.
+                  </p>
+                )}
               </>
             ) : (
               <p className="text-xs text-ink-3">書き出しの注意はありません.</p>
@@ -623,6 +670,7 @@ function ImageMasksForm({ linked }: { linked?: Linked }) {
           path: linked.pairs.path,
           version: linked.version,
           overwrite: fields.overwrite,
+          follow_links: fields.followLinks,
           export: linkedSettings(
             'export_image_masks',
             common.body!,
@@ -667,6 +715,7 @@ function ImageMasksForm({ linked }: { linked?: Linked }) {
               onChange={setMasks}
               placeholder="~/data/masks"
             />
+            <LinksField prefix="masks" fields={fields} setFields={setFields} />
             <Row id="mask-suffix" label="領域の名前の終わり">
               <input
                 id="mask-suffix"
@@ -736,6 +785,7 @@ function CaptureCloudsForm({ linked }: { linked?: Linked }) {
           path: linked.pairs.path,
           version: linked.version,
           overwrite: fields.overwrite,
+          follow_links: fields.followLinks,
           export: linkedSettings(
             'export_capture_clouds',
             common.body!,
@@ -779,6 +829,7 @@ function CaptureCloudsForm({ linked }: { linked?: Linked }) {
               onChange={setClouds}
               placeholder="~/data/clouds"
             />
+            <LinksField prefix="clouds" fields={fields} setFields={setFields} />
             <Row id="cloud-units" label="点群の単位">
               <select
                 id="cloud-units"

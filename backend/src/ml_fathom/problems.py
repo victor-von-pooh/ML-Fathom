@@ -160,6 +160,11 @@ class PairsExport(BaseModel):
     overwrite: bool = Field(
         False, description="前に書き出したデータセットを置き換えるか"
     )
+    # 問題の設定に書き戻さない欄 (外を写すかは書き出しのたびに利用者が選ぶもの)
+    follow_links: bool = Field(
+        False, description="入力と正解のディレクトリの外を指すリンクの先も"
+        "写すか"
+    )
 
 
 class ProblemWrite(BaseModel):
@@ -1007,7 +1012,8 @@ def get_problem_pairs(path: str) -> dict[str, Any]:
 
 
 def pair_call(
-    settings: dict[str, Any], parent: Parent, overwrite: bool
+    settings: dict[str, Any], parent: Parent, overwrite: bool,
+    follow_links: bool = False
 ) -> dict[str, Any]:
     """
     書き出しの設定のまま, ML-EDA のファイルの組の書き出しを呼ぶ関数
@@ -1021,6 +1027,9 @@ def pair_call(
         開いた書き出し先の親 (ML-EDA は親の記述子に対して書く)
     overwrite: bool
         前のデータセットを置き換えるか
+    follow_links: bool = False
+        入力と正解のディレクトリの外を指すリンクの先も写すか (書き出し先
+        は変わらず開いた親の中)
 
     Returns
     ----------
@@ -1038,7 +1047,7 @@ def pair_call(
         split=settings["split"] or None, groups=settings["groups"],
         origin=settings["origin"] or None, name=parent.place.name,
         overwrite=overwrite, item_steps=item_steps or None,
-        parent=parent.fd, **options
+        follow_links=follow_links, parent=parent.fd, **options
     )
 
     return info
@@ -1054,7 +1063,7 @@ def export_problem_pairs(body: PairsExport) -> dict[str, Any]:
     ----------
     body: PairsExport
         問題の設定の場所, 確かめたときの中身の印, 書き出しの設定 (中身の
-        手順も含む), 置き換えるか
+        手順も含む), 置き換えるか, 外を指すリンクの先も写すか
 
     Returns
     ----------
@@ -1109,7 +1118,9 @@ def export_problem_pairs(body: PairsExport) -> dict[str, Any]:
                     409, f"{target} には既にデータセットがあります. 置き換え"
                     "てよいかを確かめてから書き出してください"
                 )
-            info = pair_call(settings, parent, body.overwrite)
+            info = pair_call(
+                settings, parent, body.overwrite, body.follow_links
+            )
     except HTTPException:
         raise
     except FileExistsError as error:
