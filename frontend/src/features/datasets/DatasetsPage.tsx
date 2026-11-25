@@ -53,7 +53,7 @@ function outputsText(model: ModelInputs): string {
   if (model.task === 'anomaly')
     return `${model.outputs} (モデルが入力を作り直す値の数. 学習に使う列の数と同じ)`
   if (model.task === 'uplift')
-    return `${model.outputs} (出力の頭 1 つが出す値の数. 処置したときとしないときの予測の頭がそれぞれ 1)`
+    return `${model.outputs} (処置したときの予測と, しないときの予測で, それぞれ 1 つの値)`
   return `${model.outputs} (値)`
 }
 

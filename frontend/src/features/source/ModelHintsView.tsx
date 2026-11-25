@@ -16,7 +16,7 @@ export function ModelHintsView({
   hints: ModelHints
   /** 異常の検知のデータセットか (出力の幅は入力を作り直す値の数) */
   anomaly?: boolean
-  /** 効果を見積もるのデータセットか (出力の幅は出力の頭 1 つが出す値の数) */
+  /** 効果を見積もるのデータセットか (出力の幅は, 処置したときとしないときの予測のそれぞれが出す値の数) */
   uplift?: boolean
 }) {
   const id = useId()
@@ -41,7 +41,7 @@ export function ModelHintsView({
       anomaly
         ? '最後の nn.Linear の out_features (自己符号化器のモデルが入力を作り直す値の数. 学習に使う列の数と同じ)'
         : uplift
-          ? '出力の頭ごとの最後の nn.Linear の out_features (処置したときの予測の頭と, しないときの予測の頭がそれぞれ 1 つの値を出す)'
+          ? '最後の nn.Linear の out_features (処置したときの予測と, しないときの予測で, それぞれ 1 つの値を出す)'
           : hints.outputs === 1
             ? '最後の nn.Linear の out_features (値を 1 つ)'
             : '最後の nn.Linear の out_features (クラスの数)',

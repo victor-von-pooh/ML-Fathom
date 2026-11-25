@@ -554,8 +554,8 @@ def quest_problem(tmp_path: Path, data: Path) -> tuple[Path, Path]:
     problem = ml_quest.answer(problem, "action.decision",
                               {"type": "treat", "budget": 50})
     problem = ml_quest.attach_data(problem, str(data))
-    # 効果の見積もりの骨組みを書き出せない ML-Quest でも, 骨組みの config
-    # と同じ場所 (data.dataset) を記録する
+    # 効果の見積もりの骨組みを書き出せない ML-Quest のための, 骨組みの config
+    # と同じ場所 (data.dataset) の記録
     project = tmp_path / "project"
     config = project / "configs" / "default" / "train.yaml"
     config.parent.mkdir(parents=True)

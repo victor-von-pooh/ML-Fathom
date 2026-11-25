@@ -53,8 +53,8 @@ export function UpliftSummaryCard({
       {body === null && (
         <p className="text-sm text-ink-3">
           {recipe.target
-            ? '処置の列を選ぶと, 処置の群と対照の群の数, 結果の差と釣り合いを出します.'
-            : '上で結果の列 (目的の列) を選び, 処置の列を選ぶと, 処置の群と対照の群の数, 結果の差と釣り合いを出します.'}
+            ? '処置の列を選ぶと, 処置の群 (配った行) と対照の群 (配らなかった行) の数, 結果の差と釣り合いを出します.'
+            : '上で結果の列 (目的の列) を選び, 処置の列を選ぶと, 処置の群 (配った行) と対照の群 (配らなかった行) の数, 結果の差と釣り合いを出します.'}
         </p>
       )}
       {summary.isFetching && <Spinner label="介入の記録を要約しています" />}
@@ -73,12 +73,19 @@ export function UpliftSummaryCard({
             <span className="font-semibold">差 (全体の効果) {formatNumber(data.effect)}</span>
           </div>
           <p className="text-xs text-ink-3">
+            処置の群は処置の列が 1 の行 (配った顧客), 対照の群は 0 の行 (配らなかった顧客) です.
             結果の種類: {OUTCOME_TEXT[data.outcome_kind] ?? data.outcome_kind}. 行は処置と結果の
-            両方が分かる行で, 読み込んだ元の表で数えます (手順の前). 欠けた行: 処置{' '}
+            両方が分かる行で, 前処理の手順をかける前の表で数えます. 欠けた行: 処置{' '}
             {formatNumber(data.missing.treatment)} 行, 結果 {formatNumber(data.missing.outcome)} 行.
             差は処置の群の平均 − 対照の群の平均で, 無作為に配った記録なら全体の効果です.
           </p>
           <Findings findings={data.findings} />
+          {/* 行の id の列を選ばないと, ML-EDA の既定で ID らしい列も釣り合いに入る */}
+          {!recipe.id && (
+            <p className="text-xs text-ink-3">
+              行の id の列 (顧客の ID など) を選ぶと, その列は釣り合いの表から外れます.
+            </p>
+          )}
           {posts.length > 0 && (
             <div className="flex flex-wrap items-center gap-2">
               <Button icon={Plus} onClick={() => onDrop(posts)}>
@@ -90,8 +97,10 @@ export function UpliftSummaryCard({
             <div className="overflow-x-auto">
               <table className="text-xs">
                 <caption className="mb-1 text-left text-ink-3">
-                  群どうしの釣り合い (標準化した平均の差. 絶対値が {IMBALANCE} 以上に印.
-                  差の大きい順に {BALANCE_ROWS} 列まで)
+                  群どうしの釣り合い. 標準化した平均の差は, 2 つの群の平均の差を値の散らばりで
+                  割った数で, 0 に近いほど 2 つの群がそろっています (目安: 絶対値が 0.1 未満なら
+                  よくそろい, {IMBALANCE} 以上なら釣り合いが崩れています). 差の大きい順に{' '}
+                  {BALANCE_ROWS} 列まで
                 </caption>
                 <thead className="text-ink-3">
                   <tr>
@@ -105,7 +114,7 @@ export function UpliftSummaryCard({
                       標準化した平均の差
                     </th>
                     <th scope="col" className="pr-3 text-left font-normal">
-                      差の最も大きい値
+                      最も差の大きい値 (カテゴリの列)
                     </th>
                   </tr>
                 </thead>
@@ -126,7 +135,7 @@ export function UpliftSummaryCard({
                           }
                         >
                           {formatNumber(item.smd)}
-                          {broken && ' (崩れ)'}
+                          {broken && ' (釣り合いが崩れ)'}
                         </td>
                         <td className="pr-3 font-mono">{item.value ?? ''}</td>
                       </tr>

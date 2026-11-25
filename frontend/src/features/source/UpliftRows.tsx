@@ -19,8 +19,9 @@ export function UpliftRows({ summary }: { summary: UpliftSplits }) {
         処置の列: <span className="font-mono">{summary.treatment}</span>. 結果の種類:{' '}
         {OUTCOME_TEXT[summary.outcome] ?? summary.outcome}. 結果の欠けた行:{' '}
         {UNLABELED_TEXT[summary.unlabeled] ?? summary.unlabeled}. 行の id の列:{' '}
-        <span className="font-mono">{summary.id}</span>. 差は処置の群の平均 − 対照の群の平均です
-        (unlabeled の分割は行の数だけ).
+        <span className="font-mono">{summary.id}</span>. 処置の群は処置の列が 1 の行 (配った行),
+        対照の群は 0 の行 (配らなかった行) です. 差は処置の群の平均 − 対照の群の平均です (unlabeled
+        の分割は行の数だけ).
       </p>
       <div className="overflow-x-auto">
         <table className="text-xs">

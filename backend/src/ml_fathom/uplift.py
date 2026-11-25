@@ -9,8 +9,9 @@ from ml_fathom.jsonable import to_json
 
 router = APIRouter(prefix="/api")
 
-# 介入の記録の要約を求められるデータの種類 (ML-EDA の describe_uplift が
-# 読むもの. 日時の列を見つけた表も中身は表なので timeseries も)
+# 介入の記録の要約を求め, 効果の見積もりの問題の設定から始められるデータ
+# の種類 (ML-EDA の describe_uplift と効果を見積もるが読むもの. 日時の列を
+# 見つけた表も中身は表なので timeseries も)
 UPLIFT_KINDS = ("table", "timeseries")
 
 # 誤りとして理由を返す ML-EDA の例外 (列の誤り, 値の誤りなど)
@@ -18,7 +19,7 @@ INPUT_ERRORS = (ValueError, TypeError, KeyError)
 
 
 class UpliftRequest(BaseModel):
-    # 知らない欄は断る (取り違えた欄を黙って捨てないため)
+    # 知らない欄の拒否 (取り違えた欄を黙って捨てないため)
     model_config = ConfigDict(extra="forbid")
     treatment: str = Field(min_length=1, description="処置の列")
     outcome: str = Field(min_length=1, description="結果の列")

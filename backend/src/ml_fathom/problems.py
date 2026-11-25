@@ -50,6 +50,7 @@ from ml_fathom.reactions import (
     read_reactions,
 )
 from ml_fathom.settings import get_problems_dir
+from ml_fathom.uplift import UPLIFT_KINDS
 
 router = APIRouter(prefix="/api")
 
@@ -83,10 +84,6 @@ GROUP_KINDS = ("table", "timeseries")
 # 異常の検知の問題の設定から始められる表の種類 (ML-EDA の異常の検知が読む
 # もの. 日時の列を見つけた表も中身は表なので timeseries も)
 ANOMALY_KINDS = ("table", "timeseries")
-
-# 効果の見積もりの問題の設定から始められる表の種類 (ML-EDA の効果を見積もる
-# が読むもの. 異常の検知と同じ)
-UPLIFT_KINDS = ("table", "timeseries")
 
 # ML-Quest の書き出しの関数の名前から, ファイルの組の書き出しの画面の欄
 PAIR_FORMS = {
@@ -473,7 +470,7 @@ def require_recipe(problem: dict[str, Any]) -> None:
         "のは, 予測するで正解の種類が表の列, 画像の領域, 点群, 異常の場合"
         "と, "
         "作るで正解の種類が画像か表の場合と, 並べるかまとめるで学習する"
-        "場合と, 効果を見積もるで今ある記録から効果を見積もる場合です. "
+        "場合と, 効果を見積もる (今ある記録から) 場合です. "
         "データは「データを追加」から入れて分析できます"
     )
 

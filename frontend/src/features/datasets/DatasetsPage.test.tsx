@@ -318,7 +318,7 @@ test('効果を見積もるのデータセットは, 分割ごとの群の数と
   renderPage()
   const card = within((await screen.findByText('coupons')).closest('section')!)
   expect(card.getByText(/効果を見積もる/)).toBeInTheDocument()
-  expect(card.getByText(/1 \(出力の頭 1 つが出す値の数/)).toBeInTheDocument()
+  expect(card.getByText(/1 \(処置したときの予測と, しないときの予測で/)).toBeInTheDocument()
   const table = card.getByRole('table', {
     name: '分割ごとの処置の群と対照の群の行の数, 群ごとの結果の平均と差',
   })

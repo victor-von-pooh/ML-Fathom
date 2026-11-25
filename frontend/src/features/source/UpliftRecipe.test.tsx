@@ -170,7 +170,7 @@ test('介入の記録の要約に群の数と結果の差と釣り合いを出�
     id: 'customer_id',
   })
   const balance = screen.getByRole('table', { name: /群どうしの釣り合い/ })
-  expect(balance.textContent).toContain('1.2 (崩れ)')
+  expect(balance.textContent).toContain('1.2 (釣り合いが崩れ)')
   fireEvent.click(screen.getByRole('button', { name: /used\) を落とす手順を足す/ }))
   const yaml = screen.getByText(/format_version/).textContent ?? ''
   expect(yaml).toContain('drop_columns')
