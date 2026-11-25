@@ -781,9 +781,13 @@ def test_export_project_outside(
 
 
 @pytest.mark.parametrize("made", [True, False])
+@pytest.mark.parametrize("when, word", [
+    ("check", "外を指すように替わった"), ("walk", "シンボリックリンク"),
+], ids=["check", "walk"])
 def test_export_project_swapped(
     client: TestClient, tmp_path: Path,
-    swap_after_check: Callable[[Path, Path], None], made: bool
+    swap_after_check: Callable[[Path, Path, str], None], made: bool
+, when: str, word: str
 ) -> None:
     """
     確かめの後に書き出し先の途中が外を指すリンクに替わっても, 理由付きの
@@ -795,8 +799,12 @@ def test_export_project_swapped(
         クライアント
     tmp_path: Path
         一時ディレクトリ
-    swap_after_check: Callable[[Path, Path], None]
+    swap_after_check: Callable[[Path, Path, str], None]
         確かめの後に途中の場所をリンクに替える差し替え
+    when: str
+        替える時 (check は確かめの後, walk は途中を一段ずつ開く間)
+    word: str
+        断りの文に入る言葉
     made: bool
         途中のディレクトリが確かめのときにあったか
 
@@ -816,17 +824,22 @@ def test_export_project_swapped(
     with_project(path, project, project / "data" / "dataset")
     outside = tmp_path / "outside"
     outside.mkdir()
-    swap_after_check(project / "data", outside)
+    swap_after_check(project / "data", outside, when)
 
-    # 理由付きで断り, 外にも途中にも書かない
+    # 理由付きで断り, 外にも退けた元の data にも書かない. 替えたリンクは
+    # 消さず, 他にディレクトリ (一時ディレクトリなど) も作らない
     refused = client.post(f"{url}/export_project", json={
         "recipe": recipe, "overwrite": True
     })
     assert refused.status_code == 422
-    assert "外を指すように替わった" in refused.json()["detail"]
+    assert word in refused.json()["detail"]
     assert list(outside.iterdir()) == []
+    assert (project / "data").is_symlink()
     moved = project / "data.moved"
-    assert not moved.exists() or list(moved.iterdir()) == []
+    expected = ["data", "data.moved"] if made else ["data"]
+    assert sorted(item.name for item in project.iterdir()) == expected
+    if made:
+        assert moved.is_dir() and list(moved.iterdir()) == []
 
 
 def test_write_keeps_project(client: TestClient, tmp_path: Path) -> None:

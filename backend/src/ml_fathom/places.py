@@ -19,10 +19,11 @@ class Parent:
     Attributes
     ----------
     fd: int
-        親のディレクトリの記述子 (書き込みはこれに対して行うと, 途中が
-        替わっても同じディレクトリに書く)
+        親のディレクトリの記述子 (反応の表と群分けの表の写し (copy_file)
+        はこれに対して書くので, 途中が替わっても同じディレクトリに書く)
     place: Path
-        書き出し先 (親の実体のパスの下の名前. ML-EDA にはこれを渡す)
+        書き出し先 (親の実体のパスの下の名前. 版 1 とファイルの組は ML-EDA
+        にこのパスを渡すので, ML-EDA が書いている最中の差し替えは防がない)
     """
 
     fd: int
@@ -126,7 +127,7 @@ def pinned_parent(root: Path, target: Path) -> Iterator[Parent]:
         )
 
     # プロジェクトから一段ずつ, リンクをたどらずに開く (作ったものを覚える)
-    fds = [os.open(base, os.O_RDONLY | os.O_DIRECTORY)]
+    fds = [os.open(base, DIRECTORY_FLAGS)]
     made: list[tuple[int, str]] = []
     part = base
     try:
