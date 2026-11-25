@@ -71,7 +71,8 @@ def rank_answers(problem: dict[str, Any]) -> dict[str, Any]:
 
 def data_place(problem: dict[str, Any]) -> Optional[dict[str, Any]]:
     """
-    問題の設定から, 入れた反応の表の場所と読み方を返す関数
+    問題の設定から, 入れた表 (反応の表, 群分けの表) の場所と読み方を返す
+    関数
 
     写しが消えていれば元の場所 (data.origin) を使う (ML-Quest が骨組みに
     写すデータと同じ選び方)
@@ -165,7 +166,7 @@ def describe(reactions: ml_eda.Reactions) -> dict[str, Any]:
 
 def file_state(path: Path) -> str:
     """
-    反応の表の書き出し先の今の様子を返す関数
+    ファイル 1 つの書き出し先 (反応の表, 群分けの表) の今の様子を返す関数
 
     Parameters
     ----------
@@ -191,9 +192,9 @@ def file_state(path: Path) -> str:
     return state
 
 
-def copy_reactions(source: Path, target: Path) -> bool:
+def copy_file(source: Path, target: Path) -> bool:
     """
-    反応の表のファイルを, そのまま書き出し先に写す関数
+    反応の表か群分けの表のファイルを, そのまま書き出し先に写す関数
 
     途中で止まっても前のファイルが壊れないように, 同じディレクトリの一時
     ファイルに写してから置き換える
@@ -201,7 +202,7 @@ def copy_reactions(source: Path, target: Path) -> bool:
     Parameters
     ----------
     source: Path
-        登録した反応の表
+        登録した表
     target: Path
         書き出し先 (骨組みの config の data.dataset)
 

@@ -1,14 +1,17 @@
-import { useMutation } from '@tanstack/react-query'
-import { Shapes, Upload } from 'lucide-react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { FolderOutput, Shapes, Upload } from 'lucide-react'
 import { useId, useState } from 'react'
 
-import { api } from '../../api/client'
-import type { GroupSummary, Profile, Source } from '../../api/types'
-import { Button, Card, ErrorBox, StatTile } from '../../components/ui'
+import { api, ApiError } from '../../api/client'
+import type { GroupAnswers, GroupProblem, GroupSummary, Profile, Source } from '../../api/types'
+import { Button, Card, ErrorBox, Spinner, StatTile } from '../../components/ui'
 import { defaultDatasetName, formatNumber, formatPercent, TYPE_LABELS } from '../../lib/format'
 import {
+  answerColumns,
+  answerK,
   cellText,
   defaultGroupColumns,
+  differsFromAnswers,
   groupLabel,
   groupUsage,
   MAX_GROUPS,
@@ -122,6 +125,131 @@ function UsedColumns({ summary }: { summary: GroupSummary }) {
       />
       <Stat label="そろえた後の列の数" value={formatNumber(summary.width)} />
       <Stat label="乱数の種" value={formatNumber(summary.seed)} />
+    </Card>
+  )
+}
+
+/**
+ * 始めた問題の設定の名前と場所と, まとめるの答え. 欄を答えと違う選び方にすると,
+ * 骨組みは問題の設定の答えで群を作ることを知らせる
+ */
+function ProblemAnswersCard({ problem, differs }: { problem: GroupProblem; differs: boolean }) {
+  const answers = problem.group
+  return (
+    <Card title="問題の設定">
+      <p className="truncate text-xs text-ink-3" title={problem.path}>
+        {problem.name ?? '名前なし'} · <span className="font-mono">{problem.path}</span>
+      </p>
+      {answers ? (
+        <>
+          <Stat
+            label="群を作る列"
+            value={answers.columns.length > 0 ? answers.columns.join(', ') : '答えていません'}
+          />
+          <Stat label="行を見分ける列" value={answers.id ?? 'なし (行の番号)'} />
+          <Stat label="群の数" value={answers.k === null ? '答えていません' : String(answers.k)} />
+          <Stat label="安定性の数え方" value={answers.stability_label ?? '答えていません'} />
+          {answers.stability === 'sample' && (
+            <p className="mt-2 text-xs text-ink-3">
+              骨組みは標本を変えて作り直して安定性を数えます.
+              ここの調整ランド指数は乱数の種を変えて作り直したものです.
+            </p>
+          )}
+          {differs && (
+            <p role="status" className="mt-2 text-xs text-warning-text">
+              群を作る列か群の数が問題の設定の答えと違います.
+              学習のプロジェクトの骨組みは問題の設定の答えで群を作ります. この選び方にするなら,
+              ML-Pathfinder で答え直してください.
+            </p>
+          )}
+        </>
+      ) : (
+        <p className="mt-2 text-xs text-warning-text">
+          この問題の設定は, まとめるで学習する受け持ちではなくなりました.
+          問題の設定の答えで欄を埋めず, プロジェクトへも書き出しません.
+        </p>
+      )}
+    </Card>
+  )
+}
+
+/**
+ * 表を前処理せず, ファイル 1 つのまま, 問題の設定に記録したプロジェクトの骨組みが読む場所へ
+ * 写す. 前に置いたファイルは確かめてから置き換え, ファイルでないものは置き換えない
+ */
+function ProjectExportCard({
+  sourceId,
+  problem,
+  fetching,
+}: {
+  sourceId: string
+  problem: GroupProblem
+  fetching: boolean
+}) {
+  const queryClient = useQueryClient()
+  const exporter = useMutation({
+    mutationFn: (overwrite: boolean) => api.exportGroupProject(sourceId, overwrite),
+    onSettled: (_, error) => {
+      // 書き出した後と, 他で書き出し先が変わった (409) ときは様子を読み直す
+      if (!error || (error instanceof ApiError && error.status === 409)) {
+        void queryClient.invalidateQueries({ queryKey: ['group_problem', sourceId] })
+      }
+    },
+  })
+  const place = problem.project
+  if (!place) return null
+  const run = () => {
+    const replace = place.state === 'file'
+    if (
+      replace &&
+      !window.confirm(`${place.dataset} には前に置いた表があります. 置き換えますか?`)
+    ) {
+      return
+    }
+    exporter.mutate(replace)
+  }
+  const done = exporter.data
+  return (
+    <Card title="プロジェクトへ書き出す">
+      <p className="text-sm text-ink-2">
+        表を前処理せず, ファイル 1 つのまま,
+        問題の設定に記録した学習のプロジェクトの骨組みが読む場所 (config の data.dataset)
+        に写します. 骨組みは問題の設定の読み方で表を読み,
+        答えた群を作る列と行を見分ける列だけを使い, 学習用と検証用に分けます.
+      </p>
+      {place.dataset && (
+        <p className="mt-2 truncate font-mono text-xs" title={place.dataset}>
+          {place.dataset}
+        </p>
+      )}
+      {place.state === 'file' && (
+        <p className="text-xs text-ink-3">
+          前に置いたファイルがあります (書き出すと, 確かめてから置き換えます)
+        </p>
+      )}
+      {place.reason && <p className="mt-1 text-xs text-warning-text">{place.reason}</p>}
+      {place.ready && (
+        <Button
+          variant="primary"
+          icon={FolderOutput}
+          className="mt-3"
+          // 書き出し先の様子を読み直す間は押せない (古い様子で置き換えを決めないように)
+          disabled={exporter.isPending || fetching}
+          onClick={run}
+        >
+          {exporter.isPending ? '書き出し中…' : 'プロジェクトへ書き出す'}
+        </Button>
+      )}
+      {exporter.error && <ErrorBox error={exporter.error} />}
+      {done && (
+        <p role="status" className="mt-3 text-sm text-good-text">
+          {done.copied
+            ? `プロジェクトへ書き出しました: ${done.path}`
+            : `書き出し先は登録した表そのものなので, 写さずにそのまま使います: ${done.path}`}{' '}
+          ({formatNumber(done.rows)} 行. 骨組みが群を作る列 {done.columns.join(', ')}
+          {done.id ? `, 行を見分ける列 ${done.id}` : ''})
+        </p>
+      )}
     </Card>
   )
 }
@@ -307,12 +435,56 @@ function ExportCard({
 
 /**
  * 群分け (まとめる): 群を作る列と群の数を選び, 学習に通さずに作った群の要約
- * (ML-EDA の describe_groups) を見て, 群分けの表を書き出す
+ * (ML-EDA の describe_groups) を見て, 群分けの表を書き出す. 問題の設定から始めたデータは,
+ * 開くたびに問題の設定を読み直し, まとめるの答えで欄を埋める
  */
 export function GroupsTab({ source, profile }: { source: Source; profile: Profile }) {
+  const linked = Boolean(source.problem)
+  const problem = useQuery({
+    queryKey: ['group_problem', source.id],
+    queryFn: () => api.groupProblem(source.id),
+    enabled: linked,
+    retry: false,
+  })
+  if (linked && problem.isPending) return <Spinner label="問題の設定を読んでいます" />
+  const answers = problem.data?.group ?? null
+  return (
+    <>
+      {/* 問題の設定を読めなくても, 群分けは続けられる */}
+      {problem.error && (
+        <div className="mb-4">
+          <ErrorBox error={problem.error} />
+        </div>
+      )}
+      <GroupsBody
+        // 答えが変わったら, 答えで欄を埋め直す
+        key={JSON.stringify(answers)}
+        source={source}
+        profile={profile}
+        problem={problem.data ?? null}
+        fetching={problem.isFetching}
+      />
+    </>
+  )
+}
+
+function GroupsBody({
+  source,
+  profile,
+  problem,
+  fetching,
+}: {
+  source: Source
+  profile: Profile
+  problem: GroupProblem | null
+  fetching: boolean
+}) {
   const all = Object.keys(profile.columns)
-  const [columns, setColumns] = useState(() => defaultGroupColumns(profile.columns, source.target))
-  const [k, setK] = useState(3)
+  const answers: GroupAnswers | null = problem?.group ?? null
+  const [columns, setColumns] = useState(() =>
+    answers ? answerColumns(answers, all) : defaultGroupColumns(profile.columns, source.target),
+  )
+  const [k, setK] = useState(() => (answers ? answerK(answers) : 3))
   const [seed, setSeed] = useState(0)
   const grouping = useMutation({
     mutationFn: () => api.groups(source.id, { columns, k, seed }),
@@ -344,6 +516,12 @@ export function GroupsTab({ source, profile }: { source: Source; profile: Profil
   const summary = grouping.data
   return (
     <div className="space-y-4">
+      {problem && (
+        <ProblemAnswersCard
+          problem={problem}
+          differs={answers !== null && differsFromAnswers(answers, columns, k)}
+        />
+      )}
       <Card title="群を作る列と群の数">
         <p className="text-sm text-ink-2">
           正解の無い表を, 選んだ列の値の近さで群に分けます. 学習に通さずに, 群ごとの行の数と特徴,
@@ -419,6 +597,9 @@ export function GroupsTab({ source, profile }: { source: Source; profile: Profil
           <SummaryTable summary={summary} />
           <UsedColumns summary={summary} />
         </>
+      )}
+      {problem?.group && (
+        <ProjectExportCard sourceId={source.id} problem={problem} fetching={fetching} />
       )}
       <ExportCard source={source} columns={columns} candidates={all} k={k} />
     </div>

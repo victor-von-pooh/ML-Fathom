@@ -22,10 +22,11 @@ from ml_fathom.api import (
     pair_result,
     source_view,
 )
+from ml_fathom.groups import check_group_columns, group_answers, is_group
 from ml_fathom.jsonable import to_json
 from ml_fathom.reactions import (
     REACTIONS_KIND,
-    copy_reactions,
+    copy_file,
     data_place,
     describe,
     file_state,
@@ -54,6 +55,10 @@ GENERATE_KINDS = {"image": ("image",), "table": ("table", "timeseries")}
 # 作るものの正解の種類の, 理由の文の名前
 KIND_NAMES = {"image": "画像", "table": "表"}
 
+# まとめるの問題の設定から始められる表の種類 (群分けのタブが読むもの. 日時
+# の列を見つけた表は timeseries になる)
+GROUP_KINDS = ("table", "timeseries")
+
 # ML-Quest の書き出しの関数の名前から, ファイルの組の書き出しの画面の欄
 PAIR_FORMS = {
     "export_image_masks": "image_masks",
@@ -79,6 +84,12 @@ class ProjectExport(BaseModel):
 class ReactionsExport(BaseModel):
     overwrite: bool = Field(
         False, description="前に置いた反応の表を置き換えるか"
+    )
+
+
+class GroupProjectExport(BaseModel):
+    overwrite: bool = Field(
+        False, description="前に置いた表を置き換えるか"
     )
 
 
@@ -269,15 +280,21 @@ def require_recipe(problem: dict[str, Any]) -> None:
             "1 つのまま骨組みに渡し, 分割は骨組みが時刻で行うため). 反応の表"
             "の分析の画面から, そのままプロジェクトへ書き出してください"
         )
+    if is_group(problem):
+        raise HTTPException(
+            422, "まとめるの問題の設定はレシピを持ちません (表をファイル 1 つ"
+            "のまま骨組みに渡し, 分割は骨組みが行うため). 群分けのタブから, "
+            "そのままプロジェクトへ書き出してください"
+        )
     if role == "effect" and ml_quest.active_value(
         problem, f"{part}.autonomous"
     ) is True:
         why = ("方策は行動の結果を環境とのやり取りで集めるので, データの"
                "分析の段階を通りません")
-    elif role in ("predict", "rank") and ml_quest.active_value(
+    elif role in ("predict", "rank", "group") and ml_quest.active_value(
         problem, f"{part}.method"
     ) == "pretrained":
-        name = "予測" if role == "predict" else "並べる"
+        name = {"predict": "予測", "rank": "並べる", "group": "まとめる"}[role]
         why = (f"既製のモデルをそのまま使う{name}は学習しないので, データの"
                "分析の段階を通りません")
     else:
@@ -288,7 +305,8 @@ def require_recipe(problem: dict[str, Any]) -> None:
         f"(正解の種類 {choice_text(ml_quest.TARGET_KINDS, kind)}) は, "
         f"問題の設定から始めることと書き戻しに使えません ({why}). 使える"
         "のは, 予測するで正解の種類が表の列, 画像の領域, 点群の場合と, "
-        "作るで正解の種類が画像か表の場合と, 並べるで学習する場合です. "
+        "作るで正解の種類が画像か表の場合と, 並べるかまとめるで学習する"
+        "場合です. "
         "データは「データを追加」から入れて分析できます"
     )
 
@@ -316,9 +334,12 @@ def require_items(problem: dict[str, Any]) -> None:
     # 列の予測と画像か表の生成は登録したデータで始める
     if is_items_part(problem):
         return
-    if is_column_part(problem) or is_generate(problem) or is_rank(problem):
+    if is_column_part(problem) or is_generate(problem) or is_rank(problem) or (
+        is_group(problem)
+    ):
         raise HTTPException(
-            422, "この問題の設定は列の予測か, 画像か表の生成か, 並べるです. "
+            422, "この問題の設定は列の予測か, 画像か表の生成か, 並べるか, "
+            "まとめるです. "
             "データの画面の「問題の設定から始める」で始めてください"
         )
     require_recipe(problem)
@@ -474,7 +495,8 @@ def start_from_problem(
     started: dict[str, Any]
         source (登録したデータ. ファイルの組の受け持ちでは None),
         problem (problem.yaml の場所), form (ファイルの組の書き出しの画面の
-        欄. 列の予測と画像か表の生成では None), notes (知らせの文の並び)
+        欄. 列の予測と画像か表の生成では None), notes (知らせの文の並び),
+        tab (開くタブ. まとめるでは groups, 他は None)
 
     Raises
     ----------
@@ -490,11 +512,14 @@ def start_from_problem(
         started: dict[str, Any] = {
             "source": None, "problem": str(path),
             "form": PAIR_FORMS[draft["export"]["function"]],
-            "notes": draft["notes"],
+            "notes": draft["notes"], "tab": None,
         }
         return started
     if is_rank(problem):
         started = start_rank(request, path, problem)
+        return started
+    if is_group(problem):
+        started = start_group(request, path, problem)
         return started
     require_recipe(problem)
     try:
@@ -553,19 +578,19 @@ def start_from_problem(
     }) or source
     store.write_recipe(source["id"], recipe)
     started = {"source": source_view(source), "problem": str(path),
-               "form": None, "notes": start["notes"]}
+               "form": None, "notes": start["notes"], "tab": None}
 
     return started
 
 
-def rank_reason(problem: dict[str, Any]) -> Optional[str]:
+def skeleton_reason(problem: dict[str, Any]) -> Optional[str]:
     """
-    並べるの問題の設定から始められない理由を返す関数
+    並べるかまとめるの問題の設定から始められない理由を返す関数
 
     Parameters
     ----------
     problem: dict[str, Any]
-        問題の設定 (並べるで学習する受け持ち)
+        問題の設定 (並べるかまとめるで学習する受け持ち)
 
     Returns
     ----------
@@ -573,7 +598,7 @@ def rank_reason(problem: dict[str, Any]) -> Optional[str]:
         骨組みを書き出せない理由 (ML-Quest の project_error) か, データを
         入れていない旨 (始められれば None)
     """
-    # 骨組みを書き出せること (入れたデータが表か, 出力の形が順位かも)
+    # 骨組みを書き出せること (入れたデータが表か, 出力の形が順位か群かも)
     try:
         error = ml_quest.project_error(problem)
     except SHAPE_ERRORS as reason:
@@ -589,6 +614,99 @@ def rank_reason(problem: dict[str, Any]) -> Optional[str]:
         reason_text = None
 
     return reason_text
+
+
+def load_place(
+    problem: dict[str, Any], what: str
+) -> tuple[Path, str, dict[str, Any], ml_eda.Data]:
+    """
+    並べるかまとめるの問題の設定に入れた表を, 問題の設定の読み方で読む関数
+
+    読み方が無ければ, 骨組みの load_data と同じく読み込みの候補の先頭
+
+    Parameters
+    ----------
+    problem: dict[str, Any]
+        問題の設定 (並べるかまとめるで学習する受け持ち)
+    what: str
+        理由の文の表の呼び方 (並べるの反応の表など)
+
+    Returns
+    ----------
+    loaded: tuple[Path, str, dict[str, Any], ml_eda.Data]
+        表の場所, 読み込みの名前, 読み込みの設定, 読み込んだ表
+
+    Raises
+    ----------
+    HTTPException
+        データが無ければ 404, 渡せないか, ファイルでないか読めなければ 422
+    """
+    # 骨組みを書き出せて, データを入れてあること
+    reason = skeleton_reason(problem)
+    place = data_place(problem)
+    if reason or place is None:
+        raise HTTPException(422, reason)
+    data_path = Path(place["path"])
+    if not data_path.exists():
+        raise HTTPException(404, f"{data_path} がありません")
+    if not data_path.is_file():
+        raise HTTPException(
+            422, f"{data_path.name} はファイルではありません. {what}は"
+            "ファイル 1 つで入れてください"
+        )
+    loader = place["loader"]
+    if not loader:
+        candidates = ml_eda.detect(data_path)
+        if not candidates:
+            raise HTTPException(
+                422, f"{data_path.name} を読める読み込みがありません"
+            )
+        loader = candidates[0]["loader"]
+    options = place["options"]
+    data = load_source(
+        {"path": str(data_path), "loader": loader, "options": options}
+    )
+    loaded = (data_path, str(loader), options, data)
+
+    return loaded
+
+
+def register_linked(
+    request: Request, path: Path, problem: dict[str, Any],
+    loaded: tuple[Path, str, dict[str, Any], ml_eda.Data], kind: str
+) -> dict[str, Any]:
+    """
+    読んだ表を, 始めた問題の設定と結んで登録する関数 (レシピは保存しない)
+
+    Parameters
+    ----------
+    request: Request
+        リクエスト
+    path: Path
+        problem.yaml
+    problem: dict[str, Any]
+        問題の設定
+    loaded: tuple[Path, str, dict[str, Any], ml_eda.Data]
+        load_place の結果
+    kind: str
+        登録するデータの種類
+
+    Returns
+    ----------
+    source: dict[str, Any]
+        登録したデータ
+    """
+    # 始めたときの知らせは無い
+    data_path, loader, options, _ = loaded
+    store = get_store(request)
+    source = store.add(data_path, problem["name"], loader, kind, options)
+    source = store.update(source["id"], {
+        "problem": str(path),
+        "problem_created": str(problem["created_at"]),
+        "problem_notes": [],
+    }) or source
+
+    return source
 
 
 def start_rank(
@@ -612,54 +730,71 @@ def start_rank(
     Returns
     ----------
     started: dict[str, Any]
-        source (登録したデータ), problem, form (None), notes (空)
+        source (登録したデータ), problem, form (None), notes (空), tab
+        (None)
 
     Raises
     ----------
     HTTPException
         データが無ければ 404, 渡せないか, 反応の表として読めなければ 422
     """
-    # 骨組みを書き出せて, データを入れてあること
-    reason = rank_reason(problem)
-    place = data_place(problem)
-    if reason or place is None:
-        raise HTTPException(422, reason)
-    data_path = Path(place["path"])
-    if not data_path.exists():
-        raise HTTPException(404, f"{data_path} がありません")
-    if not data_path.is_file():
-        raise HTTPException(
-            422, f"{data_path.name} はファイルではありません. 並べるの反応の"
-            "表はファイル 1 つで入れてください"
-        )
-
-    # 読み込みの候補 (読み方が無ければ, 骨組みの load_data と同じく候補の
-    # 先頭) で読み, 問題の設定の列で反応の表として読めること
-    loader = place["loader"]
-    if not loader:
-        candidates = ml_eda.detect(data_path)
-        if not candidates:
-            raise HTTPException(
-                422, f"{data_path.name} を読める読み込みがありません"
-            )
-        loader = candidates[0]["loader"]
-    options = place["options"]
-    data = load_source(
-        {"path": str(data_path), "loader": loader, "options": options}
-    )
-    read_reactions(data, rank_answers(problem))
-    store = get_store(request)
-    source = store.add(
-        data_path, problem["name"], loader, REACTIONS_KIND, options
-    )
-    source = store.update(source["id"], {
-        "problem": str(path),
-        "problem_created": str(problem["created_at"]),
-        "problem_notes": [],
-    }) or source
+    # 問題の設定の列で反応の表として読めること
+    loaded = load_place(problem, "並べるの反応の表")
+    read_reactions(loaded[3], rank_answers(problem))
+    source = register_linked(request, path, problem, loaded, REACTIONS_KIND)
     started: dict[str, Any] = {
         "source": source_view(source), "problem": str(path), "form": None,
-        "notes": [],
+        "notes": [], "tab": None,
+    }
+
+    return started
+
+
+def start_group(
+    request: Request, path: Path, problem: dict[str, Any]
+) -> dict[str, Any]:
+    """
+    まとめるの問題の設定から, 入れた表を登録する関数
+
+    まとめるはレシピを持たないので, レシピは保存しない. 読み方は問題の設定
+    の手元のデータの読み方 (骨組みの学習のスクリプトと同じ). 種類は読み
+    込みのまま (表か時系列) で, 表の分析も使える
+
+    Parameters
+    ----------
+    request: Request
+        リクエスト
+    path: Path
+        problem.yaml
+    problem: dict[str, Any]
+        問題の設定 (まとめるで学習する受け持ち)
+
+    Returns
+    ----------
+    started: dict[str, Any]
+        source (登録したデータ), problem, form (None), notes (空), tab
+        (groups. 群分けのタブを開く)
+
+    Raises
+    ----------
+    HTTPException
+        データが無ければ 404, 渡せないか, 表として読めないか, 答えた列が
+        表に無ければ 422
+    """
+    # 群分けのタブが読む種類で, 骨組みが読む列があること
+    loaded = load_place(problem, "まとめるの表")
+    data = loaded[3]
+    if data.kind not in GROUP_KINDS:
+        raise HTTPException(
+            422, f"{loaded[0].name} は表として読めません (読み込みの種類 "
+            f"{data.kind}). まとめるの問題の設定には, ML-Pathfinder の「手元"
+            "のデータは」で 1 行が 1 つの対象の表を入れてください"
+        )
+    check_group_columns(data, group_answers(problem))
+    source = register_linked(request, path, problem, loaded, data.kind)
+    started: dict[str, Any] = {
+        "source": source_view(source), "problem": str(path), "form": None,
+        "notes": [], "tab": "groups",
     }
 
     return started
@@ -1063,8 +1198,8 @@ def problem_entry(path: Path) -> dict[str, Any]:
 
     # 始めるときと同じ確かめ (列の予測と画像か表の生成はデータを入れて
     # あること. ファイルの組の受け持ちはディレクトリを画面で選べる)
-    if is_rank(problem):
-        entry["reason"] = rank_reason(problem)
+    if is_rank(problem) or is_group(problem):
+        entry["reason"] = skeleton_reason(problem)
         entry["startable"] = entry["reason"] is None
         return entry
     try:
@@ -1249,7 +1384,8 @@ def get_project(request: Request, source_id: str) -> dict[str, Any]:
     """
     # 記録と書き出し先の様子
     _, _, problem = linked_problem(request, source_id)
-    result = project_place(project_record(problem), single=is_rank(problem))
+    single = is_rank(problem) or is_group(problem)
+    result = project_place(project_record(problem), single=single)
 
     return result
 
@@ -1265,7 +1401,7 @@ def project_place(
     record: Optional[dict[str, str]]
         問題の設定のプロジェクトの記録
     single: bool = False
-        書き出し先がファイル 1 つ (並べるの反応の表) か
+        書き出し先がファイル 1 つ (並べるの反応の表, まとめるの表) か
 
     Returns
     ----------
@@ -1369,6 +1505,70 @@ def export_project(
     }
 
     return result
+
+
+def copy_to_project(
+    record: Optional[dict[str, str]], data_path: Path, overwrite: bool,
+    what: str
+) -> tuple[Path, bool]:
+    """
+    登録した表をファイル 1 つのまま, プロジェクトの書き出し先に写す関数
+
+    書き出し先と, 置き換えてよいかは, 確かめと写しの間に変わらないように,
+    写しと同じ鍵の中で確かめる. 骨組みは問題の設定の読み方で読むので,
+    拡張子が違えば (読み方を決めていないときの候補が変わるので) 写さない
+
+    Parameters
+    ----------
+    record: Optional[dict[str, str]]
+        問題の設定のプロジェクトの記録
+    data_path: Path
+        登録した表
+    overwrite: bool
+        前に置いたファイルを置き換えるか
+    what: str
+        理由の文の表の呼び方 (反応の表など)
+
+    Returns
+    ----------
+    copied: tuple[Path, bool]
+        書き出し先と, 写したか (書き出し先が登録した表そのものなら False)
+
+    Raises
+    ----------
+    HTTPException
+        記録が無い, 拡張子が書き出し先と違う, 書けない場合は 422,
+        プロジェクトが無ければ 404, ファイルでないものがあるか, 置き換えを
+        指定せずにファイルがある場合は 409
+    """
+    # 書き出し先の様子と拡張子を確かめてから写す
+    try:
+        with EXPORT_LOCK:
+            target = export_place(record)
+            state = file_state(target)
+            if state == "occupied":
+                raise HTTPException(
+                    409, f"{target} はファイルではないので置き換えません"
+                )
+            if state == "file" and not overwrite:
+                raise HTTPException(
+                    409, f"{target} には既にファイルがあります. 置き換えて"
+                    "よいかを確かめてから書き出してください"
+                )
+            if target.suffix.lower() != data_path.suffix.lower():
+                raise HTTPException(
+                    422, f"書き出し先 {target.name} と{what} "
+                    f"{data_path.name} の拡張子が違います. ML-Pathfinder で"
+                    "プロジェクトを作り直してください"
+                )
+            done = copy_file(data_path, target)
+    except OSError as error:
+        raise HTTPException(
+            422, f"{what}を書き出せません: {error}"
+        ) from error
+    copied = (target, done)
+
+    return copied
 
 
 def linked_rank(
@@ -1482,37 +1682,147 @@ def export_reactions(
         read_reactions(load_source(source), rank_answers(problem))
     )
 
-    # 書き出し先と, 置き換えてよいか (確かめと写しの間に変わらないように,
-    # 写しと同じ鍵の中で確かめる). 骨組みは問題の設定の読み方で読むので,
-    # 拡張子が違えば (読み方を決めていないときの候補が変わるので) 写さない
-    try:
-        with EXPORT_LOCK:
-            target = export_place(record)
-            state = file_state(target)
-            if state == "occupied":
-                raise HTTPException(
-                    409, f"{target} はファイルではないので置き換えません"
-                )
-            if state == "file" and not body.overwrite:
-                raise HTTPException(
-                    409, f"{target} には既にファイルがあります. 置き換えて"
-                    "よいかを確かめてから書き出してください"
-                )
-            if target.suffix.lower() != data_path.suffix.lower():
-                raise HTTPException(
-                    422, f"書き出し先 {target.name} と反応の表 "
-                    f"{data_path.name} の拡張子が違います. ML-Pathfinder で"
-                    "プロジェクトを作り直してください"
-                )
-            copied = copy_reactions(data_path, target)
-    except OSError as error:
-        raise HTTPException(
-            422, f"反応の表を書き出せません: {error}"
-        ) from error
+    target, copied = copy_to_project(
+        record, data_path, body.overwrite, "反応の表"
+    )
     result = {
         "path": str(target), "copied": copied,
         "reactions": summary["reactions"],
         "dropped": summary["dropped"]["total"],
+    }
+
+    return result
+
+
+def linked_group(
+    request: Request, source_id: str
+) -> tuple[dict[str, Any], Path, dict[str, Any]]:
+    """
+    まとめるの問題の設定から始めたデータと, 問題の設定を返す関数
+
+    Parameters
+    ----------
+    request: Request
+        リクエスト
+    source_id: str
+        データの ID
+
+    Returns
+    ----------
+    linked: tuple[dict[str, Any], Path, dict[str, Any]]
+        登録したデータ, problem.yaml の場所, 問題の設定
+
+    Raises
+    ----------
+    HTTPException
+        問題の設定から始めていなければ 404, まとめるでなくなっていれば 422
+    """
+    # 始めた後に受け持ちを答え直した場合も断る
+    linked = linked_problem(request, source_id)
+    if not is_group(linked[2]):
+        raise HTTPException(
+            422, "この問題の設定はまとめるで学習する受け持ちではありません. "
+            "問題の設定から始め直してください"
+        )
+
+    return linked
+
+
+@router.get("/sources/{source_id}/group_problem")
+def get_group_problem(request: Request, source_id: str) -> dict[str, Any]:
+    """
+    始めた問題の設定の, まとめるの答えとプロジェクトの書き出し先を返す関数
+
+    群分けのタブが, 欄を問題の設定の答えで埋めるために開くたびに読む
+
+    Parameters
+    ----------
+    request: Request
+        リクエスト
+    source_id: str
+        データの ID
+
+    Returns
+    ----------
+    result: dict[str, Any]
+        name (問題の設定の名前), path (problem.yaml), group (群を作る列,
+        行を見分ける列, 群の数, 安定性の数え方とその言葉. まとめるで学習
+        する受け持ちでなければ None), project (書き出し先とその様子.
+        group が None なら None)
+
+    Raises
+    ----------
+    HTTPException
+        問題の設定から始めていなければ 404, 読めなければ 422
+    """
+    # まとめるでなくなっていても名前と場所は返す (画面はカードにそう出す)
+    _, path, problem = linked_problem(request, source_id)
+    result: dict[str, Any] = {
+        "name": problem.get("name"), "path": str(path), "group": None,
+        "project": None,
+    }
+    if not is_group(problem):
+        return result
+    answers = group_answers(problem)
+    choices = next(
+        (item.get("choices") or [] for item in ml_quest.QUESTIONS
+         if item.get("id") == f"{ml_quest.PART}.group.stability"), []
+    )
+    label = [str(item["label"]).split(" (")[0] for item in choices
+             if item.get("value") == answers["stability"]]
+    answers["stability_label"] = label[0] if label else answers["stability"]
+    result["group"] = answers
+    result["project"] = project_place(project_record(problem), single=True)
+
+    return result
+
+
+@router.post("/sources/{source_id}/export_group_project")
+def export_group_project(
+    request: Request, source_id: str, body: GroupProjectExport
+) -> dict[str, Any]:
+    """
+    まとめるの問題の設定から始めた表をファイル 1 つのまま, プロジェクトの
+    骨組みが読む場所 (config の data.dataset) に写す関数
+
+    前処理はかけない (まとめるはレシピを持たず, 分割は骨組みが行う). 骨組み
+    は問題の設定の読み方で読み, 答えた列だけを使う
+
+    Parameters
+    ----------
+    request: Request
+        リクエスト
+    source_id: str
+        データの ID
+    body: GroupProjectExport
+        前に置いた表を置き換えるか
+
+    Returns
+    ----------
+    result: dict[str, Any]
+        path (書き出した場所), copied (写したか. 書き出し先が登録した表
+        そのものなら False), rows (行の数), columns (骨組みが群を作る列),
+        id (骨組みが行を見分ける列か None)
+
+    Raises
+    ----------
+    HTTPException
+        記録が無い, 答えた列が表に無い, 拡張子が書き出し先と違う, 書けない
+        場合は 422, プロジェクトが無ければ 404, ファイルでないものがあるか,
+        置き換えを指定せずにファイルがある場合は 409
+    """
+    # 骨組みが読めること (今の問題の設定の答えの列) を写す前に確かめる
+    source, _, problem = linked_group(request, source_id)
+    data = load_source(source)
+    answers = group_answers(problem)
+    check_group_columns(data, answers)
+    target, copied = copy_to_project(
+        project_record(problem), Path(source["path"]), body.overwrite,
+        "群分けの表"
+    )
+    result = {
+        "path": str(target), "copied": copied, "rows": len(data.frame),
+        "columns": answers["columns"], "id": answers["id"],
     }
 
     return result

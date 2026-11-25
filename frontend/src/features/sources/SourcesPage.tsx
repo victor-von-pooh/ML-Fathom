@@ -113,10 +113,10 @@ export function SourcesPage() {
         <AddSourceDialog
           mode={adding}
           onClose={() => setAdding(null)}
-          onAdded={(source) => {
+          onAdded={(source, tab) => {
             void queryClient.invalidateQueries({ queryKey: ['sources'] })
             setAdding(null)
-            void navigate(`/sources/${source.id}`)
+            void navigate(`/sources/${source.id}${tab ? `?tab=${tab}` : ''}`)
           }}
         />
       )}

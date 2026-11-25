@@ -94,7 +94,8 @@ export function AddSourceDialog({
   mode = 'data',
 }: {
   onClose: () => void
-  onAdded: (source: Source) => void
+  /** 登録したデータと, 開くタブ (まとめるの問題の設定から始めた群分けなど) */
+  onAdded: (source: Source, tab?: string | null) => void
   mode?: 'data' | 'problem'
 }) {
   const fromProblem = mode === 'problem'
@@ -119,7 +120,7 @@ export function AddSourceDialog({
     // ファイルの組の受け持ちはデータを登録せず, 書き出しの画面へ問題の設定を付けて移る
     onSuccess: (result) => {
       if (result.source) {
-        onAdded(result.source)
+        onAdded(result.source, result.tab)
         return
       }
       const search = new URLSearchParams({ form: result.form ?? '', problem: result.problem })
@@ -129,7 +130,7 @@ export function AddSourceDialog({
   })
   const add = useMutation({
     mutationFn: () => api.createSource({ path: picked!, loader: loader || undefined }),
-    onSuccess: onAdded,
+    onSuccess: (source) => onAdded(source),
   })
 
   // 選んだ場所 (ディレクトリも画像や文のまとまりとして選べる)

@@ -988,3 +988,43 @@ test('正解の無い表で群を作る列と群の数を選び, 群の要約を
   await expect(card.getByText('版 2 · 群分けの表')).toBeVisible()
   await expect(card.getByText('まとめる · 正解なし')).toBeVisible()
 })
+
+test('まとめるの問題の設定から始め, 答えの列で群を作ってプロジェクトへ写す', async ({ page }) => {
+  // 骨組みが入れたデータを写しているので, 置き換えの確かめを受ける
+  page.on('dialog', (dialog) => void dialog.accept())
+
+  // 一覧から始めると, 群分けのタブが開き, 問題の設定の答えで欄を埋める
+  await page.goto('/')
+  await page.getByRole('button', { name: '問題の設定から始める' }).click()
+  const stored = page.getByRole('list', { name: '保存した問題の設定' })
+  await stored.getByRole('button', { name: /客の群のプロジェクト/ }).click()
+  await page.getByRole('button', { name: 'この問題の設定から始める' }).click()
+  await expect(page.getByRole('heading', { name: '客の群のプロジェクト' })).toBeVisible()
+  await expect(page.getByRole('tab', { name: '群分け' })).toHaveAttribute('aria-selected', 'true', {
+    timeout: 20_000,
+  })
+  const fields = page.getByRole('group', { name: '群を作る列' })
+  await expect(fields.getByRole('checkbox', { name: /spend/ })).toBeChecked()
+  await expect(fields.getByRole('checkbox', { name: /visits/ })).toBeChecked()
+  await expect(fields.getByRole('checkbox', { name: /region/ })).not.toBeChecked()
+  await expect(page.getByLabel('群の数')).toHaveValue('3')
+
+  // 答えの列で群を作ると, 40 行ずつの 3 つの群になる
+  await page.getByRole('button', { name: '群を作る' }).click()
+  const table = page.getByRole('table', { name: '群ごとの行の数, 割合, 安定性と列の特徴' })
+  await expect(table.getByText('40', { exact: true })).toHaveCount(3, { timeout: 20_000 })
+
+  // 答えと違う列を選ぶと知らせ, 戻すと消える
+  await fields.getByRole('checkbox', { name: /region/ }).check()
+  await expect(page.getByText(/問題の設定の答えと違います/)).toBeVisible()
+  await fields.getByRole('checkbox', { name: /region/ }).uncheck()
+  await expect(page.getByText(/問題の設定の答えと違います/)).toHaveCount(0)
+
+  // 骨組みの読む場所 (data/segments.csv) へ, ファイル 1 つのまま写す
+  await expect(page.getByText(/group_project\/data\/segments\.csv$/)).toBeVisible()
+  await page.getByRole('button', { name: 'プロジェクトへ書き出す' }).click()
+  await expect(page.getByText(/プロジェクトへ書き出しました/)).toContainText(
+    '120 行. 骨組みが群を作る列 spend, visits, 行を見分ける列 member',
+    { timeout: 20_000 },
+  )
+})

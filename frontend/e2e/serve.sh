@@ -368,6 +368,42 @@ pd.DataFrame({
 }).to_csv(sys.argv[1], index=False)
 PY
 
+# まとめるの問題の設定 (群分けの表を入れ, 群を作る列, 会員の番号, 群の数を
+# 答えた. ML-Quest でプロジェクトを作り, 記録とともに ML-Pathfinder の置き場に
+# 保存する)
+uv run python - "$WORK" <<'PY'
+import sys
+from pathlib import Path
+
+import ml_quest
+from ml_quest.examples import example_problem
+
+work = Path(sys.argv[1])
+problem = example_problem("解約の引き止め")
+problem["ml"]["parts"] = [{}]
+for key in ("decision", "basis", "current"):
+    problem["action"].pop(key, None)
+problem = ml_quest.answer(
+    problem, "information.columns", ["member", "spend", "visits", "region"]
+)
+answers = [("role", "group"), ("unit", "row"), ("output", "cluster"),
+           ("target.source", "none"), ("method", "scratch"),
+           ("what", "客の群"), ("item", "客 1 人"),
+           ("baseline", "今の区分 (地域)"),
+           ("evaluation.metric", "silhouette"),
+           ("evaluation.link", "群ごとに連絡の仕方を変える"),
+           ("group.columns", ["spend", "visits"]), ("group.id", "member"),
+           ("group.k", 3), ("group.stability", "seed")]
+for key, value in answers:
+    problem = ml_quest.answer(problem, f"ml.parts.0.{key}", value)
+problem = ml_quest.attach_data(problem, work / "segments.csv")
+problem["name"] = "客の群のプロジェクト"
+project = work / "group_project"
+ml_quest.make_project(problem, project)
+problem = ml_quest.record_project(problem, project)
+ml_quest.save_problem(problem, work / "pathfinder" / "problems" / "group")
+PY
+
 # 記録した軌跡の見本 (ML-EDA のテストの見本を写す. 守りの付いた Discrete の
 # 行動の軌跡, Box の行動の軌跡と, 行動を選んだ確率の列を持つ軌跡. どれも表と
 # 説明の JSON)
