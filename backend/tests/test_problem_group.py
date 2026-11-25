@@ -358,6 +358,9 @@ def test_group_refusals(client: TestClient, tmp_path: Path) -> None:
     checked = client.post(f"{url}/problem/check", json={"recipe": recipe})
     assert checked.status_code == 422
     assert "レシピを持ちません" in checked.json()["detail"]
+    # 前処理のタブは, 確かめを呼ぶ前に群分けの答えの有無で案内に切り替える
+    # (確かめの 422 は, レシピを送る呼び手への守りとして残す)
+    assert client.get(f"{url}/group_problem").json()["group"] is not None
     assert client.post(
         f"{url}/export_project", json={"recipe": recipe}
     ).status_code == 422

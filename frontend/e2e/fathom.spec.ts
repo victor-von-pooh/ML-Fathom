@@ -1027,4 +1027,14 @@ test('まとめるの問題の設定から始め, 答えの列で群を作って
     '120 行. 骨組みが群を作る列 spend, visits, 行を見分ける列 member',
     { timeout: 20_000 },
   )
+
+  // 前処理のタブは, レシピの確かめの誤りでなく案内を出し, 群分けのタブへ導く
+  await page.getByRole('tab', { name: '前処理と書き出し' }).click()
+  await expect(page.getByText(/まとめる \(群分け\) の問題の設定から始めたデータは/)).toBeVisible({
+    timeout: 20_000,
+  })
+  await expect(page.getByText(/レシピを持ちません \(表をファイル/)).toHaveCount(0)
+  await expect(page.getByRole('button', { name: '問題の設定に書き戻す' })).toHaveCount(0)
+  await page.getByRole('link', { name: '群分けのタブへ移る' }).click()
+  await expect(page.getByRole('tab', { name: '群分け' })).toHaveAttribute('aria-selected', 'true')
 })

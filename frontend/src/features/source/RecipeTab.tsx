@@ -33,7 +33,7 @@ import { autoRecipe, ITEM_KINDS, suggestSteps } from '../../lib/suggest'
 import { useDecided } from '../../lib/useDecided'
 import { DecisionsCard } from './DecisionsCard'
 import { Findings } from './Findings'
-import { ProblemCard } from './ProblemCard'
+import { GroupProblemNote, ProblemCard } from './ProblemCard'
 import { ProjectExport } from './ProjectExport'
 import { ItemPreviewCard } from './ItemPreviewCard'
 import { ModelHintsView } from './ModelHintsView'
@@ -298,6 +298,23 @@ export function RecipeTab({
   const [addingItem, setAddingItem] = useState('')
   const queryClient = useQueryClient()
   const saved = useQuery({ queryKey: ['recipe', sourceId], queryFn: () => api.recipe(sourceId) })
+  // 始めた問題の設定の受け持ちを開くたびに読み直す. まとめるはレシピを持たないので,
+  // 確かめと「プロジェクトへ書き出す」の代わりに群分けのタブへ導く
+  // (読めなければ問題の設定のカードが理由を出す). 群分けのタブと鍵を分け, タブを離れたら
+  // 覚えを捨てる (古い答えで確かめを走らせず, 開くたびに読み込み中から始めるため)
+  const linked = useQuery({
+    queryKey: ['group_problem', sourceId, 'recipe'],
+    queryFn: () => api.groupProblem(sourceId),
+    enabled: Boolean(problem),
+    retry: false,
+    gcTime: 0,
+  })
+  const grouping = linked.data?.group ? linked.data : null
+  // 読み直しの間は確かめのカードと「プロジェクトへ書き出す」を隠して止める (ML-Pathfinder で
+  // まとめるに答え直して戻ったときに, 前の答えのまま確かめの 422 を出さないように).
+  // 選んだ答えを消さないよう, 外さずに隠す
+  const waiting = Boolean(problem) && linked.isFetching
+  const checking = Boolean(problem) && !linked.isPending && !grouping
   // 編集中のレシピ (編集するまでは保存したもの. タブを移っても残す).
   // 目的の列は上の指定に合わせる
   const [draft, setDraft] = useRecipeDraft(sourceId)
@@ -425,20 +442,25 @@ export function RecipeTab({
   return (
     <div className="grid gap-4 xl:grid-cols-[minmax(0,30rem)_1fr]">
       <div className="space-y-4">
-        {problem && (
-          <ProblemCard
-            sourceId={sourceId}
-            notes={problemNotes}
-            recipe={pending.recipe}
-            latest={recipe}
-            onWritten={() => {
-              // 書き戻したレシピはここにも保存したので, 編集中の印を外す
-              setSelected(null)
-              setDraft(null)
-              save.reset()
-              exporter.reset()
-            }}
-          />
+        {waiting && !grouping && <Spinner label="問題の設定を読んでいます" />}
+        {grouping && <GroupProblemNote problem={grouping} />}
+        {checking && (
+          <div hidden={waiting}>
+            <ProblemCard
+              sourceId={sourceId}
+              notes={problemNotes}
+              recipe={pending.recipe}
+              latest={recipe}
+              paused={waiting}
+              onWritten={() => {
+                // 書き戻したレシピはここにも保存したので, 編集中の印を外す
+                setSelected(null)
+                setDraft(null)
+                save.reset()
+                exporter.reset()
+              }}
+            />
+          </div>
         )}
         <DecisionsCard
           sourceId={sourceId}
@@ -878,17 +900,19 @@ export function RecipeTab({
               </pre>
             </div>
           )}
-          {problem && (
-            <ProjectExport
-              sourceId={sourceId}
-              recipe={recipe}
-              reasons={reasons}
-              onExported={() => {
-                // 書き出しはレシピも保存するので, 編集中の印を外す
-                setDraft(null)
-                save.reset()
-              }}
-            />
+          {checking && (
+            <div hidden={waiting}>
+              <ProjectExport
+                sourceId={sourceId}
+                recipe={recipe}
+                reasons={reasons}
+                onExported={() => {
+                  // 書き出しはレシピも保存するので, 編集中の印を外す
+                  setDraft(null)
+                  save.reset()
+                }}
+              />
+            </div>
           )}
         </Card>
         <Card title="レシピ (YAML)" padded>

@@ -2,9 +2,10 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tansta
 import clsx from 'clsx'
 import { ClipboardList } from 'lucide-react'
 import { useId, useState } from 'react'
+import { Link } from 'react-router'
 
 import { api, ApiError } from '../../api/client'
-import type { ProblemFinding, Recipe } from '../../api/types'
+import type { GroupProblem, ProblemFinding, Recipe } from '../../api/types'
 import { Button, Card, ErrorBox, Spinner } from '../../components/ui'
 
 /** 食い違いの重さの名前と色 */
@@ -29,6 +30,7 @@ export function ProblemCard({
   notes = [],
   recipe,
   latest,
+  paused = false,
   onWritten,
 }: {
   sourceId: string
@@ -38,6 +40,8 @@ export function ProblemCard({
   recipe: Recipe | null
   /** 待つ前の最新の編集中のレシピ (書き戻すのはこれ) */
   latest: Recipe | null
+  /** 問題の設定の受け持ちを読み直している間は確かめない (読み直した後に確かめ直す) */
+  paused?: boolean
   onWritten: (recipe: Recipe) => void
 }) {
   const queryClient = useQueryClient()
@@ -47,9 +51,12 @@ export function ProblemCard({
   const check = useQuery({
     queryKey: ['problem-check', sourceId, JSON.stringify(recipe)],
     queryFn: () => api.checkProblem(sourceId, recipe!),
-    enabled: recipe !== null,
+    // 受け持ちの読み直しと同時に確かめないよう, 画面に戻ったときは確かめ直さず,
+    // 読み直しが済んで止めを外したときに確かめ直す (古くなった結果は外すと読み直す)
+    enabled: recipe !== null && !paused,
     placeholderData: keepPreviousData,
     retry: false,
+    refetchOnWindowFocus: false,
   })
   const data = check.data
   const choices = data?.choices ?? []
@@ -201,6 +208,44 @@ export function ProblemCard({
             )}
           </>
         )}
+      </div>
+    </Card>
+  )
+}
+
+/**
+ * まとめるで学習する問題の設定から始めたデータの「問題の設定」のカード.
+ * まとめるはレシピを持たないので, 確かめと書き戻しをせず, 理由を案内として出して
+ * 群分けのタブ (プロジェクトへ書き出す所) へ導く
+ */
+export function GroupProblemNote({ problem }: { problem: GroupProblem }) {
+  return (
+    <Card
+      title={
+        <span className="flex items-center gap-1.5">
+          <ClipboardList className="size-4 text-accent" aria-hidden />
+          問題の設定{problem.name ? `: ${problem.name}` : ''}
+        </span>
+      }
+      className="border-accent/50"
+    >
+      <div className="space-y-3 text-sm">
+        <p className="text-ink-2">
+          まとめる (群分け) の問題の設定から始めたデータは, レシピを持ちません.
+          学習のプロジェクトは表をファイル 1 つのまま読み, 分割も学習のプロジェクトが行うため,
+          ここでの前処理は問題の設定に書き戻さず, プロジェクトへも書き出しません.
+        </p>
+        <p>
+          <Link to="?tab=groups" replace className="text-accent-text underline">
+            群分けのタブへ移る
+          </Link>
+          <span className="ml-1 text-xs text-ink-3">
+            (答えた列で群を見て, 表をそのままプロジェクトへ書き出します)
+          </span>
+        </p>
+        <p className="truncate font-mono text-xs text-ink-3" title={problem.path}>
+          {problem.path}
+        </p>
       </div>
     </Card>
   )
