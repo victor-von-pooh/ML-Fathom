@@ -24,6 +24,10 @@ MAX_GROUPS = 50
 # が持つ)
 MAX_COLUMNS = 200
 
+# ML-Quest の GROUP_TAKEN のうち, 1 件の行の決まった列 (断る文で群の要約の
+# 列と分けて見せるためだけに使う. 確かめは GROUP_TAKEN で行う)
+ROW_KEYS = ("id", "split")
+
 # 誤りとして理由を返す ML-EDA の例外 (列の誤り, 群の数の誤りなど)
 INPUT_ERRORS = (ValueError, TypeError, KeyError)
 
@@ -167,18 +171,22 @@ def check_group_columns(
     # 骨組みが使えない名前 (群の要約と 1 件の鍵, 群の割り当ての表の列)
     taken = [name for name in names if name in ml_quest.GROUP_TAKEN]
     if taken:
+        summary = [name for name in ml_quest.GROUP_TAKEN
+                   if name not in ROW_KEYS]
+        row = [name for name in ml_quest.GROUP_TAKEN if name in ROW_KEYS]
         raise HTTPException(
-            422, f"群を作る列 {', '.join(taken)} は, 群の要約の列か 1 件の"
-            f"決まった列 ({', '.join(ml_quest.GROUP_TAKEN)}) と同じ名前なので"
-            " 群を作るのに使えません. 名前を変えた列を持つ表を入れ直して"
-            "ください"
+            422, f"群を作る列 {', '.join(taken)} は, 群の要約の列 ("
+            f"{', '.join(summary)}) か 1 件の行の決まった列 ("
+            f"{', '.join(row)}) と同じ名前なので群を作るのに使えません. "
+            "名前を変えた列を持つ表を入れ直すか, ML-Pathfinder で群を作る"
+            "列に別の列を答え直してください"
         )
     if answers["id"] in ml_quest.GROUP_ASSIGNED:
         raise HTTPException(
             422, f"行を見分ける列 {answers['id']} は, 群の割り当ての表の列 ("
             f"{', '.join(ml_quest.GROUP_ASSIGNED)}) と同じ名前なので行を"
             "見分けるのに使えません. 名前を変えた列を持つ表を入れ直すか, "
-            "ML-Pathfinder で行を見分ける列を答え直してください"
+            "ML-Pathfinder で行を見分ける列に別の列を答え直してください"
         )
 
 

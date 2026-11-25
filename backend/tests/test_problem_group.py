@@ -392,7 +392,7 @@ def test_group_refusals(client: TestClient, tmp_path: Path) -> None:
     assert "income" in response.json()["detail"]
     assert not target.exists()
 
-    # 群の要約の列と同じ名前の列は, 骨組みが止めるので写さない
+    # 群を作るのに使えない名前 (GROUP_TAKEN) は, 骨組みが止めるので写さない
     problem["ml"]["parts"][0]["group"]["columns"] = ["spend", "rows"]
     ml_quest.save_problem(problem, path)
     frame = pd.read_csv(source["path"])
@@ -561,11 +561,12 @@ def test_group_column_names(
 
 
 def test_group_start_column_names(
-    client: TestClient, tmp_path: Path
+    client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """
     答えた行を見分ける列が骨組みの使えない名前のまとめるの問題の設定は,
-    理由を付けて始めないことを確かめる関数
+    ML-Quest の確かめと群分けのタブの確かめの両方で始めないことを確かめる
+    関数
 
     Parameters
     ----------
@@ -573,6 +574,8 @@ def test_group_start_column_names(
         クライアント
     tmp_path: Path
         一時ディレクトリ
+    monkeypatch: pytest.MonkeyPatch
+        ML-Quest の確かめの差し替え
 
     Returns
     ----------
@@ -589,10 +592,68 @@ def test_group_start_column_names(
     problem = ml_quest.answer(problem, f"{PART}.group.id", "group")
     problem = ml_quest.attach_data(problem, str(raw))
     ml_quest.save_problem(problem, path)
+
+    # ML-Quest の確かめが先に止める
     response = client.post("/api/problems/start", json={"path": str(path)})
     assert response.status_code == 422
-    assert "group" in response.json()["detail"]
+    detail = response.json()["detail"]
+    assert detail.startswith("問題の設定を渡せません")
+    assert "行を見分ける列 group" in detail
     assert client.get("/api/sources").json() == []
+
+    # ML-Quest の確かめを通っても (config を手で直した場合など), 群分けの
+    # タブの確かめが止める
+    monkeypatch.setattr(ml_quest, "project_error", lambda problem: None)
+    response = client.post("/api/problems/start", json={"path": str(path)})
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    assert "行を見分けるのに使えません" in detail
+    assert "ML-Pathfinder" in detail
+    assert client.get("/api/sources").json() == []
+
+
+def test_group_export_reanswered(
+    client: TestClient, tmp_path: Path
+) -> None:
+    """
+    始めた後に ML-Quest の確かめで誤りになる答えに直した場合は, 写さずに
+    前に写した表を残すことを確かめる関数
+
+    Parameters
+    ----------
+    client: TestClient
+        クライアント
+    tmp_path: Path
+        一時ディレクトリ
+
+    Returns
+    ----------
+    None
+    """
+    # 始めて, 置き換えて写せる
+    path, project = saved_problem(tmp_path, group_problem())
+    source = client.post(
+        "/api/problems/start", json={"path": str(path)}
+    ).json()["source"]
+    url = f"/api/sources/{source['id']}"
+    assert client.post(
+        f"{url}/export_group_project", json={"overwrite": True}
+    ).status_code == 200
+    target = project / skeleton_config(project).data.dataset
+    target.write_text("customer,spend\n", "utf-8")
+
+    # 行を見分ける列を群を作る列の 1 つに答え直すと, 置き換えの印でも断る
+    problem = ml_quest.load_problem(path / "problem.yaml")
+    problem["ml"]["parts"][0]["group"]["id"] = "spend"
+    ml_quest.save_problem(problem, path)
+    response = client.post(
+        f"{url}/export_group_project", json={"overwrite": True}
+    )
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    assert detail.startswith("問題の設定を渡せません")
+    assert "spend" in detail
+    assert target.read_text("utf-8") == "customer,spend\n"
 
 
 @pytest.mark.parametrize("value, expected", [
