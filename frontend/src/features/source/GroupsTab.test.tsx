@@ -248,6 +248,14 @@ const GROUP_PROBLEM: GroupProblem = {
   },
 }
 
+/** 試しの書き戻しの結果 */
+const CHECKED = {
+  name: '顧客の群',
+  path: '/problems/group/problem.yaml',
+  version: 'v1',
+  changes: ['群を作る列を spend, region に書き戻した'],
+}
+
 function renderLinked() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
@@ -259,6 +267,7 @@ function renderLinked() {
 
 test('問題の設定から始めたデータは, 答えで欄を埋め, 違う選び方にすると知らせる', async () => {
   vi.spyOn(api, 'groupProblem').mockResolvedValue(GROUP_PROBLEM)
+  vi.spyOn(api, 'checkGroupProblem').mockResolvedValue(CHECKED)
   const groups = vi.spyOn(api, 'groups').mockResolvedValue(SUMMARY)
   renderLinked()
 
@@ -278,7 +287,7 @@ test('問題の設定から始めたデータは, 答えで欄を埋め, 違う�
   // 群の数を変えても知らせる
   expect(screen.getByText(/問題の設定の答えと違います/)).toBeInTheDocument()
   fireEvent.change(screen.getByLabelText('群の数'), { target: { value: '3' } })
-  expect(screen.getByText(/ML-Pathfinder で答え直してください/)).toBeInTheDocument()
+  expect(screen.getByText(/問題の設定に書き戻してください/)).toBeInTheDocument()
 })
 
 test('答えと同じ選び方なら知らせず, 受け持ちが変わったら答えで埋めず書き出さない', async () => {
@@ -354,4 +363,99 @@ test('群の数を答えていない問題の設定は, 開いただけでは答
   const fields = within(screen.getByRole('group', { name: '群を作る列' }))
   fireEvent.click(fields.getByRole('checkbox', { name: /region/ }))
   expect(screen.getByText(/問題の設定の答えと違います/)).toBeInTheDocument()
+})
+
+test('答えと違う選び方は, 変わる点を確かめてから書き戻し, 読み直すと知らせが消える', async () => {
+  const answers = vi
+    .spyOn(api, 'groupProblem')
+    .mockResolvedValueOnce(GROUP_PROBLEM)
+    .mockResolvedValue({
+      ...GROUP_PROBLEM,
+      group: { ...GROUP_PROBLEM.group!, columns: ['spend', 'region'], id: null, k: 5 },
+    })
+  const check = vi.spyOn(api, 'checkGroupProblem').mockResolvedValue({
+    ...CHECKED,
+    changes: [
+      '群を作る列を spend, region に書き戻した',
+      '行を見分ける列を外した',
+      '群の数を 5 に書き戻した',
+      '書き出したプロジェクトの config の group は変わらないので, 骨組みを書き出し直してください',
+    ],
+  })
+  const write = vi.spyOn(api, 'writeGroupProblem').mockResolvedValue({
+    changes: ['群の数を 5 に書き戻した'],
+    group: { columns: ['spend', 'region'], id: null, k: 5, stability: 'sample' },
+    path: '/problems/group/problem.yaml',
+    version: 'v2',
+  })
+  vi.spyOn(api, 'groups').mockResolvedValue(SUMMARY)
+  renderLinked()
+
+  // 行を見分ける列も答えで埋める. 群を作ってから, 群の数と行を見分ける列を変える
+  const id = await screen.findByLabelText('行を見分ける列')
+  expect(id).toHaveValue('member')
+  fireEvent.change(screen.getByLabelText('群の数'), { target: { value: '5' } })
+  fireEvent.change(id, { target: { value: '' } })
+  fireEvent.click(screen.getByRole('button', { name: '群を作る' }))
+  expect(await screen.findByText('群の要約')).toBeInTheDocument()
+
+  // 少し待った選び方で確かめ, 変わる点 (書き出し直しの案内も) を出す
+  await waitFor(() =>
+    expect(check).toHaveBeenLastCalledWith('s1', { columns: ['spend', 'region'], id: null, k: 5 }),
+  )
+  // 知らせの枠は空でも見た目だけ隠し, 読み上げの木に残す (display: none にしない)
+  for (const status of screen.getAllByRole('status')) {
+    expect(status.className).toContain('empty:sr-only')
+    expect(status.className).not.toContain('empty:hidden')
+  }
+  const changes = await screen.findByRole('region', { name: '書き戻すと変わる点' })
+  expect(changes).toHaveTextContent('群の数を 5 に書き戻した')
+  expect(changes).toHaveTextContent('骨組みを書き出し直してください')
+
+  // 確かめたときの印とともに書き戻し, 読み直すと答えが欄と同じになる
+  const button = screen.getByRole('button', { name: '問題の設定に書き戻す' })
+  await waitFor(() => expect(button).toBeEnabled())
+  fireEvent.click(button)
+  await waitFor(() =>
+    expect(write).toHaveBeenCalledWith(
+      's1',
+      { columns: ['spend', 'region'], id: null, k: 5 },
+      'v1',
+    ),
+  )
+  expect(await screen.findByText('問題の設定に書き戻しました.')).toBeInTheDocument()
+  await waitFor(() => expect(answers).toHaveBeenCalledTimes(2))
+  await waitFor(() =>
+    expect(screen.queryByText(/問題の設定の答えと違います/)).not.toBeInTheDocument(),
+  )
+  expect(screen.queryByRole('button', { name: '問題の設定に書き戻す' })).not.toBeInTheDocument()
+  // 自分の書き戻しでは欄を埋め直さないので, 群の要約も残る
+  expect(screen.getByText('群の要約')).toBeInTheDocument()
+  expect(screen.getByLabelText('群の数')).toHaveValue(5)
+})
+
+test('書き戻せない選び方は理由を出して押せず, 他で変わったら確かめ直す', async () => {
+  vi.spyOn(api, 'groupProblem').mockResolvedValue(GROUP_PROBLEM)
+  const check = vi
+    .spyOn(api, 'checkGroupProblem')
+    .mockRejectedValueOnce(
+      new ApiError(422, '群の選び方を書き戻せません: 群を作る列と行を見分ける列が重なります.'),
+    )
+    .mockResolvedValue(CHECKED)
+  const write = vi
+    .spyOn(api, 'writeGroupProblem')
+    .mockRejectedValue(new ApiError(409, '問題の設定が他で変わりました'))
+  renderLinked()
+  expect(await screen.findByRole('alert')).toHaveTextContent('重なります')
+  expect(screen.getByRole('button', { name: '問題の設定に書き戻す' })).toBeDisabled()
+
+  // 欄を変えると確かめ直し, 409 なら確かめ直す
+  fireEvent.change(screen.getByLabelText('群の数'), { target: { value: '6' } })
+  const button = screen.getByRole('button', { name: '問題の設定に書き戻す' })
+  await waitFor(() => expect(button).toBeEnabled())
+  const calls = check.mock.calls.length
+  fireEvent.click(button)
+  await waitFor(() => expect(write).toHaveBeenCalled())
+  expect(await screen.findByText('問題の設定が他で変わりました')).toBeInTheDocument()
+  await waitFor(() => expect(check.mock.calls.length).toBeGreaterThan(calls))
 })

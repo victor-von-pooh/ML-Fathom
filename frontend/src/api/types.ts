@@ -811,6 +811,33 @@ export interface GroupProblem {
   project: ProjectPlace | null
 }
 
+/** 群分けのタブから問題の設定に書き戻す選び方 (書いた欄だけを書き戻す) */
+export interface GroupChoice {
+  columns: string[]
+  /** 行を見分ける列 (null は外す) */
+  id: string | null
+  k: number
+}
+
+/** 群分けのタブの選び方を問題の設定に試しに書き戻した結果 */
+export interface GroupCheck {
+  name: string | null
+  path: string
+  /** 書き戻すときに送り返す, 問題の設定のファイルの中身の印 */
+  version: string
+  /** 書き戻すと変わる点 (同じ値は出さない) */
+  changes: string[]
+}
+
+/** 群分けのタブの選び方を問題の設定に書き戻した結果 */
+export interface GroupWritten {
+  changes: string[]
+  /** 書き戻した後の答え */
+  group: Omit<GroupAnswers, 'stability_label'>
+  path: string
+  version: string
+}
+
 /** まとめるの表をプロジェクトへ写した結果 */
 export interface GroupProjectResult {
   path: string

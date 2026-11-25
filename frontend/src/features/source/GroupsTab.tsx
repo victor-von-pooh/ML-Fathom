@@ -1,14 +1,24 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { FolderOutput, Shapes, Upload } from 'lucide-react'
-import { useId, useState } from 'react'
+import { ClipboardCheck, FolderOutput, Shapes, Upload } from 'lucide-react'
+import { type ReactNode, useId, useState } from 'react'
 
 import { api, ApiError } from '../../api/client'
-import type { GroupAnswers, GroupProblem, GroupSummary, Profile, Source } from '../../api/types'
+import type {
+  GroupAnswers,
+  GroupChoice,
+  GroupProblem,
+  GroupSummary,
+  GroupWritten,
+  Profile,
+  Source,
+} from '../../api/types'
 import { Button, Card, ErrorBox, Spinner, StatTile } from '../../components/ui'
 import { defaultDatasetName, formatNumber, formatPercent, TYPE_LABELS } from '../../lib/format'
 import {
   answerColumns,
+  answerId,
   answerK,
+  answersKey,
   cellText,
   defaultGroupColumns,
   differsFromAnswers,
@@ -18,6 +28,7 @@ import {
   MIN_GROUPS,
   summaryColumns,
 } from '../../lib/groups'
+import { useDebounced } from '../../lib/useDebounced'
 import { Stat } from './ColumnsTab'
 import { Notes } from './TrajectoryView'
 
@@ -131,9 +142,17 @@ function UsedColumns({ summary }: { summary: GroupSummary }) {
 
 /**
  * 始めた問題の設定の名前と場所と, まとめるの答え. 欄を答えと違う選び方にすると,
- * 骨組みは問題の設定の答えで群を作ることを知らせる
+ * 骨組みは問題の設定の答えで群を作ることを知らせ, 書き戻す所 (children) を出す
  */
-function ProblemAnswersCard({ problem, differs }: { problem: GroupProblem; differs: boolean }) {
+function ProblemAnswersCard({
+  problem,
+  differs,
+  children,
+}: {
+  problem: GroupProblem
+  differs: boolean
+  children?: ReactNode
+}) {
   const answers = problem.group
   return (
     <Card title="問題の設定">
@@ -155,11 +174,12 @@ function ProblemAnswersCard({ problem, differs }: { problem: GroupProblem; diffe
               ここの調整ランド指数は乱数の種を変えて作り直したものです.
             </p>
           )}
-          {/* 読み上げに知らせるため, 枠は常に置いて中身だけ変える */}
-          <p role="status" className="mt-2 text-xs text-warning-text empty:hidden">
+          {/* 読み上げに知らせるため, 枠は常に置いて中身だけ変える (空の間は見た目だけ隠し, 読み上げの木に残す) */}
+          <p role="status" className="mt-2 text-xs text-warning-text empty:sr-only">
             {differs &&
-              '群を作る列か群の数が問題の設定の答えと違います. 学習のプロジェクトの骨組みは問題の設定の答えで群を作ります. この選び方にするなら, ML-Pathfinder で答え直してください.'}
+              '群を作る列, 行を見分ける列か群の数が問題の設定の答えと違います. 学習のプロジェクトの骨組みは問題の設定の答えで群を作ります. この選び方にするなら, 問題の設定に書き戻してください.'}
           </p>
+          {children}
         </>
       ) : (
         <p className="mt-2 text-xs text-warning-text">
@@ -168,6 +188,110 @@ function ProblemAnswersCard({ problem, differs }: { problem: GroupProblem; diffe
         </p>
       )}
     </Card>
+  )
+}
+
+/**
+ * 欄の選び方を問題の設定に試しに書き戻して変わる点を出し (保存はしない),
+ * 「問題の設定に書き戻す」で確かめたときの中身の印とともに保存する.
+ * 書き戻した後は問題の設定を読み直す (前処理のタブのレシピの書き戻しと同じ流れ)
+ */
+function GroupWriteBack({
+  sourceId,
+  choice,
+  differs,
+  onWritten,
+}: {
+  sourceId: string
+  /** 欄の選び方 (欄に誤りがあれば null) */
+  choice: GroupChoice | null
+  differs: boolean
+  onWritten: (result: GroupWritten) => void
+}) {
+  const queryClient = useQueryClient()
+  // 群の数を打つたびに確かめないよう, 少し待った選び方で確かめる
+  const pending = useDebounced(choice)
+  const latest = JSON.stringify(choice)
+  const check = useQuery({
+    queryKey: ['group-check', sourceId, JSON.stringify(pending)],
+    queryFn: () => api.checkGroupProblem(sourceId, pending!),
+    enabled: differs && pending !== null,
+    retry: false,
+    refetchOnWindowFocus: false,
+  })
+  const write = useMutation({
+    mutationFn: ({ sent, version }: { sent: GroupChoice; version: string }) =>
+      api.writeGroupProblem(sourceId, sent, version),
+    onSuccess: (result) => {
+      onWritten(result)
+      // 答えを読み直す (欄と同じになるので知らせと書き戻しが消える)
+      void queryClient.invalidateQueries({ queryKey: ['group_problem', sourceId] })
+      void queryClient.invalidateQueries({ queryKey: ['group-check', sourceId] })
+    },
+    // 他で変わった (409) ら確かめ直す (古い印のまま押し続けないように)
+    onError: (error) => {
+      if (error instanceof ApiError && error.status === 409) {
+        void queryClient.invalidateQueries({ queryKey: ['group-check', sourceId] })
+      }
+    },
+  })
+  const data = check.data
+  // 確かめが最新の欄に追いついていない間は書き戻さない
+  const settling = check.isFetching || JSON.stringify(pending) !== latest
+  const blocked =
+    !data || !choice || settling || check.isError || data.changes.length === 0 || write.isPending
+  // 書き戻した後に欄を変えたら, 書き戻しましたの表示を消す
+  const written = write.data && JSON.stringify(write.variables?.sent) === latest ? write.data : null
+  return (
+    <div className="mt-3 space-y-2 text-sm">
+      {differs && (
+        <>
+          {!choice && (
+            <p className="text-xs text-ink-3">欄の誤りを直すと, 問題の設定に書き戻せます</p>
+          )}
+          {check.isPending && check.fetchStatus !== 'idle' && (
+            <Spinner label="問題の設定と比べています" />
+          )}
+          {check.error && <ErrorBox error={check.error} />}
+          {data && !check.isError && data.changes.length > 0 && (
+            <section aria-label="書き戻すと変わる点">
+              <h3 className="text-xs font-semibold text-ink-2">書き戻すと変わる点</h3>
+              <ul className="mt-1 list-disc pl-5 text-xs">
+                {data.changes.map((text) => (
+                  <li key={text}>{text}</li>
+                ))}
+              </ul>
+            </section>
+          )}
+          <Button
+            variant="primary"
+            icon={ClipboardCheck}
+            disabled={blocked}
+            onClick={() => {
+              if (data && choice) write.mutate({ sent: choice, version: data.version })
+            }}
+          >
+            {write.isPending ? '書き戻しています…' : '問題の設定に書き戻す'}
+          </Button>
+        </>
+      )}
+      {write.error && <ErrorBox error={write.error} />}
+      {/* 読み上げに知らせるため, 枠は常に置いて中身だけ変える (空の間は見た目だけ隠し, 読み上げの木に残す) */}
+      <div role="status" className="text-xs text-good-text empty:sr-only">
+        {written && (
+          <>
+            問題の設定に書き戻しました.
+            {written.changes.length > 0 && (
+              <ul className="mt-1 list-disc pl-5">
+                {written.changes.map((text) => (
+                  <li key={text}>{text}</li>
+                ))}
+              </ul>
+            )}
+          </>
+        )}
+      </div>
+    </div>
   )
 }
 
@@ -239,8 +363,8 @@ function ProjectExportCard({
         </Button>
       )}
       {exporter.error && <ErrorBox error={exporter.error} />}
-      {/* 読み上げに知らせるため, 枠は常に置いて中身だけ変える */}
-      <p role="status" className="mt-3 text-sm text-good-text empty:hidden">
+      {/* 読み上げに知らせるため, 枠は常に置いて中身だけ変える (空の間は見た目だけ隠し, 読み上げの木に残す) */}
+      <p role="status" className="mt-3 text-sm text-good-text empty:sr-only">
         {done &&
           `${
             done.copied
@@ -258,23 +382,24 @@ function ProjectExportCard({
 function ExportCard({
   source,
   columns,
-  candidates,
+  ids,
+  chosenId,
+  onIdChange,
   k,
 }: {
   source: Source
   columns: string[]
-  candidates: string[]
+  /** 行を見分ける列の候補 (群を作る列の他) */
+  ids: string[]
+  /** 選んだ行を見分ける列 (候補に無ければ空の文字. 問題の設定への書き戻しと同じ欄) */
+  chosenId: string
+  onIdChange: (id: string) => void
   k: number
 }) {
   const [name, setName] = useState(() => `${defaultDatasetName(source.name, source.path)}_groups`)
   const [overwrite, setOverwrite] = useState(false)
-  const [idColumn, setIdColumn] = useState('')
   const [method, setMethod] = useState<'random' | 'none'>('random')
   const [valid, setValid] = useState(0.2)
-  // 行を見分ける列は群を作る列の他から選ぶ (群を作る列に入れた列は「なし」に戻して見せ,
-  // 送る値も見せる値にそろえる)
-  const ids = candidates.filter((column) => !columns.includes(column))
-  const chosenId = ids.includes(idColumn) ? idColumn : ''
   // 変数は書き出したときの群の数 (使い方の文に使う) と, 群を作る列と群の数の選び方
   const selection = `${JSON.stringify(columns)}:${k}`
   const exporter = useMutation({
@@ -312,7 +437,7 @@ function ExportCard({
           id="group-id"
           value={chosenId}
           onChange={(event) => {
-            setIdColumn(event.target.value)
+            onIdChange(event.target.value)
             reset()
           }}
           className="h-8 rounded border border-line bg-surface px-2 font-mono"
@@ -411,8 +536,8 @@ function ExportCard({
           )}
         </ErrorBox>
       )}
-      {/* 読み上げに知らせるため, 枠は常に置いて中身だけ変える */}
-      <p role="status" className="mt-3 text-sm text-good-text empty:hidden">
+      {/* 読み上げに知らせるため, 枠は常に置いて中身だけ変える (空の間は見た目だけ隠し, 読み上げの木に残す) */}
+      <p role="status" className="mt-3 text-sm text-good-text empty:sr-only">
         {done && `書き出しました: ${done.path}`}
       </p>
       {done && (
@@ -447,8 +572,13 @@ export function GroupsTab({ source, profile }: { source: Source; profile: Profil
     enabled: linked,
     retry: false,
   })
+  // 自分で書き戻した答えでは欄を埋め直さない (欄と群の要約を残す). from は書き戻した
+  // ときの欄の鍵, to は書き戻した後の答えの鍵
+  const [own, setOwn] = useState<{ from: string; to: string } | null>(null)
   if (linked && problem.isPending) return <Spinner label="問題の設定を読んでいます" />
   const answers = problem.data?.group ?? null
+  const current = answersKey(answers)
+  const key = own && own.to === current ? own.from : current
   return (
     <>
       {/* 問題の設定を読めなくても, 群分けは続けられる */}
@@ -458,12 +588,13 @@ export function GroupsTab({ source, profile }: { source: Source; profile: Profil
         </div>
       )}
       <GroupsBody
-        // 答えが変わったら, 答えで欄を埋め直す
-        key={JSON.stringify(answers)}
+        // 答えが他で変わったら, 答えで欄を埋め直す
+        key={key}
         source={source}
         profile={profile}
         problem={problem.data ?? null}
         fetching={problem.isFetching}
+        onWritten={(result) => setOwn({ from: key, to: answersKey(result.group) })}
       />
     </>
   )
@@ -474,11 +605,13 @@ function GroupsBody({
   profile,
   problem,
   fetching,
+  onWritten,
 }: {
   source: Source
   profile: Profile
   problem: GroupProblem | null
   fetching: boolean
+  onWritten: (result: GroupWritten) => void
 }) {
   const all = Object.keys(profile.columns)
   const answers: GroupAnswers | null = problem?.group ?? null
@@ -486,6 +619,11 @@ function GroupsBody({
     answers ? answerColumns(answers, all) : defaultGroupColumns(profile.columns, source.target),
   )
   const [k, setK] = useState(() => (answers ? answerK(answers) : 3))
+  const [idColumn, setIdColumn] = useState(() => (answers ? answerId(answers, all) : ''))
+  // 行を見分ける列は群を作る列の他から選ぶ (群を作る列に入れた列は「なし」に戻して見せ,
+  // 送る値も見せる値にそろえる)
+  const ids = all.filter((column) => !columns.includes(column))
+  const chosenId = ids.includes(idColumn) ? idColumn : ''
   const [seed, setSeed] = useState(0)
   const grouping = useMutation({
     mutationFn: () => api.groups(source.id, { columns, k, seed }),
@@ -515,13 +653,18 @@ function GroupsBody({
           ? '乱数の種は 0 以上の整数にしてください'
           : null
   const summary = grouping.data
+  const differs = answers !== null && differsFromAnswers(answers, columns, k, chosenId)
   return (
     <div className="space-y-4">
       {problem && (
-        <ProblemAnswersCard
-          problem={problem}
-          differs={answers !== null && differsFromAnswers(answers, columns, k)}
-        />
+        <ProblemAnswersCard problem={problem} differs={differs}>
+          <GroupWriteBack
+            sourceId={source.id}
+            choice={reason === null ? { columns, id: chosenId || null, k } : null}
+            differs={differs}
+            onWritten={onWritten}
+          />
+        </ProblemAnswersCard>
       )}
       <Card title="群を作る列と群の数">
         <p className="text-sm text-ink-2">
@@ -602,7 +745,14 @@ function GroupsBody({
       {problem?.group && (
         <ProjectExportCard sourceId={source.id} problem={problem} fetching={fetching} />
       )}
-      <ExportCard source={source} columns={columns} candidates={all} k={k} />
+      <ExportCard
+        source={source}
+        columns={columns}
+        ids={ids}
+        chosenId={chosenId}
+        onIdChange={setIdColumn}
+        k={k}
+      />
     </div>
   )
 }

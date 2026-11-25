@@ -3,11 +3,14 @@ import type {
   CaptureCloudExport,
   DatasetSummary,
   ExportResult,
+  GroupCheck,
+  GroupChoice,
   GroupExport,
   GroupProblem,
   GroupProjectResult,
   GroupRequest,
   GroupSummary,
+  GroupWritten,
   ImageMaskExport,
   Info,
   Listing,
@@ -102,6 +105,13 @@ export const api = {
   exportGroups: (id: string, body: GroupExport) =>
     request<PairExportResult>(`/api/sources/${id}/export_groups`, json('POST', body)),
   groupProblem: (id: string) => request<GroupProblem>(`/api/sources/${id}/group_problem`),
+  checkGroupProblem: (id: string, group: GroupChoice) =>
+    request<GroupCheck>(`/api/sources/${id}/group_problem/check`, json('POST', { group })),
+  writeGroupProblem: (id: string, group: GroupChoice, version: string) =>
+    request<GroupWritten>(
+      `/api/sources/${id}/group_problem/write`,
+      json('POST', { group, version }),
+    ),
   exportGroupProject: (id: string, overwrite: boolean) =>
     request<GroupProjectResult>(
       `/api/sources/${id}/export_group_project`,
