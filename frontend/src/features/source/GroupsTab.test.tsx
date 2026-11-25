@@ -140,8 +140,8 @@ test('群を作る列と行を見分ける列で, 群分けの表を分析用に
   const name = screen.getByLabelText('データセットの名前')
   expect(name).toHaveValue('customers_groups')
   // 版 2 は分析の保存で, 学習のプロジェクトへは表のファイルを渡すと案内する
-  expect(screen.getByText(/分析の保存として版 2/)).toHaveTextContent(
-    '学習には使いません. 学習のプロジェクトへは',
+  expect(screen.getByText(/後で群の要約を見直すための分析の保存/)).toHaveTextContent(
+    '学習には使えません. 学習のプロジェクトへ表を渡すには',
   )
 
   // 行を見分ける列は群を作る列の他から選ぶ
