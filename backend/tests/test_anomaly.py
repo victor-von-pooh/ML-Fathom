@@ -434,6 +434,10 @@ def test_start_not_table(
     assert client.get("/api/sources").json() == []
 
 
+# 異常の検知を知らない ML-Quest の受け渡しの誤りの文
+OLD_REASON = "「正解の種類は」の答え anomaly は選べません"
+
+
 def old_handoff(_: dict[str, Any]) -> NoReturn:
     """
     異常の検知を知らない ML-Quest の受け渡しの代わりの関数
@@ -445,18 +449,19 @@ def old_handoff(_: dict[str, Any]) -> NoReturn:
 
     Returns
     ----------
-    None
+    never: NoReturn
+        返らない (常に ValueError を上げる)
 
     Raises
     ----------
     ValueError
-        正解の種類の異常を知らない旨
+        正解の種類の異常を知らない旨 (OLD_REASON)
     """
     # 正解の種類の選択肢に異常が無い版の答えの確かめ
-    raise ValueError("「正解の種類は」の答え anomaly は選べません")
+    raise ValueError(OLD_REASON)
 
 
-@pytest.mark.parametrize("old", [False, True])
+@pytest.mark.parametrize("old", [False, True], ids=["answer", "old"])
 def test_start_refused(
     client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
     old: bool
@@ -493,7 +498,7 @@ def test_start_refused(
     monkeypatch.setenv("ML_PATHFINDER_HOME", str(tmp_path / "pathfinder"))
     if old:
         monkeypatch.setattr(ml_quest, "recipe_from", old_handoff)
-    reason = "選べません" if old else "異常の正解の列は"
+    reason = OLD_REASON if old else "「異常の正解の列は」に答えてください"
 
     # 始めると 422 で ML-Quest の理由があり, データは登録しない
     started = client.post("/api/problems/start", json={"path": str(path)})
