@@ -14,6 +14,7 @@ import { Card, EmptyState, ErrorBox, PageHeader, Spinner } from '../../component
 import { stepText } from '../../lib/entrySteps'
 import { formatNumber, KIND_LABELS, TASK_LABELS } from '../../lib/format'
 import { AnomalyRows } from '../source/AnomalyRows'
+import { UpliftRows } from '../source/UpliftRows'
 import {
   conventionText,
   depthConventionText,
@@ -51,6 +52,8 @@ function outputsText(model: ModelInputs): string {
   if (model.task === 'classification') return `${model.outputs} (クラスの数)`
   if (model.task === 'anomaly')
     return `${model.outputs} (モデルが入力を作り直す値の数. 学習に使う列の数と同じ)`
+  if (model.task === 'uplift')
+    return `${model.outputs} (処置したときの予測と, しないときの予測で, それぞれ 1 つの値)`
   return `${model.outputs} (値)`
 }
 
@@ -117,6 +120,14 @@ function TableCard({ item }: { item: TableDataset }) {
             <dt className="text-ink-3">正解と異常</dt>
             <dd>
               <AnomalyRows summary={item.anomaly} />
+            </dd>
+          </>
+        )}
+        {item.uplift && (
+          <>
+            <dt className="text-ink-3">群と結果の差</dt>
+            <dd>
+              <UpliftRows summary={item.uplift} />
             </dd>
           </>
         )}

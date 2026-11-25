@@ -5,15 +5,20 @@ import {
   anomalyOf,
   anomalyTotals,
   canKeepUnlabeled,
+  fitTreatment,
   looksLikeDatetime,
   fitUnlabeled,
   itemLimitErrors,
   splitLabel,
   untargetedDraft,
+  postTreatmentColumns,
   rowIdColumns,
+  upliftOf,
   usageSnippet,
+  withOutcome,
   withRowId,
   withTask,
+  withTreatment,
   withUnlabeled,
 } from './recipe'
 
@@ -226,4 +231,69 @@ test('行の id の列の候補は, 目的の列でなく欠けも同じ値も�
   }
   expect(rowIdColumns(columns, 'label')).toEqual(['reading_id'])
   expect(rowIdColumns(columns, null)).toEqual(['reading_id', 'label'])
+})
+
+test('効果を見積もるでなくなると, 処置の列と結果の種類を消し, 異常の検知なら行の id を残す', () => {
+  const uplift: Recipe = {
+    ...recipe,
+    task: 'uplift',
+    treatment: 'coupon',
+    outcome: 'binary',
+    id: 'customer_id',
+  }
+  expect(withTask(uplift, 'uplift')).toEqual(uplift)
+  const plain = withTask(uplift, 'classification')
+  expect(plain.treatment).toBeUndefined()
+  expect(plain.outcome).toBeUndefined()
+  expect(plain.id).toBeUndefined()
+  const anomaly = withTask(uplift, 'anomaly')
+  expect(anomaly.treatment).toBeUndefined()
+  expect(anomaly.id).toBe('customer_id')
+  // 異常の検知から変えると正常と見なすを消す
+  const normal = withTask(
+    { ...recipe, task: 'anomaly', split: { method: 'random', unlabeled: 'normal' } },
+    'uplift',
+  )
+  expect(normal.split.unlabeled).toBeUndefined()
+  expect(uplift.treatment).toBe('coupon')
+})
+
+test('処置の列は行の id の列か目的の列と同じになると消す', () => {
+  const uplift: Recipe = { ...recipe, task: 'uplift', treatment: 'coupon' }
+  expect(withRowId(uplift, 'coupon').treatment).toBeUndefined()
+  expect(withRowId(uplift, 'customer_id').treatment).toBe('coupon')
+  expect(fitTreatment(uplift, 'coupon').treatment).toBeUndefined()
+  expect(fitTreatment(uplift, 'y')).toBe(uplift)
+  expect('treatment' in withTreatment(uplift, '')).toBe(false)
+  expect(withOutcome(uplift, 'amount').outcome).toBe('amount')
+  expect('outcome' in withOutcome({ ...uplift, outcome: 'binary' }, '')).toBe(false)
+})
+
+test('処置の後に決まる列のうち, まだ落としていない列だけを返す', () => {
+  const findings = [
+    { code: 'post_treatment', columns: ['used'] },
+    { code: 'post_treatment', columns: ['redeemed'] },
+    { code: 'small_group', columns: [] },
+  ]
+  expect(postTreatmentColumns(findings, [])).toEqual(['used', 'redeemed'])
+  expect(postTreatmentColumns(findings, [{ op: 'drop_columns', columns: ['used'] }])).toEqual([
+    'redeemed',
+  ])
+})
+
+test('効果を見積もるの説明と使い方の例', () => {
+  const summary = {
+    id: 'row_id',
+    treatment: 'coupon',
+    outcome: 'binary' as const,
+    unlabeled: 'drop' as const,
+    splits: {},
+  }
+  expect(upliftOf({ uplift: summary })).toBe(summary)
+  expect(upliftOf({ uplift: null })).toBeNull()
+  expect(upliftOf({})).toBeNull()
+  const snippet = usageSnippet('/d', { train: {}, valid: {} }, false, false, true)
+  expect(snippet).toContain('dataset.treatment("train")')
+  expect(snippet).toContain('dataset.info["uplift"]["splits"]')
+  expect(snippet).not.toContain('クラスの数')
 })

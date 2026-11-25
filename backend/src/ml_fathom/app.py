@@ -17,6 +17,7 @@ from ml_fathom.groups import router as group_router
 from ml_fathom.problems import router as problem_router
 from ml_fathom.settings import get_data_dir
 from ml_fathom.store import SourceStore
+from ml_fathom.uplift import router as uplift_router
 
 # ビルド済みの画面を置く場所 (パッケージの中)
 STATIC_DIR = (Path(__file__).parent / "static").resolve()
@@ -341,6 +342,7 @@ def create_app(
     app.include_router(router)
     app.include_router(problem_router)
     app.include_router(group_router)
+    app.include_router(uplift_router)
     mount_frontend(app, STATIC_DIR)
 
     return app

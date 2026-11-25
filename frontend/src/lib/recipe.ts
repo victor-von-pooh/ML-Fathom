@@ -1,4 +1,12 @@
-import type { AnomalySummary, ColumnInfo, ItemStepInfo, Recipe, RecipeStep } from '../api/types'
+import type {
+  AnomalySummary,
+  ColumnInfo,
+  ItemStepInfo,
+  Recipe,
+  RecipeStep,
+  UpliftOutcome,
+  UpliftSplits,
+} from '../api/types'
 
 /** 目的の列の欠けた行の扱い (ML-EDA の split.unlabeled. normal は異常の検知だけ) */
 export type UnlabeledMode = 'drop' | 'keep' | 'normal'
@@ -16,32 +24,108 @@ export function withUnlabeled(recipe: Recipe, mode: UnlabeledMode): Recipe {
 
 /**
  * 行の id の列の候補. 分析で欠けも同じ値も無い列だけ (ML-EDA が他の列を誤りにする).
- * 目的の列は除く
+ * 目的の列と処置の列は除く
  */
-export function rowIdColumns(columns: Record<string, ColumnInfo>, target: string | null): string[] {
+export function rowIdColumns(
+  columns: Record<string, ColumnInfo>,
+  target: string | null,
+  treatment?: string,
+): string[] {
   return Object.entries(columns)
-    .filter(([name, info]) => name !== target && info.missing === 0 && info.unique === info.count)
+    .filter(
+      ([name, info]) =>
+        name !== target && name !== treatment && info.missing === 0 && info.unique === info.count,
+    )
     .map(([name]) => name)
 }
 
+/** 行の id の列を使うタスク (ML-EDA のレシピの id. 他のタスクでは誤り) */
+const ID_TASKS = ['anomaly', 'uplift']
+
 /**
- * タスクを変えたレシピ. 異常の検知 (anomaly) でなくなると, 異常の検知だけの書き方
- * (行の id の列 id と split.unlabeled: normal) を消す (ML-EDA が他のタスクで誤りにし,
- * 欄も出さないので隠れたまま残さない). 分割は変えない (欄の下の誤りで知らせる)
+ * タスクを変えたレシピ. 異常の検知 (anomaly) と効果を見積もる (uplift) の書き方のうち,
+ * 新しいタスクで使えないもの (行の id の列 id, split.unlabeled: normal, 処置の列 treatment と
+ * 結果の種類 outcome) を消す (ML-EDA が他のタスクで誤りにし, 欄も出さないので隠れたまま
+ * 残さない). 分割は変えない (欄の下の誤りで知らせる)
  */
 export function withTask(recipe: Recipe, task: string): Recipe {
-  const next: Recipe = { ...recipe, task }
-  if (task === 'anomaly') return next
-  delete next.id
-  return next.split.unlabeled === 'normal' ? withUnlabeled(next, 'drop') : next
+  let next: Recipe = { ...recipe, task }
+  if (!ID_TASKS.includes(task)) delete next.id
+  if (task !== 'uplift') {
+    delete next.treatment
+    delete next.outcome
+  }
+  if (task !== 'anomaly' && next.split.unlabeled === 'normal') next = withUnlabeled(next, 'drop')
+  return next
 }
 
-/** 行の id の列を変えたレシピ (空なら項目を消し, ML-EDA が行の位置の row_id を置く) */
+/**
+ * 行の id の列を変えたレシピ (空なら項目を消し, ML-EDA が行の位置の row_id を置く).
+ * 処置の列と同じ列にすると処置の列の指定を消す (ML-EDA が誤りにする)
+ */
 export function withRowId(recipe: Recipe, column: string): Recipe {
   const next: Recipe = { ...recipe }
   if (column) next.id = column
   else delete next.id
+  if (column && next.treatment === column) delete next.treatment
   return next
+}
+
+/** 処置の列を変えたレシピ (空なら項目を消す) */
+export function withTreatment(recipe: Recipe, column: string): Recipe {
+  const next: Recipe = { ...recipe }
+  if (column) next.treatment = column
+  else delete next.treatment
+  return next
+}
+
+/** 結果の種類を変えたレシピ (空なら項目を消し, ML-EDA が値から決める) */
+export function withOutcome(recipe: Recipe, outcome: UpliftOutcome | ''): Recipe {
+  const next: Recipe = { ...recipe }
+  if (outcome) next.outcome = outcome
+  else delete next.outcome
+  return next
+}
+
+/**
+ * 目的の列に合わせた効果を見積もるのレシピ. 処置の列が目的の列と同じなら処置の列の指定を消す
+ * (ML-EDA が誤りにする. 目的の列は上の欄で変わるため)
+ */
+export function fitTreatment(recipe: Recipe, target: string | null): Recipe {
+  if (recipe.treatment === undefined || recipe.treatment !== target) return recipe
+  return withTreatment(recipe, '')
+}
+
+/** 効果を見積もるの結果の種類の言葉 (ML-Quest の UPLIFT_OUTCOMES と同じ分け方) */
+export const OUTCOME_TEXT: Record<UpliftOutcome, string> = {
+  binary: '起きたか (0 と 1. 効果は確率の差)',
+  amount: '量 (効果は値の差)',
+}
+
+/** 効果を見積もる (task: uplift) を選べるデータの種類 (ML-EDA が他の種類を誤りにする) */
+export const UPLIFT_KINDS = ['table', 'timeseries']
+
+/** 書き出しの説明 (dataset.yaml の中身) の効果を見積もるの uplift (他のタスクは null) */
+export function upliftOf(info: Record<string, unknown>): UpliftSplits | null {
+  const value = info.uplift
+  if (typeof value !== 'object' || value === null || !('splits' in value)) return null
+  return value as UpliftSplits
+}
+
+/** 処置の後に決まる列の気付きの列のうち, まだ落としていない列 (落とす手順を足す候補) */
+export function postTreatmentColumns(
+  findings: { code: string; columns: string[] }[],
+  steps: RecipeStep[],
+): string[] {
+  const dropped = new Set(
+    steps
+      .filter((step) => step.op === 'drop_columns' && Array.isArray(step.columns))
+      .flatMap((step) => step.columns as string[]),
+  )
+  const found = findings
+    .filter((item) => item.code === 'post_treatment')
+    .flatMap((item) => item.columns)
+  return [...new Set(found)].filter((name) => !dropped.has(name))
 }
 
 /** 異常の検知 (task: anomaly) を選べるデータの種類 (ML-EDA が他の種類を誤りにする) */
@@ -125,13 +209,15 @@ export function untargetedDraft(draft: Recipe | null, saved: Recipe | null): Rec
 /**
  * 書き出したデータセットを ML-Found の学習スクリプトで読む例.
  * 検証用と unlabeled の行は, その分割がある場合だけ. 異常の検知は, 学習用が
- * 正常の行だけで, 検証用とテスト用の正解で度合いを確かめることを添える
+ * 正常の行だけで, 検証用とテスト用の正解で度合いを確かめることを添える. 効果を見積もるは,
+ * 処置を入力と別に読むことと, 分割ごとの群の数と結果の差の場所を添える
  */
 export function usageSnippet(
   path: string,
   splits: Record<string, unknown>,
   media: boolean,
   anomaly = false,
+  uplift = false,
 ): string {
   const valid =
     'valid' in splits
@@ -139,11 +225,13 @@ export function usageSnippet(
       : null
   const unlabeled =
     'unlabeled' in splits ? '# 正解の無い行: dataset.tensors("unlabeled") (入力だけ)' : null
-  const sizes = anomaly
-    ? '# 入力の次元: len(dataset.features). train は正常の行だけ. valid と test の正解 (異常は 1) で度合いを確かめる\n# 分割ごとの行の数: dataset.info["anomaly"]["rows"]'
-    : media
-      ? '# 入力の形: dataset.info["splits"]["train"]["shape"][1:], クラスの数: len(dataset.info["classes"])'
-      : '# 入力の次元: len(dataset.features), クラスの数: len(dataset.info["classes"])'
+  const sizes = uplift
+    ? '# 入力の次元: len(dataset.features). 処置の列は入力に入らず, 処置 (1 か 0) は dataset.treatment("train") で読む\n# 分割ごとの群の数と結果の差: dataset.info["uplift"]["splits"]'
+    : anomaly
+      ? '# 入力の次元: len(dataset.features). train は正常の行だけ. valid と test の正解 (異常は 1) で度合いを確かめる\n# 分割ごとの行の数: dataset.info["anomaly"]["rows"]'
+      : media
+        ? '# 入力の形: dataset.info["splits"]["train"]["shape"][1:], クラスの数: len(dataset.info["classes"])'
+        : '# 入力の次元: len(dataset.features), クラスの数: len(dataset.info["classes"])'
   const lines = [
     'from ml_eda import load_dataset',
     'from torch.utils.data import DataLoader, TensorDataset',

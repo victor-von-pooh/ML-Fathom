@@ -50,6 +50,7 @@ from ml_fathom.reactions import (
     read_reactions,
 )
 from ml_fathom.settings import get_problems_dir
+from ml_fathom.uplift import UPLIFT_KINDS
 
 router = APIRouter(prefix="/api")
 
@@ -346,6 +347,36 @@ def is_anomaly(problem: dict[str, Any]) -> bool:
     return anomaly
 
 
+def is_uplift(problem: dict[str, Any]) -> bool:
+    """
+    受け持ちが効果の見積もり (効果を見積もるで, 方策でなく, 今ある記録から
+    効果を見積もる. 作り方が既製のモデルをそのままでない) かを返す関数
+
+    ML-Quest の is_uplift_part と同じ決まり (公開の名前でないので, 公開の
+    active_value で見分ける)
+
+    Parameters
+    ----------
+    problem: dict[str, Any]
+        問題の設定 (版 2)
+
+    Returns
+    ----------
+    uplift: bool
+        効果の見積もりの受け持ちか
+    """
+    # 受け持ち, 方策か, 集め方と作り方の答え (要らない問いの古い答えは除外)
+    part = ml_quest.PART
+    uplift = bool(
+        ml_quest.active_value(problem, f"{part}.role") == "effect"
+        and ml_quest.active_value(problem, f"{part}.autonomous") is not True
+        and ml_quest.active_value(problem, f"{part}.collect") == "log"
+        and ml_quest.active_value(problem, f"{part}.method") != "pretrained"
+    )
+
+    return uplift
+
+
 def choice_text(choices: list[dict[str, Any]], value: Any) -> str:
     """
     ML-Quest の選択肢の値を, 画面の言葉と値の組の文にする関数
@@ -376,12 +407,12 @@ def choice_text(choices: list[dict[str, Any]], value: Any) -> str:
 def require_recipe(problem: dict[str, Any]) -> None:
     """
     受け持ちが, 登録したデータとレシピで書き出すもの (列の予測, 画像か
-    表の生成と, 異常の検知) でなければ止める関数
+    表の生成, 異常の検知と効果の見積もり) でなければ止める関数
 
     ML-Quest の版 2 の問題の設定は, 受け持ち (作る, 並べるなど) と正解の
     種類 (領域, 点群など) を持つ. 登録したデータのレシピの下書きと書き戻し
-    は列の予測, 画像か表の生成と異常の検知だけ (ファイルの組の受け持ちは
-    require_items)
+    は列の予測, 画像か表の生成, 異常の検知と効果の見積もりだけ (ファイル
+    の組の受け持ちは require_items)
 
     Parameters
     ----------
@@ -399,7 +430,9 @@ def require_recipe(problem: dict[str, Any]) -> None:
         受け持ちの文)
     """
     # 使えない受け持ちと正解の種類を, 画面の選択肢と同じ言葉で
-    if is_column_part(problem) or is_generate(problem) or is_anomaly(problem):
+    if is_column_part(problem) or is_generate(problem) or (
+        is_anomaly(problem) or is_uplift(problem)
+    ):
         return
     part = ml_quest.PART
     role = ml_quest.active_value(problem, f"{part}.role")
@@ -437,7 +470,7 @@ def require_recipe(problem: dict[str, Any]) -> None:
         "のは, 予測するで正解の種類が表の列, 画像の領域, 点群, 異常の場合"
         "と, "
         "作るで正解の種類が画像か表の場合と, 並べるかまとめるで学習する"
-        "場合です. "
+        "場合と, 効果を見積もる (今ある記録から) 場合です. "
         "データは「データを追加」から入れて分析できます"
     )
 
@@ -466,11 +499,11 @@ def require_items(problem: dict[str, Any]) -> None:
     if is_items_part(problem):
         return
     if is_column_part(problem) or is_generate(problem) or is_rank(problem) or (
-        is_group(problem) or is_anomaly(problem)
+        is_group(problem) or is_anomaly(problem) or is_uplift(problem)
     ):
         raise HTTPException(
             422, "この問題の設定は列の予測か, 画像か表の生成か, 異常の検知か, "
-            "並べるか, まとめるです. "
+            "効果の見積もりか, 並べるか, まとめるです. "
             "データの画面の「問題の設定から始める」で始めてください"
         )
     require_recipe(problem)
@@ -654,7 +687,8 @@ def start_from_problem(
     started: dict[str, Any]
         source (登録したデータ. ファイルの組の受け持ちでは None),
         problem (problem.yaml の場所), form (ファイルの組の書き出しの画面の
-        欄. 列の予測, 画像か表の生成と異常の検知では None), notes
+        欄. 列の予測, 画像か表の生成, 異常の検知と効果の見積もりでは
+        None), notes
         (知らせの文の並び), tab (開くタブ. まとめるでは groups, 他は None)
 
     Raises
@@ -697,7 +731,9 @@ def start_from_problem(
 
     # 読めること, 目的の列があること (画像か表の生成は目的の列が無く,
     # データの種類が正解の種類に合うこと. 異常の検知は表であることと, 答えた
-    # 正解の列と行の id の列があること) を確かめて登録し, レシピを保存
+    # 正解の列と行の id の列があること. 効果の見積もりは表であることと,
+    # 結果の列, 処置の列と行の id の列があること) を確かめて登録し, レシピ
+    # を保存
     data_path = Path(load["path"])
     if not data_path.exists():
         raise HTTPException(404, f"{data_path} がありません")
@@ -725,6 +761,8 @@ def start_from_problem(
             )
     elif is_anomaly(problem):
         check_anomaly_start(data, data_path, recipe)
+    elif is_uplift(problem):
+        check_uplift_start(data, data_path, recipe)
     elif target not in [str(name) for name in data.frame.columns]:
         raise HTTPException(
             422, f"目的の列 {target} がデータにありません"
@@ -779,6 +817,49 @@ def check_anomaly_start(
         )
     columns = [str(name) for name in data.frame.columns]
     for key, title in (("target", "異常の正解の列"), ("id", "行の id の列")):
+        name = recipe.get(key)
+        if name is not None and name not in columns:
+            raise HTTPException(
+                422, f"{title} {name} がデータにありません"
+            )
+
+
+def check_uplift_start(
+    data: ml_eda.Data, data_path: Path, recipe: dict[str, Any]
+) -> None:
+    """
+    効果の見積もりの問題の設定から始める表を確かめる関数
+
+    Parameters
+    ----------
+    data: ml_eda.Data
+        読み込んだ入れたデータ
+    data_path: Path
+        入れたデータの場所
+    recipe: dict[str, Any]
+        ML-Quest の recipe_from のレシピ (task: uplift)
+
+    Returns
+    ----------
+    None
+
+    Raises
+    ----------
+    HTTPException
+        表か時系列でない場合と, 結果の列, 処置の列か行の id の列が表に無い
+        場合は 422
+    """
+    # ML-EDA の効果を見積もるが読む種類 (表と時系列). 結果の列と処置の列
+    # (必ずある) と, 行の id の列 (答えたときだけレシピにある)
+    if data.kind not in UPLIFT_KINDS:
+        raise HTTPException(
+            422, f"{data_path.name} は表ではありません (種類 {data.kind}). "
+            "効果の見積もりの問題の設定には, ML-Pathfinder の「手元のデータ"
+            "は」で処置の列と結果の列を持つ表を入れてください"
+        )
+    columns = [str(name) for name in data.frame.columns]
+    for key, title in (("target", "結果の列"), ("treatment", "処置の列"),
+                       ("id", "行の id の列")):
         name = recipe.get(key)
         if name is not None and name not in columns:
             raise HTTPException(
