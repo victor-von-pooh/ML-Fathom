@@ -764,8 +764,17 @@ export interface GroupSummary {
   width: number
   seed: number | null
   groups: GroupRow[]
-  /** 種を変えて作り直した群との調整ランド指数の平均と最も低い値 */
-  stability: { method: string; repeats: number; ari: number | null; ari_min: number | null } | null
+  /**
+   * 作り直した群との調整ランド指数の平均と最も低い値. method は数え方 (seed は種を変えて,
+   * sample は種を変えて行の fraction の割合を引き直して作り直す. seed では fraction は null)
+   */
+  stability: {
+    method: 'seed' | 'sample'
+    repeats: number
+    fraction: number | null
+    ari: number | null
+    ari_min: number | null
+  } | null
   silhouette: number | null
   source: Record<string, unknown>
   notes: string[]
@@ -776,6 +785,8 @@ export interface GroupRequest {
   columns: string[]
   k: number
   seed: number
+  /** 安定性の数え方 (問題の設定の答え. 無ければ seed) */
+  stability: 'seed' | 'sample'
 }
 
 /** 群分けの表の書き出しの要求 (ML-EDA の export_group_rows) */

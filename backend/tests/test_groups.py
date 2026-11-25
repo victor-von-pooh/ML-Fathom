@@ -125,6 +125,8 @@ def test_describe_groups(client: TestClient, tmp_path: Path) -> None:
     expected = ml_eda.describe_groups(str(file), columns=columns, k=3)
     assert summary["groups"] == expected["groups"]
     assert summary["stability"] == expected["stability"]
+    assert summary["stability"]["method"] == "seed"
+    assert summary["stability"]["fraction"] is None
     assert summary["silhouette"] == pytest.approx(expected["silhouette"])
     assert summary["method"] == "kmeans" and summary["k"] == 3
     assert summary["columns"] == {
@@ -144,6 +146,20 @@ def test_describe_groups(client: TestClient, tmp_path: Path) -> None:
         json={"columns": columns, "k": 3, "seed": 4},
     ).json()
     assert other["seed"] == 4
+
+    # 標本を変える数え方は, ML-EDA の既定の割合で引き直して数える (骨組みの
+    # config の group.fraction の既定と同じ)
+    sampled = client.post(
+        f"/api/sources/{sid}/groups",
+        json={"columns": columns, "k": 3, "seed": 2, "stability": "sample"},
+    ).json()
+    expected = ml_eda.describe_groups(
+        str(file), columns=columns, k=3, seed=2, stability="sample"
+    )
+    assert sampled["stability"] == expected["stability"]
+    assert sampled["stability"]["method"] == "sample"
+    assert sampled["stability"]["fraction"] == pytest.approx(0.8)
+    assert sampled["groups"] == expected["groups"]
 
     # 欠けのある列は気付きに数える
     noted = client.post(
@@ -177,12 +193,15 @@ def test_describe_groups_errors(client: TestClient, tmp_path: Path) -> None:
     twice = client.post(url, json={"columns": ["spend", "spend"], "k": 2})
     assert twice.status_code == 422
 
-    # 群の数は 2 から上限まで, 列は 1 つ以上, 知らない欄は断る
+    # 群の数は 2 から上限まで, 列は 1 つ以上, 知らない数え方と知らない欄
+    # (引く割合は送らない) は断る
     for body in (
         {"columns": ["spend"], "k": 1},
         {"columns": ["spend"], "k": 51},
         {"columns": [], "k": 2},
         {"columns": ["spend"], "k": 2, "labels": "region"},
+        {"columns": ["spend"], "k": 2, "stability": "other"},
+        {"columns": ["spend"], "k": 2, "fraction": 0.5},
     ):
         assert client.post(url, json=body).status_code == 422
 

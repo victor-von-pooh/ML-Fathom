@@ -393,7 +393,7 @@ answers = [("role", "group"), ("unit", "row"), ("output", "cluster"),
            ("evaluation.metric", "silhouette"),
            ("evaluation.link", "群ごとに連絡の仕方を変える"),
            ("group.columns", ["spend", "visits"]), ("group.id", "member"),
-           ("group.k", 3), ("group.stability", "seed")]
+           ("group.k", 3), ("group.stability", "sample")]
 for key, value in answers:
     problem = ml_quest.answer(problem, f"ml.parts.0.{key}", value)
 problem = ml_quest.attach_data(problem, work / "segments.csv")

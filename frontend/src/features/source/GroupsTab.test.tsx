@@ -42,7 +42,7 @@ const SUMMARY: GroupSummary = {
     { group: 1, rows: 2, share: 0.5, stability: 0.8, spend: 20.25, region: 'west (100 %)' },
     { group: '全体', rows: 4, share: 1, stability: null, spend: 10.875, region: 'east (50 %)' },
   ],
-  stability: { method: 'seed', repeats: 5, ari: 0.9, ari_min: 0.75 },
+  stability: { method: 'seed', repeats: 5, fraction: null, ari: 0.9, ari_min: 0.75 },
   silhouette: 0.62,
   source: { path: 'customers.csv' },
   notes: ['群を作る列に欠けた値のある行が 1 行あります'],
@@ -69,7 +69,12 @@ test('初めは数と種類の列を選び, 選んだ列と群の数で群を作
   fireEvent.change(screen.getByLabelText('群の数'), { target: { value: '2' } })
   fireEvent.click(screen.getByRole('button', { name: '群を作る' }))
   await waitFor(() =>
-    expect(groups).toHaveBeenCalledWith('s1', { columns: ['spend', 'region'], k: 2, seed: 0 }),
+    expect(groups).toHaveBeenCalledWith('s1', {
+      columns: ['spend', 'region'],
+      k: 2,
+      seed: 0,
+      stability: 'seed',
+    }),
   )
 
   // 安定性とまとまりの数と, 指標の意味
@@ -78,6 +83,8 @@ test('初めは数と種類の列を選び, 選んだ列と群の数で群を作
   )
   expect(screen.getByText('シルエット係数 (まとまり)').parentElement).toHaveTextContent('0.62')
   expect(screen.getByText(/1 で全く同じ分かれ方, 0 で偶然と同じ程度/)).toBeInTheDocument()
+  expect(screen.getByText(/乱数の種を変えて群を 5 回作り直した/)).toBeInTheDocument()
+  expect(screen.queryByText(/の行を引き直し/)).not.toBeInTheDocument()
   expect(screen.getByText('群を作る列に欠けた値のある行が 1 行あります')).toBeInTheDocument()
 
   // 群ごとの行と全体の行, 列の要約
@@ -268,7 +275,10 @@ function renderLinked() {
 test('問題の設定から始めたデータは, 答えで欄を埋め, 違う選び方にすると知らせる', async () => {
   vi.spyOn(api, 'groupProblem').mockResolvedValue(GROUP_PROBLEM)
   vi.spyOn(api, 'checkGroupProblem').mockResolvedValue(CHECKED)
-  const groups = vi.spyOn(api, 'groups').mockResolvedValue(SUMMARY)
+  const groups = vi.spyOn(api, 'groups').mockResolvedValue({
+    ...SUMMARY,
+    stability: { method: 'sample', repeats: 5, fraction: 0.8, ari: 0.9, ari_min: 0.75 },
+  })
   renderLinked()
 
   // 表に無い列 (income) は外し, 表の順で埋める. 群の数も答えのまま
@@ -277,11 +287,22 @@ test('問題の設定から始めたデータは, 答えで欄を埋め, 違う�
   expect(fields.getByRole('checkbox', { name: /region/ })).toBeChecked()
   expect(screen.getByLabelText('群の数')).toHaveValue(4)
   expect(screen.getByText('標本を変えて作り直す')).toBeInTheDocument()
-  expect(screen.getByText(/ここの調整ランド指数は乱数の種を変えて/)).toBeInTheDocument()
+  expect(screen.getByText(/ここの調整ランド指数も骨組みと同じく標本を変えて/)).toBeInTheDocument()
+  expect(screen.getByText(/ここは全ての行から引きます/)).toBeInTheDocument()
   fireEvent.click(screen.getByRole('button', { name: '群を作る' }))
+  // 安定性は答えの数え方 (標本を変える) で数える
   await waitFor(() =>
-    expect(groups).toHaveBeenCalledWith('s1', { columns: ['spend', 'region'], k: 4, seed: 0 }),
+    expect(groups).toHaveBeenCalledWith('s1', {
+      columns: ['spend', 'region'],
+      k: 4,
+      seed: 0,
+      stability: 'sample',
+    }),
   )
+  // 説明の文は返した数え方と割合に合わせる
+  expect(
+    await screen.findByText(/全ての行から 80% の行を引き直し, 引いた行で群を 5 回作り直した/),
+  ).toBeInTheDocument()
 
   // 答えの列が表に無い (income) ので, 答えと違う選び方として知らせる.
   // 群の数を変えても知らせる
@@ -298,7 +319,13 @@ test('答えと同じ選び方なら知らせず, 受け持ちが変わったら
   const view = renderLinked()
   expect(await screen.findByRole('button', { name: 'プロジェクトへ書き出す' })).toBeEnabled()
   expect(screen.queryByText(/問題の設定の答えと違います/)).not.toBeInTheDocument()
-  expect(screen.queryByText(/ここの調整ランド指数は乱数の種を変えて/)).not.toBeInTheDocument()
+  expect(screen.queryByText(/ここの調整ランド指数も骨組みと同じく/)).not.toBeInTheDocument()
+  // 種を変えるの答えなら, 種を変えて数える
+  const groups = vi.spyOn(api, 'groups').mockResolvedValue(SUMMARY)
+  fireEvent.click(screen.getByRole('button', { name: '群を作る' }))
+  await waitFor(() =>
+    expect(groups).toHaveBeenCalledWith('s1', expect.objectContaining({ stability: 'seed' })),
+  )
   view.unmount()
 
   vi.spyOn(api, 'groupProblem').mockResolvedValue({ ...GROUP_PROBLEM, group: null, project: null })

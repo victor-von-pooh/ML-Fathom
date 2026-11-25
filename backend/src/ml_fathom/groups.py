@@ -42,6 +42,11 @@ class GroupRequest(BaseModel):
     seed: Annotated[
         int, Field(ge=0, description="k-means の乱数の種")
     ] = 0
+    # 問題の設定の答え group.stability の数え方 (画面が答えから送る. 引く
+    # 割合は答えが無いので ML-EDA の既定で, 骨組みの config の既定と同じ)
+    stability: Literal["seed", "sample"] = Field(
+        "seed", description="群の安定性の数え方"
+    )
 
 
 class GroupSplit(BaseModel):
@@ -204,7 +209,7 @@ def describe(
     source_id: str
         データの ID
     body: GroupRequest
-        群を作る列, 群の数, 乱数の種
+        群を作る列, 群の数, 乱数の種, 安定性の数え方
 
     Returns
     ----------
@@ -220,7 +225,8 @@ def describe(
     data = load_source(find_source(request, source_id))
     try:
         summary: dict[str, Any] = to_json(ml_eda.describe_groups(
-            data, columns=body.columns, k=body.k, seed=body.seed
+            data, columns=body.columns, k=body.k, seed=body.seed,
+            stability=body.stability
         ))
     except INPUT_ERRORS as error:
         raise HTTPException(
