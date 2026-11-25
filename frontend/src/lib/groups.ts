@@ -42,15 +42,41 @@ export function answerK(answers: GroupAnswers): number {
 }
 
 /**
- * 欄の群を作る列か群の数が, 問題の設定の答えと違うか (列の順は問わない). 答えていない
- * 項目 (列が空, 群の数が null) は比べない (未答の問題の設定を開いただけで知らせないため)
+ * 問題の設定の答えの行を見分ける列. 表に無いか, 答えの群を作る列に入っていれば
+ * 「なし」 (空の文字) にする (欄の候補にある値だけを埋めるため)
  */
-export function differsFromAnswers(answers: GroupAnswers, columns: string[], k: number): boolean {
+export function answerId(answers: GroupAnswers, columns: string[]): string {
+  const id = answers.id
+  return id !== null && columns.includes(id) && !answers.columns.includes(id) ? id : ''
+}
+
+/**
+ * 欄の群を作る列, 行を見分ける列 (空の文字は「なし」) か群の数が, 問題の設定の答えと
+ * 違うか (列の順は問わない). 答えていない項目 (列が空, 群の数が null) は比べない
+ * (未答の問題の設定を開いただけで知らせないため). 行を見分ける列の null は「なし」の答え
+ */
+export function differsFromAnswers(
+  answers: GroupAnswers,
+  columns: string[],
+  k: number,
+  id: string,
+): boolean {
   const wanted = new Set(answers.columns)
   const kDiffers = answers.k !== null && answers.k !== k
   const columnsDiffer =
     wanted.size > 0 && (columns.length !== wanted.size || columns.some((name) => !wanted.has(name)))
-  return kDiffers || columnsDiffer
+  const idDiffers = (answers.id ?? '') !== id
+  return kDiffers || columnsDiffer || idDiffers
+}
+
+/**
+ * 答えのうち, 欄を埋め直すかを決める値 (群を作る列, 行を見分ける列, 群の数, 数え方).
+ * 列の順と言葉は問わない
+ */
+export function answersKey(answers: Omit<GroupAnswers, 'stability_label'> | null): string {
+  if (!answers) return 'null'
+  const { columns, id, k, stability } = answers
+  return JSON.stringify({ columns: [...columns].sort(), id, k, stability })
 }
 
 /** 群の要約の行から, 群を作った列の名前を表の順に返す */

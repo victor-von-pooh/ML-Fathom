@@ -3,7 +3,9 @@ import { expect, test } from 'vitest'
 import type { ColumnInfo, GroupAnswers } from '../api/types'
 import {
   answerColumns,
+  answerId,
   answerK,
+  answersKey,
   cellText,
   defaultGroupColumns,
   differsFromAnswers,
@@ -66,10 +68,10 @@ test('問題の設定の答えの列は表にあるものを表の順に, 違う
   expect(answerK(answers)).toBe(4)
   expect(answerK({ ...answers, k: null })).toBe(3)
   const same = { ...answers, columns: ['region', 'spend'] }
-  expect(differsFromAnswers(same, ['spend', 'region'], 4)).toBe(false)
-  expect(differsFromAnswers(same, ['spend', 'region'], 3)).toBe(true)
-  expect(differsFromAnswers(same, ['spend'], 4)).toBe(true)
-  expect(differsFromAnswers(answers, ['spend', 'region'], 4)).toBe(true)
+  expect(differsFromAnswers(same, ['spend', 'region'], 4, '')).toBe(false)
+  expect(differsFromAnswers(same, ['spend', 'region'], 3, '')).toBe(true)
+  expect(differsFromAnswers(same, ['spend'], 4, '')).toBe(true)
+  expect(differsFromAnswers(answers, ['spend', 'region'], 4, '')).toBe(true)
 })
 
 test('答えていない群の数と列は, 答えとの違いに数えない', () => {
@@ -81,8 +83,41 @@ test('答えていない群の数と列は, 答えとの違いに数えない', 
     stability_label: null,
   }
   // 未答の群の数は初めの 3 で埋めても, 違いとしない
-  expect(differsFromAnswers(unanswered, ['spend', 'region'], answerK(unanswered))).toBe(false)
-  expect(differsFromAnswers(unanswered, ['spend', 'region'], 5)).toBe(false)
-  expect(differsFromAnswers(unanswered, ['spend'], 3)).toBe(true)
-  expect(differsFromAnswers({ ...unanswered, columns: [] }, ['spend'], 3)).toBe(false)
+  expect(differsFromAnswers(unanswered, ['spend', 'region'], answerK(unanswered), '')).toBe(false)
+  expect(differsFromAnswers(unanswered, ['spend', 'region'], 5, '')).toBe(false)
+  expect(differsFromAnswers(unanswered, ['spend'], 3, '')).toBe(true)
+  expect(differsFromAnswers({ ...unanswered, columns: [] }, ['spend'], 3, '')).toBe(false)
+})
+
+test('行を見分ける列は, 表にあって群を作る列でない答えだけを埋め, 違いに数える', () => {
+  const answers: GroupAnswers = {
+    columns: ['spend'],
+    id: 'member',
+    k: 4,
+    stability: 'seed',
+    stability_label: '種を変えて作り直す',
+  }
+  expect(answerId(answers, ['member', 'spend'])).toBe('member')
+  expect(answerId(answers, ['spend'])).toBe('')
+  expect(answerId({ ...answers, id: 'spend' }, ['member', 'spend'])).toBe('')
+  expect(answerId({ ...answers, id: null }, ['member', 'spend'])).toBe('')
+  // null の答えは「なし」と同じ
+  expect(differsFromAnswers(answers, ['spend'], 4, 'member')).toBe(false)
+  expect(differsFromAnswers(answers, ['spend'], 4, '')).toBe(true)
+  expect(differsFromAnswers({ ...answers, id: null }, ['spend'], 4, '')).toBe(false)
+  expect(differsFromAnswers({ ...answers, id: null }, ['spend'], 4, 'member')).toBe(true)
+})
+
+test('欄を埋め直す鍵は, 列の順と数え方の言葉を問わない', () => {
+  const answers: GroupAnswers = {
+    columns: ['spend', 'region'],
+    id: null,
+    k: 4,
+    stability: 'seed',
+    stability_label: '種を変えて作り直す',
+  }
+  const { stability_label: _, ...plain } = answers
+  expect(answersKey(answers)).toBe(answersKey({ ...plain, columns: ['region', 'spend'] }))
+  expect(answersKey(answers)).not.toBe(answersKey({ ...plain, k: 5 }))
+  expect(answersKey(null)).toBe('null')
 })

@@ -743,6 +743,152 @@ def test_group_export_reanswered(
     assert target.read_text("utf-8") == "customer,spend\n"
 
 
+def test_group_write_back(client: TestClient, tmp_path: Path) -> None:
+    """
+    群分けのタブの選び方を試しに書き戻して変わる点を返し, 中身の印ととも
+    に ml.parts.<n>.group に書き戻して保存することを確かめる関数
+
+    Parameters
+    ----------
+    client: TestClient
+        クライアント
+    tmp_path: Path
+        一時ディレクトリ
+
+    Returns
+    ----------
+    None
+    """
+    # 試しの書き戻しは保存しない (プロジェクトがあるので書き出し直す案内)
+    path, project = saved_problem(tmp_path, group_problem())
+    source = client.post(
+        "/api/problems/start", json={"path": str(path)}
+    ).json()["source"]
+    url = f"/api/sources/{source['id']}"
+    file = path / "problem.yaml"
+    before = file.read_bytes()
+    chosen = {"columns": ["spend", "visits"], "id": None, "k": 4}
+    checked = client.post(
+        f"{url}/group_problem/check", json={"group": chosen}
+    )
+    assert checked.status_code == 200
+    result = checked.json()
+    assert result["path"] == str(file)
+    changes = result["changes"]
+    assert len(changes) == 4
+    assert "spend, visits" in changes[0] and "4" in changes[2]
+    assert "書き出し直してください" in changes[3]
+    assert file.read_bytes() == before
+
+    # 書き戻すと, 答えが選び方と同じになり, 安定性の数え方は残る
+    written = client.post(f"{url}/group_problem/write", json={
+        "group": chosen, "version": result["version"],
+    })
+    assert written.status_code == 200
+    done = written.json()
+    assert done["changes"] == changes
+    assert done["group"] == {
+        "columns": ["spend", "visits"], "id": None, "k": 4,
+        "stability": "sample",
+    }
+    answers = client.get(f"{url}/group_problem").json()["group"]
+    assert {key: answers[key] for key in ("columns", "id", "k")} == {
+        "columns": ["spend", "visits"], "id": None, "k": 4,
+    }
+    problem = ml_quest.load_problem(file)
+    assert ml_quest.active_value(problem, f"{PART}.group.k") == 4
+    assert done["version"] != result["version"]
+
+    # 同じ選び方は変わる点が無く, 書いた欄だけを書き戻す
+    again = client.post(f"{url}/group_problem/check", json={"group": chosen})
+    assert again.json()["changes"] == []
+    written = client.post(f"{url}/group_problem/write", json={
+        "group": {"id": "customer"}, "version": done["version"],
+    })
+    assert written.status_code == 200
+    assert written.json()["group"]["id"] == "customer"
+    assert written.json()["group"]["k"] == 4
+
+    # 書き出し直した骨組みの config の group は書き戻した値と同じ
+    ml_quest.make_project(
+        ml_quest.load_problem(file), project, overwrite=True
+    )
+    group = skeleton_config(project).group
+    assert list(group.columns) == ["spend", "visits"]
+    assert group.id == "customer" and group.k == 4
+
+
+def test_group_write_back_refusals(
+    client: TestClient, tmp_path: Path
+) -> None:
+    """
+    骨組みを組めない選び方, 確かめた後の問題の設定の変更, まとめるでなく
+    なった問題の設定は, 書き戻さずに断ることを確かめる関数
+
+    Parameters
+    ----------
+    client: TestClient
+        クライアント
+    tmp_path: Path
+        一時ディレクトリ
+
+    Returns
+    ----------
+    None
+    """
+    # 群を作る列と行を見分ける列の重なり, 無い列, 空の列は理由付きの 422
+    path, _ = saved_problem(tmp_path, group_problem())
+    source = client.post(
+        "/api/problems/start", json={"path": str(path)}
+    ).json()["source"]
+    url = f"/api/sources/{source['id']}"
+    file = path / "problem.yaml"
+    before = file.read_bytes()
+    for chosen, part in [
+        ({"columns": ["spend"], "id": "spend"}, "書き戻せません"),
+        ({"columns": ["spend", "income"]}, "income"),
+        ({"columns": []}, "空にはできません"),
+    ]:
+        response = client.post(
+            f"{url}/group_problem/check", json={"group": chosen}
+        )
+        assert response.status_code == 422
+        assert part in response.json()["detail"]
+    version = client.post(
+        f"{url}/group_problem/check", json={"group": {"k": 5}}
+    ).json()["version"]
+    response = client.post(f"{url}/group_problem/write", json={
+        "group": {"columns": ["spend"], "id": "spend"}, "version": version,
+    })
+    assert response.status_code == 422
+    assert file.read_bytes() == before
+
+    # 知らない欄は断る (取り違えた欄を黙って捨てないため)
+    assert client.post(
+        f"{url}/group_problem/check", json={"group": {"seed": 1}}
+    ).status_code == 422
+
+    # 確かめた後に他で変わっていれば 409 で, 書き戻さない
+    problem = ml_quest.load_problem(file)
+    problem = ml_quest.answer(problem, f"{PART}.group.k", 6)
+    ml_quest.save_problem(problem, path)
+    changed = file.read_bytes()
+    response = client.post(f"{url}/group_problem/write", json={
+        "group": {"k": 5}, "version": version,
+    })
+    assert response.status_code == 409
+    assert file.read_bytes() == changed
+
+    # まとめるでなくなれば, 確かめも書き戻しも断る
+    problem["ml"]["parts"][0]["role"] = "predict"
+    ml_quest.save_problem(problem, path)
+    response = client.post(
+        f"{url}/group_problem/check", json={"group": {"k": 5}}
+    )
+    assert response.status_code == 422
+    assert "まとめる" in response.json()["detail"]
+
+
 @pytest.mark.parametrize("value, expected", [
     (4, 4), (4.0, 4), (True, None), (2.5, None), ("4", None), (None, None),
 ])

@@ -22,7 +22,12 @@ from ml_fathom.api import (
     pair_result,
     source_view,
 )
-from ml_fathom.groups import check_group_columns, group_answers, is_group
+from ml_fathom.groups import (
+    MAX_COLUMNS,
+    check_group_columns,
+    group_answers,
+    is_group,
+)
 from ml_fathom.jsonable import to_json
 from ml_fathom.reactions import (
     REACTIONS_KIND,
@@ -90,6 +95,35 @@ class ReactionsExport(BaseModel):
 class GroupProjectExport(BaseModel):
     overwrite: bool = Field(
         False, description="前に置いた表を置き換えるか"
+    )
+
+
+class GroupChoice(BaseModel):
+    # 知らない欄は断り, 書いた欄だけを書き戻す (安定性の数え方はタブで選ば
+    # ないので送らない)
+    model_config = ConfigDict(extra="forbid")
+    columns: Optional[list[str]] = Field(
+        None, max_length=MAX_COLUMNS, description="群を作る列"
+    )
+    id: Optional[str] = Field(
+        None, description="行を見分ける列 (None は外す)"
+    )
+    k: Optional[int] = Field(None, description="群の数")
+    stability: Optional[Literal["seed", "sample"]] = Field(
+        None, description="群の安定性の数え方"
+    )
+
+
+class GroupCheck(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    group: GroupChoice
+
+
+class GroupWrite(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    group: GroupChoice
+    version: str = Field(
+        description="確かめたときの問題の設定のファイルの中身の印"
     )
 
 
@@ -1807,6 +1841,132 @@ def get_group_problem(request: Request, source_id: str) -> dict[str, Any]:
     answers["stability_label"] = label[0] if label else answers["stability"]
     result["group"] = answers
     result["project"] = project_place(project_record(problem), single=True)
+
+    return result
+
+
+def group_trial(
+    problem: dict[str, Any], group: GroupChoice
+) -> dict[str, Any]:
+    """
+    群分けのタブの選び方を問題の設定に試しに書き戻す関数 (保存はしない)
+
+    Parameters
+    ----------
+    problem: dict[str, Any]
+        問題の設定 (まとめるで学習する受け持ち)
+    group: GroupChoice
+        選び方 (書いた欄だけを書き戻す)
+
+    Returns
+    ----------
+    trial: dict[str, Any]
+        ML-Quest の apply_group の結果 (problem, changes, conflicts,
+        choices)
+
+    Raises
+    ----------
+    HTTPException
+        apply_group が断る選び方 (骨組みを組めない問題の設定になるもの)
+        は理由を付けて 422
+    """
+    # 書いた欄だけ (書かない欄は今の答えのまま)
+    chosen = group.model_dump(exclude_unset=True)
+    try:
+        trial: dict[str, Any] = ml_quest.apply_group(problem, chosen)
+    except ValueError as error:
+        raise HTTPException(422, str(error)) from error
+
+    return trial
+
+
+@router.post("/sources/{source_id}/group_problem/check")
+def check_group_problem(
+    request: Request, source_id: str, body: GroupCheck
+) -> dict[str, Any]:
+    """
+    群分けのタブの選び方を, 始めた問題の設定に試しに書き戻した結果を返す
+    関数
+
+    Parameters
+    ----------
+    request: Request
+        リクエスト
+    source_id: str
+        データの ID
+    body: GroupCheck
+        選び方
+
+    Returns
+    ----------
+    result: dict[str, Any]
+        name (問題の設定の名前), path, version (書き戻すときに送り返す
+        中身の印), changes (書き戻すと変わる点の文)
+
+    Raises
+    ----------
+    HTTPException
+        問題の設定から始めていなければ 404, まとめるでなくなっているか,
+        書き戻せない選び方は 422
+    """
+    # 保存はしない
+    _, path, problem = linked_group(request, source_id)
+    version = version_of(path)
+    trial = group_trial(problem, body.group)
+    result = {
+        "name": problem.get("name"), "path": str(path), "version": version,
+        "changes": trial["changes"],
+    }
+
+    return result
+
+
+@router.post("/sources/{source_id}/group_problem/write")
+def write_group_problem(
+    request: Request, source_id: str, body: GroupWrite
+) -> dict[str, Any]:
+    """
+    群分けのタブの選び方を, 始めた問題の設定の ml.parts.<n>.group に書き
+    戻して保存する関数
+
+    Parameters
+    ----------
+    request: Request
+        リクエスト
+    source_id: str
+        データの ID
+    body: GroupWrite
+        選び方と, 確かめたときの問題の設定の中身の印
+
+    Returns
+    ----------
+    result: dict[str, Any]
+        changes (変えた点の文), group (書き戻した後の答え. group_answers
+        の結果), path, version (書き戻した後の中身の印)
+
+    Raises
+    ----------
+    HTTPException
+        問題の設定から始めていなければ 404, まとめるでなくなっているか,
+        書き戻せない選び方か, 保存できなければ 422, 確かめた後に問題の
+        設定が変わった場合は 409
+    """
+    # 確かめた後に変わっていないこと (読む前と後の中身の印も同じ)
+    _, path, problem = linked_group(request, source_id)
+    unchanged(path, body.version)
+    trial = group_trial(problem, body.group)
+    updated = trial["problem"]
+    unchanged(path, body.version)
+    try:
+        ml_quest.save_problem(updated, path)
+    except OSError as error:
+        raise HTTPException(
+            422, f"問題の設定を保存できません: {error}"
+        ) from error
+    result = {
+        "changes": trial["changes"], "group": group_answers(updated),
+        "path": str(path), "version": version_of(path),
+    }
 
     return result
 
