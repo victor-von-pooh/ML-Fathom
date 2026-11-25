@@ -21,10 +21,6 @@ PART = ml_quest.PART
 # 合成の介入の記録の表の行の数
 ROWS = 200
 
-# ML-Quest が効果の見積もりの問題の設定を扱えるか (扱えなければ, ML-Quest
-# の本物の問題の設定で通す確かめは飛ばし, 止まることの確かめ)
-QUEST_UPLIFT = "UPLIFT_OUTCOMES" in ml_quest.__all__
-
 
 @pytest.fixture
 def client(tmp_path: Path) -> TestClient:
@@ -111,7 +107,7 @@ def uplift_part(problem: dict[str, Any]) -> dict[str, Any]:
     問題の設定の受け持ちを効果の見積もりにする関数
 
     ML-Quest の答えの確かめを通さずに受け持ちの答えを書く (効果の見積もり
-    を知らない ML-Quest でも, この画面の見分けと止まり方を確かめるため)
+    の問いに答えずに, この画面の見分けと止まり方を確かめるため)
 
     Parameters
     ----------
@@ -476,8 +472,8 @@ def test_start_refused(
 ) -> None:
     """
     ML-Quest が効果の見積もりの問題の設定を受けない場合 (効果の見積もりの
-    問いに答えていない場合か, 効果の見積もりを知らない版の場合), 理由を
-    付けて 422 で止まり, 一覧でも始められないことを確かめる関数
+    問いに答えていない場合), 理由を付けて 422 で止まり, 一覧でも始められ
+    ないことを確かめる関数
 
     Parameters
     ----------
@@ -574,8 +570,6 @@ def quest_problem(tmp_path: Path, data: Path) -> tuple[Path, Path]:
     return paths
 
 
-@pytest.mark.skipif(not QUEST_UPLIFT,
-                    reason="ML-Quest が効果の見積もりを扱わない版")
 def test_quest_uplift(
     client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
