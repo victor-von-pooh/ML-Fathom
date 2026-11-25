@@ -24,6 +24,7 @@ from ml_fathom.api import (
 )
 from ml_fathom.groups import (
     MAX_COLUMNS,
+    MAX_GROUPS,
     check_group_columns,
     group_answers,
     is_group,
@@ -45,6 +46,12 @@ router = APIRouter(prefix="/api")
 
 # 問題の設定のファイルを読めないときの例外
 READ_ERRORS = (OSError, ValueError, yaml.YAMLError)
+
+# 確かめた後に問題の設定が他で変わったときの断りの文
+CHANGED = (
+    "問題の設定が他で変わりました. 確かめ直したので, 見直してからもう一度"
+    "書き戻してください"
+)
 
 # 問題の設定の形が崩れているときに ML-Quest から出る例外
 SHAPE_ERRORS = (ValueError, TypeError, AttributeError, KeyError)
@@ -108,7 +115,9 @@ class GroupChoice(BaseModel):
     id: Optional[str] = Field(
         None, description="行を見分ける列 (None は外す)"
     )
-    k: Optional[int] = Field(None, description="群の数")
+    k: Optional[int] = Field(
+        None, ge=2, le=MAX_GROUPS, description="群の数"
+    )
     stability: Optional[Literal["seed", "sample"]] = Field(
         None, description="群の安定性の数え方"
     )
@@ -211,9 +220,46 @@ def read_problem(path: Path) -> dict[str, Any]:
     HTTPException
         読めない場合と, 問題の設定のファイルでない場合 (レシピなど) は 422
     """
-    # 版の番号の他に, 名前と作った時刻 (ML-Quest が必ず書く) を持つこと
+    # 中身の印は使わない
+    problem, _ = read_problem_bytes(path)
+
+    return problem
+
+
+def read_problem_bytes(path: Path) -> tuple[dict[str, Any], str]:
+    """
+    問題の設定を一度だけ読み, 同じ中身から問題の設定と中身の印を作る関数
+
+    読んだ後に外で保存されても, 印と中身が別の版から来ないように
+
+    Parameters
+    ----------
+    path: Path
+        problem.yaml
+
+    Returns
+    ----------
+    read: tuple[dict[str, Any], str]
+        問題の設定 (版 2) と, 同じ中身の sha256 の 16 進
+
+    Raises
+    ----------
+    HTTPException
+        読めない場合と, 問題の設定のファイルでない場合 (レシピなど) は 422
+    """
+    # 版の番号の他に, 名前と作った時刻 (ML-Quest が必ず書く) を持つこと.
+    # 版 1 は ML-Quest の load_problem と同じく版 2 に移す
     try:
-        problem: dict[str, Any] = ml_quest.load_problem(path)
+        data = path.read_bytes()
+        loaded = yaml.safe_load(data.decode("utf-8"))
+        if not isinstance(loaded, dict):
+            raise ValueError(
+                f"{path.name} は問題の設定のファイルではありません "
+                "(format_version がありません)"
+            )
+        problem: dict[str, Any] = ml_quest.upgrade_problem(
+            loaded, path.name
+        )
     except READ_ERRORS as error:
         raise HTTPException(
             422, f"問題の設定を読めません: {error}"
@@ -224,8 +270,9 @@ def read_problem(path: Path) -> dict[str, Any]:
         raise HTTPException(
             422, f"{path.name} は問題の設定のファイルではありません"
         )
+    read = (problem, hashlib.sha256(data).hexdigest())
 
-    return problem
+    return read
 
 
 def is_generate(problem: dict[str, Any]) -> bool:
@@ -400,6 +447,37 @@ def linked_problem(
     Raises
     ----------
     HTTPException
+        linked_versioned と同じ
+    """
+    # 中身の印は使わない
+    source, path, problem, _ = linked_versioned(request, source_id)
+    linked = (source, path, problem)
+
+    return linked
+
+
+def linked_versioned(
+    request: Request, source_id: str
+) -> tuple[dict[str, Any], Path, dict[str, Any], str]:
+    """
+    登録したデータと, 始めた問題の設定の場所, 中身と, 同じ中身から作った
+    中身の印を返す関数
+
+    Parameters
+    ----------
+    request: Request
+        リクエスト
+    source_id: str
+        データの ID
+
+    Returns
+    ----------
+    linked: tuple[dict[str, Any], Path, dict[str, Any], str]
+        登録したデータ, problem.yaml の場所, 問題の設定, 中身の印
+
+    Raises
+    ----------
+    HTTPException
         問題の設定から始めていないか無い場合は 404, 読めないか別の問題の
         設定に置き換わった場合は 422
     """
@@ -409,13 +487,13 @@ def linked_problem(
     if not isinstance(text, str):
         raise HTTPException(404, "問題の設定から始めたデータではありません")
     path = problem_file(text)
-    problem = read_problem(path)
+    problem, version = read_problem_bytes(path)
     created = source.get("problem_created")
     if created and str(problem.get("created_at")) != created:
         raise HTTPException(
             422, f"{path} が始めたときと別の問題の設定に置き換わっています"
         )
-    linked = (source, path, problem)
+    linked = (source, path, problem, version)
 
     return linked
 
@@ -470,10 +548,7 @@ def unchanged(path: Path, version: str) -> None:
     """
     # 中身の印の比べ
     if version_of(path) != version:
-        raise HTTPException(
-            409, "問題の設定が他で変わりました. 確かめ直したので, 見直して"
-            "からもう一度書き戻してください"
-        )
+        raise HTTPException(409, CHANGED)
 
 
 def trial_of(
@@ -1787,13 +1862,35 @@ def linked_group(
     """
     # 始めた後に受け持ちを答え直した場合も断る
     linked = linked_problem(request, source_id)
-    if not is_group(linked[2]):
+    require_group(linked[2])
+
+    return linked
+
+
+def require_group(problem: dict[str, Any]) -> None:
+    """
+    問題の設定がまとめるで学習する受け持ちであることを確かめる関数
+
+    Parameters
+    ----------
+    problem: dict[str, Any]
+        問題の設定
+
+    Returns
+    ----------
+    None
+
+    Raises
+    ----------
+    HTTPException
+        まとめるでなくなっていれば 422
+    """
+    # 始めた後に受け持ちを答え直した場合
+    if not is_group(problem):
         raise HTTPException(
             422, "この問題の設定はまとめるで学習する受け持ちではありません. "
             "問題の設定から始め直してください"
         )
-
-    return linked
 
 
 @router.get("/sources/{source_id}/group_problem")
@@ -1909,9 +2006,9 @@ def check_group_problem(
         問題の設定から始めていなければ 404, まとめるでなくなっているか,
         書き戻せない選び方は 422
     """
-    # 保存はしない
-    _, path, problem = linked_group(request, source_id)
-    version = version_of(path)
+    # 保存はしない. 変わる点と印は同じ中身から
+    _, path, problem, version = linked_versioned(request, source_id)
+    require_group(problem)
     trial = group_trial(problem, body.group)
     result = {
         "name": problem.get("name"), "path": str(path), "version": version,
@@ -1951,9 +2048,12 @@ def write_group_problem(
         書き戻せない選び方か, 保存できなければ 422, 確かめた後に問題の
         設定が変わった場合は 409
     """
-    # 確かめた後に変わっていないこと (読む前と後の中身の印も同じ)
-    _, path, problem = linked_group(request, source_id)
-    unchanged(path, body.version)
+    # 確かめた後に変わっていないこと (書き戻す中身と印は同じ読みから.
+    # 保存の直前にも見る)
+    _, path, problem, version = linked_versioned(request, source_id)
+    if version != body.version:
+        raise HTTPException(409, CHANGED)
+    require_group(problem)
     trial = group_trial(problem, body.group)
     updated = trial["problem"]
     unchanged(path, body.version)

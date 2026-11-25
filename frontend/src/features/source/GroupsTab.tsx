@@ -174,8 +174,8 @@ function ProblemAnswersCard({
               ここの調整ランド指数は乱数の種を変えて作り直したものです.
             </p>
           )}
-          {/* 読み上げに知らせるため, 枠は常に置いて中身だけ変える */}
-          <p role="status" className="mt-2 text-xs text-warning-text empty:hidden">
+          {/* 読み上げに知らせるため, 枠は常に置いて中身だけ変える (空の間は見た目だけ隠し, 読み上げの木に残す) */}
+          <p role="status" className="mt-2 text-xs text-warning-text empty:sr-only">
             {differs &&
               '群を作る列, 行を見分ける列か群の数が問題の設定の答えと違います. 学習のプロジェクトの骨組みは問題の設定の答えで群を作ります. この選び方にするなら, 問題の設定に書き戻してください.'}
           </p>
@@ -276,8 +276,8 @@ function GroupWriteBack({
         </>
       )}
       {write.error && <ErrorBox error={write.error} />}
-      {/* 読み上げに知らせるため, 枠は常に置いて中身だけ変える */}
-      <div role="status" className="text-xs text-good-text empty:hidden">
+      {/* 読み上げに知らせるため, 枠は常に置いて中身だけ変える (空の間は見た目だけ隠し, 読み上げの木に残す) */}
+      <div role="status" className="text-xs text-good-text empty:sr-only">
         {written && (
           <>
             問題の設定に書き戻しました.
@@ -363,8 +363,8 @@ function ProjectExportCard({
         </Button>
       )}
       {exporter.error && <ErrorBox error={exporter.error} />}
-      {/* 読み上げに知らせるため, 枠は常に置いて中身だけ変える */}
-      <p role="status" className="mt-3 text-sm text-good-text empty:hidden">
+      {/* 読み上げに知らせるため, 枠は常に置いて中身だけ変える (空の間は見た目だけ隠し, 読み上げの木に残す) */}
+      <p role="status" className="mt-3 text-sm text-good-text empty:sr-only">
         {done &&
           `${
             done.copied
@@ -536,8 +536,8 @@ function ExportCard({
           )}
         </ErrorBox>
       )}
-      {/* 読み上げに知らせるため, 枠は常に置いて中身だけ変える */}
-      <p role="status" className="mt-3 text-sm text-good-text empty:hidden">
+      {/* 読み上げに知らせるため, 枠は常に置いて中身だけ変える (空の間は見た目だけ隠し, 読み上げの木に残す) */}
+      <p role="status" className="mt-3 text-sm text-good-text empty:sr-only">
         {done && `書き出しました: ${done.path}`}
       </p>
       {done && (

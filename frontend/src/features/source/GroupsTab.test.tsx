@@ -403,6 +403,11 @@ test('答えと違う選び方は, 変わる点を確かめてから書き戻し
   await waitFor(() =>
     expect(check).toHaveBeenLastCalledWith('s1', { columns: ['spend', 'region'], id: null, k: 5 }),
   )
+  // 知らせの枠は空でも見た目だけ隠し, 読み上げの木に残す (display: none にしない)
+  for (const status of screen.getAllByRole('status')) {
+    expect(status.className).toContain('empty:sr-only')
+    expect(status.className).not.toContain('empty:hidden')
+  }
   const changes = await screen.findByRole('region', { name: '書き戻すと変わる点' })
   expect(changes).toHaveTextContent('群の数を 5 に書き戻した')
   expect(changes).toHaveTextContent('骨組みを書き出し直してください')

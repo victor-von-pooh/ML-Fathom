@@ -1,4 +1,5 @@
 import ast
+import hashlib
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Optional
@@ -887,6 +888,184 @@ def test_group_write_back_refusals(
     )
     assert response.status_code == 422
     assert "まとめる" in response.json()["detail"]
+
+
+@pytest.mark.parametrize("k", [1, 51, 1000])
+def test_group_write_back_k_range(
+    client: TestClient, tmp_path: Path, k: int
+) -> None:
+    """
+    範囲の外の群の数 (画面と群の要約と同じ 2 から 50 の外) は, 確かめも
+    書き戻しも断って保存しないことを確かめる関数
+
+    Parameters
+    ----------
+    client: TestClient
+        クライアント
+    tmp_path: Path
+        一時ディレクトリ
+    k: int
+        群の数
+
+    Returns
+    ----------
+    None
+    """
+    # 中身の印は正しくても断る
+    path, _ = saved_problem(tmp_path, group_problem())
+    source = client.post(
+        "/api/problems/start", json={"path": str(path)}
+    ).json()["source"]
+    url = f"/api/sources/{source['id']}"
+    file = path / "problem.yaml"
+    before = file.read_bytes()
+    version = client.post(
+        f"{url}/group_problem/check", json={"group": {"k": 5}}
+    ).json()["version"]
+    assert client.post(
+        f"{url}/group_problem/check", json={"group": {"k": k}}
+    ).status_code == 422
+    assert client.post(f"{url}/group_problem/write", json={
+        "group": {"k": k}, "version": version,
+    }).status_code == 422
+    assert file.read_bytes() == before
+
+
+def test_group_write_back_same_read(
+    client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """
+    読んだ直後に外で保存されても, 変わる点と中身の印は同じ読みから作り,
+    書き戻しは外の変更を上書きせずに 409 で断ることを確かめる関数
+
+    Parameters
+    ----------
+    client: TestClient
+        クライアント
+    tmp_path: Path
+        一時ディレクトリ
+    monkeypatch: pytest.MonkeyPatch
+        読みの差し替え
+
+    Returns
+    ----------
+    None
+    """
+    # 読んだ直後に, 外で群の数を 6 に保存する読み
+    path, _ = saved_problem(tmp_path, group_problem())
+    source = client.post(
+        "/api/problems/start", json={"path": str(path)}
+    ).json()["source"]
+    url = f"/api/sources/{source['id']}"
+    file = path / "problem.yaml"
+    before = file.read_bytes()
+    original = problems.read_problem_bytes
+
+    def racing(place: Path) -> tuple[dict[str, Any], str]:
+        read = original(place)
+        changed = ml_quest.answer(
+            ml_quest.load_problem(place), f"{PART}.group.k", 6
+        )
+        ml_quest.save_problem(changed, place.parent)
+        return read
+
+    monkeypatch.setattr(problems, "read_problem_bytes", racing)
+
+    # 確かめの印は, 変わる点を作った中身 (外の保存の前) の印
+    checked = client.post(
+        f"{url}/group_problem/check", json={"group": {"k": 5}}
+    ).json()
+    assert checked["version"] == hashlib.sha256(before).hexdigest()
+    assert checked["changes"][0] == "群の数を 5 に書き戻した"
+
+    # 書き戻しは, 読んだ後の外の保存を上書きしない
+    file.write_bytes(before)
+    response = client.post(f"{url}/group_problem/write", json={
+        "group": {"k": 5}, "version": checked["version"],
+    })
+    assert response.status_code == 409
+    problem = ml_quest.load_problem(file)
+    assert ml_quest.active_value(problem, f"{PART}.group.k") == 6
+
+
+def test_group_write_back_linked_refusals(
+    client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """
+    問題の設定から始めていないデータ (404), 作った時刻が変わった問題の設定,
+    まとめるでなくなった問題の設定, 保存できない場合 (422) の書き戻しを
+    確かめる関数
+
+    Parameters
+    ----------
+    client: TestClient
+        クライアント
+    tmp_path: Path
+        一時ディレクトリ
+    monkeypatch: pytest.MonkeyPatch
+        保存の差し替え
+
+    Returns
+    ----------
+    None
+    """
+    # 問題の設定から始めていないデータは, 確かめも書き戻しも 404
+    plain = client.post("/api/sources", json={
+        "path": str(write_rows(tmp_path / "plain"))
+    }).json()
+    plain_url = f"/api/sources/{plain['id']}"
+    assert client.post(
+        f"{plain_url}/group_problem/check", json={"group": {"k": 5}}
+    ).status_code == 404
+    assert client.post(f"{plain_url}/group_problem/write", json={
+        "group": {"k": 5}, "version": "v",
+    }).status_code == 404
+
+    # 保存できなければ 422 で, ファイルは変えない
+    path, _ = saved_problem(tmp_path, group_problem())
+    source = client.post(
+        "/api/problems/start", json={"path": str(path)}
+    ).json()["source"]
+    url = f"/api/sources/{source['id']}"
+    file = path / "problem.yaml"
+    before = file.read_bytes()
+    version = hashlib.sha256(before).hexdigest()
+
+    def refuse(problem: dict[str, Any], place: Any) -> dict[str, Any]:
+        raise OSError("書けません")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(ml_quest, "save_problem", refuse)
+        response = client.post(f"{url}/group_problem/write", json={
+            "group": {"k": 5}, "version": version,
+        })
+    assert response.status_code == 422
+    assert "保存できません" in response.json()["detail"]
+    assert file.read_bytes() == before
+
+    # 作った時刻が変われば (別の問題の設定に置き換わった) 422
+    problem = ml_quest.load_problem(file)
+    problem["created_at"] = "2000-01-01T00:00:00"
+    ml_quest.save_problem(problem, path)
+    replaced = file.read_bytes()
+    response = client.post(f"{url}/group_problem/write", json={
+        "group": {"k": 5}, "version": hashlib.sha256(replaced).hexdigest(),
+    })
+    assert response.status_code == 422
+    assert "別の問題の設定に置き換わっています" in response.json()["detail"]
+    file.write_bytes(before)
+
+    # まとめるでなくなれば, 中身の印が正しくても書き戻さない
+    problem = ml_quest.load_problem(file)
+    problem["ml"]["parts"][0]["role"] = "predict"
+    ml_quest.save_problem(problem, path)
+    changed = file.read_bytes()
+    response = client.post(f"{url}/group_problem/write", json={
+        "group": {"k": 5}, "version": hashlib.sha256(changed).hexdigest(),
+    })
+    assert response.status_code == 422
+    assert "まとめる" in response.json()["detail"]
+    assert file.read_bytes() == changed
 
 
 @pytest.mark.parametrize("value, expected", [
