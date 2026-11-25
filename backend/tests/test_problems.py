@@ -1,4 +1,5 @@
 import hashlib
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -777,6 +778,55 @@ def test_export_project_outside(
     assert sorted(item.name for item in outside.iterdir()) == [
         "dataset.yaml"
     ]
+
+
+@pytest.mark.parametrize("made", [True, False])
+def test_export_project_swapped(
+    client: TestClient, tmp_path: Path,
+    swap_after_check: Callable[[Path, Path], None], made: bool
+) -> None:
+    """
+    確かめの後に書き出し先の途中が外を指すリンクに替わっても, 理由付きの
+    422 で断り, 外にも書きかけにも何も残さないことを確かめる関数
+
+    Parameters
+    ----------
+    client: TestClient
+        クライアント
+    tmp_path: Path
+        一時ディレクトリ
+    swap_after_check: Callable[[Path, Path], None]
+        確かめの後に途中の場所をリンクに替える差し替え
+    made: bool
+        途中のディレクトリが確かめのときにあったか
+
+    Returns
+    ----------
+    None
+    """
+    # プロジェクトの中の data/dataset に向け, 確かめの後に data を替える
+    path = write_problem(tmp_path)
+    source = client.post(
+        "/api/problems/start", json={"path": str(path)}
+    ).json()["source"]
+    url = f"/api/sources/{source['id']}"
+    recipe = client.get(f"{url}/recipe").json()
+    project = tmp_path / "proj"
+    (project / "data").mkdir(parents=True) if made else project.mkdir()
+    with_project(path, project, project / "data" / "dataset")
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    swap_after_check(project / "data", outside)
+
+    # 理由付きで断り, 外にも途中にも書かない
+    refused = client.post(f"{url}/export_project", json={
+        "recipe": recipe, "overwrite": True
+    })
+    assert refused.status_code == 422
+    assert "外を指すように替わった" in refused.json()["detail"]
+    assert list(outside.iterdir()) == []
+    moved = project / "data.moved"
+    assert not moved.exists() or list(moved.iterdir()) == []
 
 
 def test_write_keeps_project(client: TestClient, tmp_path: Path) -> None:

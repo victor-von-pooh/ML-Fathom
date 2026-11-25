@@ -1,6 +1,7 @@
 import os
+import secrets
 import shutil
-import tempfile
+import stat
 from pathlib import Path
 from typing import Any, Optional
 
@@ -9,6 +10,7 @@ import ml_quest
 from fastapi import HTTPException
 
 from ml_fathom.jsonable import to_json
+from ml_fathom.places import Parent
 
 # 並べるの問題の設定から始めた反応の表の種類 (表として読み, 画面は反応の表
 # の分析を出す)
@@ -192,19 +194,21 @@ def file_state(path: Path) -> str:
     return state
 
 
-def copy_file(source: Path, target: Path) -> bool:
+def copy_file(source: Path, parent: Parent) -> bool:
     """
     反応の表か群分けの表のファイルを, そのまま書き出し先に写す関数
 
     途中で止まっても前のファイルが壊れないように, 同じディレクトリの一時
-    ファイルに写してから置き換える
+    ファイルに写してから置き換える. 書き込みは一段ずつ確かめた親の記述子に
+    対して行う (途中の場所がリンクに替わっても, プロジェクトの外に書かない
+    ため)
 
     Parameters
     ----------
     source: Path
         登録した表
-    target: Path
-        書き出し先 (骨組みの config の data.dataset)
+    parent: Parent
+        書き出し先 (骨組みの config の data.dataset) の親 (pinned_parent)
 
     Returns
     ----------
@@ -216,21 +220,34 @@ def copy_file(source: Path, target: Path) -> bool:
     OSError
         読めないか書けない場合
     """
-    # 同じファイルは写さない
-    if target.exists() and os.path.samefile(source, target):
-        return False
-    target.parent.mkdir(parents=True, exist_ok=True)
-    handle, temporary = tempfile.mkstemp(
-        prefix=f".{target.name}.", dir=target.parent
-    )
-    os.close(handle)
+    # 同じファイルは写さない (書き出し先のリンクはたどらずに比べる)
+    name = parent.place.name
+    origin = os.stat(source)
     try:
-        # 一時ファイルは持ち主だけが読める権限なので, 元の権限にそろえる
-        shutil.copyfile(source, temporary)
-        shutil.copymode(source, temporary)
-        os.replace(temporary, target)
+        current = os.stat(name, dir_fd=parent.fd, follow_symlinks=False)
+    except FileNotFoundError:
+        current = None
+    if current is not None and (current.st_dev, current.st_ino) == (
+        origin.st_dev, origin.st_ino
+    ):
+        return False
+
+    # 一時ファイルは元の権限にそろえ, 写し終えてから置き換える
+    temporary = f".{name}.{secrets.token_hex(8)}"
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW
+    handle = os.open(temporary, flags, 0o600, dir_fd=parent.fd)
+    try:
+        with open(handle, "wb") as written, open(source, "rb") as read:
+            shutil.copyfileobj(read, written)
+            os.fchmod(written.fileno(), stat.S_IMODE(origin.st_mode))
+        os.replace(
+            temporary, name, src_dir_fd=parent.fd, dst_dir_fd=parent.fd
+        )
     except BaseException:
-        Path(temporary).unlink(missing_ok=True)
+        try:
+            os.unlink(temporary, dir_fd=parent.fd)
+        except FileNotFoundError:
+            pass
         raise
     copied = True
 

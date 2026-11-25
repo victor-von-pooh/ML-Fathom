@@ -1,4 +1,5 @@
 import ast
+from collections.abc import Callable
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -469,6 +470,48 @@ def test_rank_export_outside(
     assert refused.status_code == 422
     assert refused.json()["detail"] == shown["reason"]
     assert outside.read_text("utf-8") == "keep\n"
+
+
+def test_rank_export_swapped(
+    client: TestClient, tmp_path: Path,
+    swap_after_check: Callable[[Path, Path], None]
+) -> None:
+    """
+    確かめの後に書き出し先の途中が外を指すリンクに替わっても, 理由付きの
+    422 で断り, 外のファイルを置き換えないことを確かめる関数
+
+    Parameters
+    ----------
+    client: TestClient
+        クライアント
+    tmp_path: Path
+        一時ディレクトリ
+    swap_after_check: Callable[[Path, Path], None]
+        確かめの後に途中の場所をリンクに替える差し替え
+
+    Returns
+    ----------
+    None
+    """
+    # 外に同じ名前のファイルを置き, 確かめの後に書き出し先の親を替える
+    path, project = saved_problem(tmp_path, rank_problem())
+    source = client.post(
+        "/api/problems/start", json={"path": str(path)}
+    ).json()["source"]
+    url = f"/api/sources/{source['id']}"
+    target = project / skeleton_config(project).data.dataset
+    assert target.parent != project
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / target.name).write_text("keep\n", encoding="utf-8")
+    swap_after_check(target.parent, outside)
+
+    # 理由付きで断り, 外のファイルは残し, 一時ファイルも残さない
+    refused = client.post(f"{url}/export_reactions", json={"overwrite": True})
+    assert refused.status_code == 422
+    assert "外を指すように替わった" in refused.json()["detail"]
+    assert (outside / target.name).read_text("utf-8") == "keep\n"
+    assert [item.name for item in outside.iterdir()] == [target.name]
 
 
 def test_rank_not_startable(client: TestClient, tmp_path: Path) -> None:

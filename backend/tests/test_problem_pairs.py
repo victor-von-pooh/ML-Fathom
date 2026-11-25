@@ -1,5 +1,6 @@
 import copy
 import hashlib
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -373,6 +374,48 @@ def test_export_refusals(client: TestClient, tmp_path: Path) -> None:
     response = client.post(url, json=body)
     assert response.status_code == 409
     assert "データセットではない" in response.json()["detail"]
+    assert current(path) == before
+
+
+def test_export_swapped(
+    client: TestClient, tmp_path: Path,
+    swap_after_check: Callable[[Path, Path], None]
+) -> None:
+    """
+    確かめの後に書き出し先の途中が外を指すリンクに替わっても, 理由付きの
+    422 で断り, 外にも書きかけにも何も残さず, 書き戻さないことを確かめる
+    関数
+
+    Parameters
+    ----------
+    client: TestClient
+        クライアント
+    tmp_path: Path
+        一時ディレクトリ
+    swap_after_check: Callable[[Path, Path], None]
+        確かめの後に途中の場所をリンクに替える差し替え
+
+    Returns
+    ----------
+    None
+    """
+    # 書き出し先 outputs/dataset の outputs を, 確かめの後に替える
+    path = write_kind_problem(tmp_path, "mask")
+    draft = client.get(
+        "/api/problems/pairs", params={"path": str(path)}
+    ).json()
+    before = current(path)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    swap_after_check(tmp_path / "project" / "outputs", outside)
+
+    # 理由付きで断り, 外に書かず, 問題の設定も変えない
+    body = export_body(path, draft)
+    body["overwrite"] = True
+    refused = client.post("/api/problems/pairs/export", json=body)
+    assert refused.status_code == 422
+    assert "外を指すように替わった" in refused.json()["detail"]
+    assert list(outside.iterdir()) == []
     assert current(path) == before
 
 
