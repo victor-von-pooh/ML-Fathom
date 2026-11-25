@@ -32,7 +32,13 @@ from ml_fathom.groups import (
     is_group,
 )
 from ml_fathom.jsonable import to_json
-from ml_fathom.places import Parent, pinned_parent
+from ml_fathom.places import (
+    Parent,
+    opened_path,
+    opened_state,
+    pinned_parent,
+    same_parent,
+)
 from ml_fathom.reactions import (
     REACTIONS_KIND,
     copy_file,
@@ -1001,7 +1007,7 @@ def get_problem_pairs(path: str) -> dict[str, Any]:
 
 
 def pair_call(
-    settings: dict[str, Any], target: Path, overwrite: bool
+    settings: dict[str, Any], parent: Parent, overwrite: bool
 ) -> dict[str, Any]:
     """
     書き出しの設定のまま, ML-EDA のファイルの組の書き出しを呼ぶ関数
@@ -1011,8 +1017,8 @@ def pair_call(
     settings: dict[str, Any]
         ML-Quest が決まった形にした書き出しの設定 (中身の手順は
         options.item_steps)
-    target: Path
-        書き出し先
+    parent: Parent
+        開いた書き出し先の親 (ML-EDA は親の記述子に対して書く)
     overwrite: bool
         前のデータセットを置き換えるか
 
@@ -1028,10 +1034,11 @@ def pair_call(
     item_steps = options.pop("item_steps", None)
     info: dict[str, Any] = function(
         Path(settings["inputs"]).expanduser(),
-        Path(settings["targets"]).expanduser(), target,
+        Path(settings["targets"]).expanduser(), parent.place,
         split=settings["split"] or None, groups=settings["groups"],
-        origin=settings["origin"] or None, name=target.name,
-        overwrite=overwrite, item_steps=item_steps or None, **options
+        origin=settings["origin"] or None, name=parent.place.name,
+        overwrite=overwrite, item_steps=item_steps or None,
+        parent=parent.fd, **options
     )
 
     return info
@@ -1092,7 +1099,7 @@ def export_problem_pairs(body: PairsExport) -> dict[str, Any]:
         with EXPORT_LOCK, pinned_export(project_record(problem)) as (
             target, parent
         ):
-            state = place_state(parent.place)
+            state = opened_state(parent)
             if state == "occupied":
                 raise HTTPException(
                     409, f"{target} はデータセットではないので置き換えません"
@@ -1102,7 +1109,7 @@ def export_problem_pairs(body: PairsExport) -> dict[str, Any]:
                     409, f"{target} には既にデータセットがあります. 置き換え"
                     "てよいかを確かめてから書き出してください"
                 )
-            info = pair_call(settings, parent.place, body.overwrite)
+            info = pair_call(settings, parent, body.overwrite)
     except HTTPException:
         raise
     except FileExistsError as error:
@@ -1507,6 +1514,34 @@ def export_place(record: Optional[dict[str, str]]) -> Path:
     return target
 
 
+def changed_message(target: Path, parent: Parent) -> str:
+    """
+    書いている最中に書き出し先の途中が替わった場合の理由の文を返す関数
+
+    Parameters
+    ----------
+    target: Path
+        書き出し先 (記録のまま)
+    parent: Parent
+        書き出しに使った, 開いた親
+
+    Returns
+    ----------
+    message: str
+        データセットを書けた場所と, 替わった先に書いていないことの文
+    """
+    # 書けた場所は開いた親の今の場所 (求められなければ開いた時の場所)
+    place = opened_path(parent.fd) or parent.place.parent
+    message = (
+        f"書いている最中に {target} の途中のディレクトリが別の場所に"
+        f"替わりました. データセットは {place / target.name} に書き, "
+        f"今の {target} の先には書いていません. 確かめてからもう一度"
+        "書き出してください"
+    )
+
+    return message
+
+
 @contextmanager
 def pinned_export(
     record: Optional[dict[str, str]]
@@ -1516,8 +1551,8 @@ def pinned_export(
 
     export_place の確かめと書き込みの間に途中の場所がリンクに替わっても,
     プロジェクトの外に書かないように, 書く直前に親の実体を比べ直し, 途中を
-    リンクをたどらずに開く (pinned_parent). 開いた親に対して書くのは
-    copy_file だけで, ML-EDA には開いた親の実体のパスを渡す
+    リンクをたどらずに開く (pinned_parent). 写し (copy_file) も ML-EDA
+    の書き出し (引数 parent) も, 開いた親の記述子に対して書く
 
     Parameters
     ----------
@@ -1652,7 +1687,7 @@ def export_project(
     data = load_source(source)
     try:
         with EXPORT_LOCK, pinned_export(record) as (target, parent):
-            state = place_state(parent.place)
+            state = opened_state(parent)
             if state == "occupied":
                 raise HTTPException(
                     409, f"{target} はデータセットではないので置き換えません"
@@ -1664,8 +1699,14 @@ def export_project(
                 )
             info = ml_eda.export_dataset(
                 data, body.recipe, parent.place, name=target.name,
-                overwrite=body.overwrite
+                overwrite=body.overwrite, parent=parent.fd
             )
+
+            # モデルの入力の数も開いた親を通した読み込み (パスは読まない)
+            # と, 書き出し先のパスが今も開いた親を通るかの確かめ
+            hints = model_hints(parent.place, info, parent.fd)
+            if not same_parent(parent):
+                raise HTTPException(422, changed_message(target, parent))
     except FileExistsError as error:
         raise HTTPException(409, str(error)) from error
     except (ValueError, KeyError, TypeError, AttributeError) as error:
@@ -1679,8 +1720,7 @@ def export_project(
     store.write_recipe(source_id, ml_eda.load_recipe(body.recipe))
     store.update(source_id, {"project_dataset": str(target)})
     result = {
-        "path": str(target), "info": to_json(info),
-        "hints": model_hints(target, info),
+        "path": str(target), "info": to_json(info), "hints": hints,
     }
 
     return result
@@ -1724,7 +1764,7 @@ def copy_to_project(
     # 書き出し先の様子と拡張子を確かめてから写す
     try:
         with EXPORT_LOCK, pinned_export(record) as (target, parent):
-            state = file_state(parent.place)
+            state = opened_state(parent, single=True)
             if state == "occupied":
                 raise HTTPException(
                     409, f"{target} はファイルではないので置き換えません"

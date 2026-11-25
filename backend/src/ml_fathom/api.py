@@ -1465,7 +1465,9 @@ def export(
     return result
 
 
-def model_hints(path: Path, info: dict[str, Any]) -> dict[str, Any]:
+def model_hints(
+    path: Path, info: dict[str, Any], parent: Optional[int] = None
+) -> dict[str, Any]:
     """
     書き出したデータセットに合わせてモデルを組むときの数を求める関数
 
@@ -1475,6 +1477,9 @@ def model_hints(path: Path, info: dict[str, Any]) -> dict[str, Any]:
         書き出したデータセットの場所
     info: dict[str, Any]
         dataset.yaml の中身
+    parent: Optional[int] = None
+        開いた書き出し先の親の記述子 (渡すと ML-EDA が親に対してリンクを
+        たどらずに読み, path の途中は使わない)
 
     Returns
     ----------
@@ -1484,7 +1489,7 @@ def model_hints(path: Path, info: dict[str, Any]) -> dict[str, Any]:
         None, それ以外は 1)
     """
     # 入力の形と型と出力の幅は ML-EDA の model_inputs (バッチの次元を除く)
-    model = ml_eda.model_inputs(path)
+    model = ml_eda.model_inputs(path, parent=parent)
     single = model["inputs"][0]
     hints: dict[str, Any] = {
         "input_shape": [int(size) for size in single["shape"][1:]],

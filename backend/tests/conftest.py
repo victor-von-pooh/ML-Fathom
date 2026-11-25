@@ -3,6 +3,9 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Optional
 
+import ml_eda.items
+import ml_eda.pipeline
+import pandas as pd
 import pytest
 
 from ml_fathom import places, problems
@@ -74,5 +77,68 @@ def swap_after_check(
             monkeypatch.setattr(problems, "export_place", after_check)
         else:
             monkeypatch.setattr(places.os, "mkdir", in_walk)
+
+    return swap
+
+
+@pytest.fixture
+def swap_while_writing(
+    monkeypatch: pytest.MonkeyPatch
+) -> Callable[[Path, Path, str], None]:
+    """
+    ML-EDA が書き出している最中か, 書いた直後に, 途中の場所を外を指す
+    シンボリックリンクに替える差し替えを返す関数
+
+    Parameters
+    ----------
+    monkeypatch: pytest.MonkeyPatch
+        ML-EDA の書き込みか, このアプリの確かめの差し替え
+
+    Returns
+    ----------
+    swap: Callable[[Path, Path, str], None]
+        途中の場所と, リンクの指す外のディレクトリと, 替える時 (frame は
+        表を書く時, finish は親の中に入れ替える直前, read は書いた後に
+        モデルの入力の数を読む直前) を受け取り, 差し替えを仕掛ける関数
+    """
+    # 版 1 (pipeline) とファイルの組 (items) の表の書き込みと, 入れ替え
+    modules = (ml_eda.pipeline, ml_eda.items)
+    frames = {module: module.write_frame for module in modules}
+    move = ml_eda.pipeline.move_into
+    hints = problems.model_hints
+
+    def swap(part: Path, outside: Path, when: str) -> None:
+        # 1 度だけの差し替え
+        done: list[bool] = []
+
+        def once() -> None:
+            if not done:
+                done.append(True)
+                move_and_link(part, outside)
+
+        def writing(module: Any) -> Callable[[pd.DataFrame, Path], str]:
+            def write(frame: pd.DataFrame, path: Path) -> str:
+                once()
+                name: str = frames[module](frame, path)
+                return name
+
+            return write
+
+        def moving(*args: Any) -> None:
+            once()
+            move(*args)
+
+        def reading(*args: Any) -> dict[str, Any]:
+            once()
+            found: dict[str, Any] = hints(*args)
+            return found
+
+        if when == "frame":
+            for module in modules:
+                monkeypatch.setattr(module, "write_frame", writing(module))
+        elif when == "finish":
+            monkeypatch.setattr(ml_eda.pipeline, "move_into", moving)
+        else:
+            monkeypatch.setattr(problems, "model_hints", reading)
 
     return swap
