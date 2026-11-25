@@ -1342,8 +1342,8 @@ def export_place(record: Optional[dict[str, str]]) -> Path:
     Raises
     ----------
     HTTPException
-        記録 (dataset と path) が無いか絶対パスでない場合は 422,
-        プロジェクトか, プロジェクトの外の親のディレクトリが無い場合は 404
+        記録 (dataset と path) が無いか絶対パスでない場合と, 書き出し先が
+        プロジェクトの中でない場合は 422, プロジェクトが無い場合は 404
     """
     # 記録の書き出し先 (学習のスクリプトがデータセットを読む場所)
     text = (record or {}).get("dataset")
@@ -1366,16 +1366,28 @@ def export_place(record: Optional[dict[str, str]]) -> Path:
             "絶対パスではありません"
         )
 
-    # プロジェクトがあること. 親はプロジェクトの中なら作り, 外なら既にある
-    # ものだけ (消したか動かしたプロジェクトの場所に作らないように)
+    # プロジェクトがあること (消したか動かしたプロジェクトの場所に作らない
+    # ように)
     if not root.is_dir():
         raise HTTPException(
             404, f"プロジェクト {project} がありません. 消したか動かした"
             "場合は, ML-Pathfinder でプロジェクトを作り直してください"
         )
-    inside = target.resolve().is_relative_to(root.resolve())
-    if not inside and not target.parent.is_dir():
-        raise HTTPException(404, f"{target.parent} がありません")
+
+    # 書き出し先はプロジェクトの中だけ (.. と途中のリンクをたどった後で
+    # 比べる. 書き換えた記録で外のファイルを置き換えないように). 書き出し先
+    # そのものが中を指すリンクなら, 置き換えないもの (occupied) として返す
+    base = root.resolve()
+    place = target.parent.resolve() / target.name
+    places = (place, target.resolve())
+    if target.name in ("", "..") or base in places or not all(
+        item.is_relative_to(base) for item in places
+    ):
+        raise HTTPException(
+            422, f"書き出し先 {target} がプロジェクト {project} の中に"
+            "ありません. 外には書き出さないので, ML-Pathfinder で"
+            "プロジェクトを作り直してください"
+        )
 
     return target
 

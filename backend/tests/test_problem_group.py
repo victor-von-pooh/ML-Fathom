@@ -427,6 +427,90 @@ def test_group_refusals(client: TestClient, tmp_path: Path) -> None:
     assert "まとめる" in response.json()["detail"]
 
 
+def outside_place(kind: str, project: Path, outside: Path) -> Path:
+    """
+    プロジェクトの外を指す書き出し先を作る関数
+
+    Parameters
+    ----------
+    kind: str
+        absolute (外の絶対パス), parent (.. で外), link (外を指す途中の
+        リンクの下), target (外を指すリンクそのもの)
+    project: Path
+        プロジェクトのディレクトリ
+    outside: Path
+        プロジェクトの外の, 置き換えられてはいけないファイル
+
+    Returns
+    ----------
+    place: Path
+        記録に書く書き出し先 (絶対パス)
+    """
+    # 途中のリンクと, 書き出し先そのもののリンクは, プロジェクトの中に置く
+    if kind == "absolute":
+        place = outside
+    elif kind == "parent":
+        place = project / ".." / outside.parent.name / outside.name
+    elif kind == "link":
+        (project / "shared").symlink_to(
+            outside.parent, target_is_directory=True
+        )
+        place = project / "shared" / outside.name
+    else:
+        (project / outside.name).symlink_to(outside)
+        place = project / outside.name
+
+    return place
+
+
+@pytest.mark.parametrize("kind", ["absolute", "parent", "link", "target"])
+def test_group_export_outside(
+    client: TestClient, tmp_path: Path, kind: str
+) -> None:
+    """
+    書き出し先がプロジェクトの外 (絶対パス, .., リンク) なら, 置き換えの
+    印を付けても理由付きの 422 で断り, 外のファイルを置き換えないことを
+    確かめる関数
+
+    Parameters
+    ----------
+    client: TestClient
+        クライアント
+    tmp_path: Path
+        一時ディレクトリ
+    kind: str
+        外を指す書き出し先の種類 (outside_place)
+
+    Returns
+    ----------
+    None
+    """
+    # 外に, 拡張子の同じファイルを置き, 記録をそこへ向ける
+    path, project = saved_problem(tmp_path, group_problem())
+    source = client.post(
+        "/api/problems/start", json={"path": str(path)}
+    ).json()["source"]
+    url = f"/api/sources/{source['id']}"
+    target = project / skeleton_config(project).data.dataset
+    outside = tmp_path / "outside" / target.name
+    outside.parent.mkdir()
+    outside.write_text("keep\n", encoding="utf-8")
+    problem = ml_quest.load_problem(path / "problem.yaml")
+    problem["project"]["dataset"] = str(
+        outside_place(kind, project, outside)
+    )
+    ml_quest.save_problem(problem, path)
+
+    # 様子にも書き出しにも同じ理由を出し, 外のファイルは残す
+    shown = client.get(f"{url}/project").json()
+    assert shown["ready"] is False and shown["state"] is None
+    assert "の中にありません" in shown["reason"]
+    refused = client.post(f"{url}/export_group_project", json={"overwrite": True})
+    assert refused.status_code == 422
+    assert refused.json()["detail"] == shown["reason"]
+    assert outside.read_text("utf-8") == "keep\n"
+
+
 def test_group_not_startable(client: TestClient, tmp_path: Path) -> None:
     """
     データを入れていないか, 答えの列が表に無いまとめるの問題の設定は,
