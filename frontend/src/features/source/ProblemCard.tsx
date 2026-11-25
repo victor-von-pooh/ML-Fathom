@@ -30,6 +30,7 @@ export function ProblemCard({
   notes = [],
   recipe,
   latest,
+  paused = false,
   onWritten,
 }: {
   sourceId: string
@@ -39,6 +40,8 @@ export function ProblemCard({
   recipe: Recipe | null
   /** 待つ前の最新の編集中のレシピ (書き戻すのはこれ) */
   latest: Recipe | null
+  /** 問題の設定の受け持ちを読み直している間は確かめない (読み直した後に確かめ直す) */
+  paused?: boolean
   onWritten: (recipe: Recipe) => void
 }) {
   const queryClient = useQueryClient()
@@ -48,9 +51,12 @@ export function ProblemCard({
   const check = useQuery({
     queryKey: ['problem-check', sourceId, JSON.stringify(recipe)],
     queryFn: () => api.checkProblem(sourceId, recipe!),
-    enabled: recipe !== null,
+    // 受け持ちの読み直しと同時に確かめないよう, 画面に戻ったときは確かめ直さず,
+    // 読み直しが済んで止めを外したときに確かめ直す (古くなった結果は外すと読み直す)
+    enabled: recipe !== null && !paused,
     placeholderData: keepPreviousData,
     retry: false,
+    refetchOnWindowFocus: false,
   })
   const data = check.data
   const choices = data?.choices ?? []
@@ -212,14 +218,7 @@ export function ProblemCard({
  * まとめるはレシピを持たないので, 確かめと書き戻しをせず, 理由を案内として出して
  * 群分けのタブ (プロジェクトへ書き出す所) へ導く
  */
-export function GroupProblemNote({
-  problem,
-  notes = [],
-}: {
-  problem: GroupProblem
-  /** 始めたときの知らせ */
-  notes?: string[]
-}) {
+export function GroupProblemNote({ problem }: { problem: GroupProblem }) {
   return (
     <Card
       title={
@@ -236,16 +235,6 @@ export function GroupProblemNote({
           学習のプロジェクトは表をファイル 1 つのまま読み, 分割も学習のプロジェクトが行うため,
           ここでの前処理は問題の設定に書き戻さず, プロジェクトへも書き出しません.
         </p>
-        {notes.length > 0 && (
-          <section aria-label="始めたときの知らせ">
-            <h3 className="text-xs font-semibold text-ink-2">始めたときの知らせ</h3>
-            <ul className="mt-1 list-disc pl-5 text-xs text-ink-2">
-              {notes.map((text) => (
-                <li key={text}>{text}</li>
-              ))}
-            </ul>
-          </section>
-        )}
         <p>
           <Link to="?tab=groups" replace className="text-accent-text underline">
             群分けのタブへ移る

@@ -81,7 +81,7 @@ test('まとめるの問題の設定は, 誤りでなく案内を出して群分
   const call = vi.spyOn(api, 'checkProblem')
   render(
     <MemoryRouter initialEntries={['/sources/s1?tab=recipe']}>
-      <GroupProblemNote problem={GROUPED} notes={['始めたときの知らせ']} />
+      <GroupProblemNote problem={GROUPED} />
     </MemoryRouter>,
   )
   expect(screen.getByText('問題の設定: 客の群')).toBeTruthy()
@@ -90,12 +90,6 @@ test('まとめるの問題の設定は, 誤りでなく案内を出して群分
   expect(screen.queryByRole('button', { name: '問題の設定に書き戻す' })).toBeNull()
   const link = screen.getByRole('link', { name: '群分けのタブへ移る' })
   expect(link.getAttribute('href')).toBe('/sources/s1?tab=groups')
-  expect(
-    within(screen.getByRole('region', { name: '始めたときの知らせ' })).getByText(
-      '始めたときの知らせ',
-      { selector: 'li' },
-    ),
-  ).toBeTruthy()
   // レシピの確かめ (まとめるでは 422) を呼ばない
   expect(call).not.toHaveBeenCalled()
 })
