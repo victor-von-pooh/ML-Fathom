@@ -5,19 +5,13 @@
 
 ## 優先度 高
 
-### ML-Quest を異常の検知の受け渡しの入った版に上げる
-- 何を: submodule の ML-Quest を, 異常の検知の問い, 受け渡し (`anomaly` の欄と, データの分析へ渡す task, split, id, `unlabeled: normal`), `recipe_from` と `apply_recipe` の入った main に上げる
-- なぜ: 今の ML-Quest は正解の種類の異常を知らないので, 異常の検知の問題の設定から始める流れ (docs/DESIGN.md の「15. 異常の検知の表の分析」) が「問題の設定を渡せません」で止まり, 本物の問題の設定で通すテスト (`tests/test_anomaly.py` の `test_quest_anomaly`) も飛ばされるため
-- 終わりの条件: ML-Quest の submodule が異常の検知の入った main を指し, `test_quest_anomaly` が CI で飛ばされずに通る
-- つながり: ML-Quest の docs/DESIGN.md の 8 節「異常の検知の受け持ち」(`recipe_from` のレシピの雛形と `apply_recipe` の書き戻し) と 11 節「異常の検知の骨組み」
-
-## 優先度 中
-
 ### ファイルの組のデータセットにもモデルに要るものを出す
 - 何を: データセットの一覧の版 2 と版 3 (`form: items`) にも, 版 1 と同じくモデルに要るもの (`model`. ML-EDA の `model_inputs` の結果: 項目ごとの入力の名前と形と型, 正解の種類, 出す値の数) を出し, ファイルの組の書き出しの結果にも添える
 - なぜ: ML-EDA の `model_inputs` はファイルの組の版 2 と 3 も受け付けるが, このアプリは版 1 だけで呼ぶため. 画像と領域, 撮影と点群のデータセットでも, モデルの定義 (ML-ModelControl の `inputs` と最後の層の出す数) をデータに合わせるための数を画面で見られない
 - 終わりの条件: 画像と領域, 撮影と点群のデータセットの一覧と書き出しの結果に, ML-EDA の `model_inputs` の入力と出す値の数が出る (群分けの表は ML-EDA が受け付けないので, 出さずに理由を添える). docs/DESIGN.md の「8. データセットの一覧」に書く
 - つながり: ML-EDA の docs/DESIGN.md の「モデルの入力」, ML-ModelControl のモデルの定義の `inputs`
+
+## 優先度 中
 
 ### 書き出しの注意の種類を ML-EDA の印で見分ける
 - 何を: ファイルの組の書き出しの注意 (ML-EDA の `notes`) のうち, 外を指すリンクで除いた件を, 文でなく ML-EDA が返す印 (注意の種類と数) で見分け, 画面の「外を指すリンクの先も写す」の案内を出す

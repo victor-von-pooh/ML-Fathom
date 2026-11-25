@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, NoReturn, Optional
 
 import ml_eda
 import ml_quest
@@ -21,13 +21,6 @@ PART = ml_quest.PART
 # 合成の表の正常の行と異常の行の数
 NORMAL = 90
 ANOMALIES = 10
-
-# ML-Quest が異常の検知の問題の設定を扱えるか (扱えなければ, ML-Quest の
-# 本物の問題の設定で通す確かめは飛ばし, 止まることの確かめ)
-QUEST_ANOMALY = any(
-    item["value"] == "anomaly" for item in ml_quest.TARGET_KINDS
-)
-
 
 @pytest.fixture
 def client(tmp_path: Path) -> TestClient:
@@ -123,8 +116,8 @@ def anomaly_part(problem: dict[str, Any]) -> dict[str, Any]:
     """
     問題の設定の受け持ちを異常の検知にする関数
 
-    ML-Quest の答えの確かめを通さずに受け持ちの答えを書く (異常の検知を
-    知らない ML-Quest でも, この画面の見分けを確かめるため)
+    ML-Quest の答えの確かめを通さずに受け持ちの答えを書く (異常の検知の
+    問いに答えずに, この画面の見分けと止まり方を確かめるため)
 
     Parameters
     ----------
@@ -265,9 +258,9 @@ def start_with(
     ML-Quest の受け渡しの異常の検知のレシピの雛形で, 問題の設定から始める
     関数
 
-    ML-Quest が異常の検知を扱わない場合も, 受け渡しの形 (recipe_from の
-    レシピと load) で始める流れを確かめるため, 問題の設定の読み込みと
-    recipe_from を差し替える
+    ML-Quest が作らない形のレシピ (表に無い列, 表でないデータなど) でも
+    始める流れを確かめるため, 受け渡しの形 (recipe_from のレシピと load)
+    のまま recipe_from を差し替える
 
     Parameters
     ----------
@@ -276,7 +269,7 @@ def start_with(
     tmp_path: Path
         一時ディレクトリ
     monkeypatch: pytest.MonkeyPatch
-        差し替え
+        recipe_from の差し替え
     data: Path
         入れたデータ
     recipe: dict[str, Any]
@@ -293,7 +286,6 @@ def start_with(
     path = tmp_path / "problem" / "problem.yaml"
     path.parent.mkdir(parents=True)
     path.write_text(yaml.safe_dump(problem, allow_unicode=True), "utf-8")
-    monkeypatch.setattr(problems, "read_problem", lambda _: problem)
     monkeypatch.setattr(ml_quest, "recipe_from", lambda _: {
         "load": {"path": str(data), "loader": None, "options": {}},
         "recipe": recipe, "notes": ["骨組みは数の列だけを読みます"],
@@ -442,14 +434,42 @@ def test_start_not_table(
     assert client.get("/api/sources").json() == []
 
 
-@pytest.mark.skipif(QUEST_ANOMALY,
-                    reason="ML-Quest が異常の検知の問題の設定を扱う")
-def test_start_before_quest(
-    client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+# 異常の検知を知らない ML-Quest の受け渡しの誤りの文
+OLD_REASON = "「正解の種類は」の答え anomaly は選べません"
+
+
+def old_handoff(_: dict[str, Any]) -> NoReturn:
+    """
+    異常の検知を知らない ML-Quest の受け渡しの代わりの関数
+
+    Parameters
+    ----------
+    _: dict[str, Any]
+        問題の設定
+
+    Returns
+    ----------
+    never: NoReturn
+        返らない (常に ValueError を上げる)
+
+    Raises
+    ----------
+    ValueError
+        正解の種類の異常を知らない旨 (OLD_REASON)
+    """
+    # 正解の種類の選択肢に異常が無い版の答えの確かめ
+    raise ValueError(OLD_REASON)
+
+
+@pytest.mark.parametrize("old", [False, True], ids=["answer", "old"])
+def test_start_refused(
+    client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    old: bool
 ) -> None:
     """
-    ML-Quest が異常の検知を受けられない場合, 差し替えずに始めると理由を
-    付けて 422 で止まり, 一覧でも始められないことを確かめる関数
+    ML-Quest が異常の検知の問題の設定を受けない場合 (異常の検知の問いに
+    答えていない場合と, 異常の検知を知らない版の場合), 理由を付けて 422
+    で止まり, 一覧でも始められないことを確かめる関数
 
     Parameters
     ----------
@@ -458,14 +478,16 @@ def test_start_before_quest(
     tmp_path: Path
         一時ディレクトリ
     monkeypatch: pytest.MonkeyPatch
-        置き場の環境変数と問題の設定の読み込みの差し替え
+        置き場の環境変数と recipe_from の差し替え
+    old: bool
+        recipe_from を異常の検知を知らない版の受け渡しに差し替えるか
 
     Returns
     ----------
     None
     """
-    # 表を入れた異常の検知の問題の設定 (ML-Quest の答えの確かめを通さずに
-    # 書いたもの. 読み込みだけを差し替え, recipe_from は本物)
+    # 表を入れ, 異常の検知の問いに答えていない問題の設定 (ML-Quest の答え
+    # の確かめを通さずに書いたもの)
     data = write_readings(tmp_path / "raw")
     problem = anomaly_part(ml_quest.example_problem("解約の引き止め"))
     problem.update(name="センサの異常", created_at="2000-01-01T00:00:00")
@@ -474,18 +496,22 @@ def test_start_before_quest(
     path.parent.mkdir(parents=True)
     path.write_text(yaml.safe_dump(problem, allow_unicode=True), "utf-8")
     monkeypatch.setenv("ML_PATHFINDER_HOME", str(tmp_path / "pathfinder"))
-    monkeypatch.setattr(problems, "read_problem", lambda _: problem)
+    if old:
+        monkeypatch.setattr(ml_quest, "recipe_from", old_handoff)
+    reason = OLD_REASON if old else "「異常の正解の列は」に答えてください"
 
-    # 始めると 422 で, データは登録しない
+    # 始めると 422 で ML-Quest の理由があり, データは登録しない
     started = client.post("/api/problems/start", json={"path": str(path)})
     assert started.status_code == 422
-    assert "問題の設定を渡せません" in started.json()["detail"]
+    detail = started.json()["detail"]
+    assert "問題の設定を渡せません" in detail and reason in detail
     assert client.get("/api/sources").json() == []
 
-    # 一覧でも始められず, 理由がある
+    # 一覧でも始められず, 同じ理由がある
     listed = client.get("/api/problems").json()["problems"]
     assert [item["startable"] for item in listed] == [False]
     assert "問題の設定を渡せません" in listed[0]["reason"]
+    assert reason in listed[0]["reason"]
 
 
 def quest_problem(tmp_path: Path, data: Path) -> tuple[Path, Path]:
@@ -537,8 +563,6 @@ def quest_problem(tmp_path: Path, data: Path) -> tuple[Path, Path]:
     return paths
 
 
-@pytest.mark.skipif(not QUEST_ANOMALY,
-                    reason="ML-Quest が異常の検知の問題の設定を扱わない")
 def test_quest_anomaly(
     client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
