@@ -33,6 +33,8 @@ import type {
   ReactionsExportResult,
   ReactionsResult,
   TrajectorySummary,
+  UpliftRequest,
+  UpliftSummary,
 } from './types'
 
 /** API がエラーを返したときの例外 */
@@ -100,6 +102,8 @@ export const api = {
       `/api/sources/${id}/export_reactions`,
       json('POST', { overwrite }),
     ),
+  uplift: (id: string, body: UpliftRequest) =>
+    request<UpliftSummary>(`/api/sources/${id}/uplift`, json('POST', body)),
   groups: (id: string, body: GroupRequest) =>
     request<GroupSummary>(`/api/sources/${id}/groups`, json('POST', body)),
   exportGroups: (id: string, body: GroupExport) =>

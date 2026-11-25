@@ -303,8 +303,15 @@ export interface Recipe {
   format_version: number
   target: string | null
   task: string
-  /** 異常の検知 (task: anomaly) の行の id の列 (無ければ ML-EDA が行の位置の row_id を置く) */
+  /**
+   * 異常の検知 (task: anomaly) と効果を見積もる (task: uplift) の行の id の列 (無ければ ML-EDA が
+   * 行の位置の row_id を置く)
+   */
   id?: string
+  /** 効果を見積もる (task: uplift) の処置の列 (処置の群は 1 か真, 対照の群は 0 か偽) */
+  treatment?: string
+  /** 効果を見積もるの結果の種類 (無ければ ML-EDA が値から決める) */
+  outcome?: UpliftOutcome
   steps: RecipeStep[]
   item_steps?: RecipeStep[]
   split: {
@@ -319,6 +326,75 @@ export interface Recipe {
      */
     unlabeled?: 'drop' | 'keep' | 'normal'
   }
+}
+
+/** 効果を見積もるの結果の種類 (起きたかの 0 と 1 か, 量) */
+export type UpliftOutcome = 'binary' | 'amount'
+
+/** 効果を見積もるの分割 1 つの群の数と結果の平均 (ML-EDA の説明の uplift.splits の 1 つ) */
+export interface UpliftSplit {
+  /** 処置の群の行の数 */
+  treated: number
+  /** 対照の群の行の数 */
+  control: number
+  /** 群ごとの結果の平均 (unlabeled の分割と行の無い群は null) */
+  treated_mean: number | null
+  control_mean: number | null
+  /** 結果の平均の差 (処置の群 − 対照の群) */
+  effect: number | null
+}
+
+/** 効果を見積もるの処置の列, 結果の種類と分割ごとの群の数 (ML-EDA の説明の uplift) */
+export interface UpliftSplits {
+  /** 行の id の列の名前 */
+  id: string
+  /** 処置の列の名前 */
+  treatment: string
+  /** 結果の種類 (値から決めた場合も) */
+  outcome: UpliftOutcome
+  /** 結果の欠けた行の扱い */
+  unlabeled: 'drop' | 'keep'
+  splits: Record<string, UpliftSplit>
+}
+
+/** 介入の記録の要約の釣り合いの 1 列 (ML-EDA の describe_uplift の balance の 1 つ) */
+export interface UpliftBalance {
+  column: string
+  /** 分析の型 */
+  type: string
+  /** 標準化した平均の差 (求められなければ null) */
+  smd: number | null
+  /** カテゴリの列で差の最も大きい値 (他は null) */
+  value: string | null
+}
+
+/** 介入の記録の要約 (ML-EDA の describe_uplift の結果) */
+export interface UpliftSummary {
+  treatment: string
+  outcome: string
+  outcome_kind: UpliftOutcome
+  /** 処置と結果の両方が分かる行の数 */
+  rows: number
+  /** 欠けた行の数 */
+  missing: { treatment: number; outcome: number }
+  groups: {
+    treated: { rows: number; mean: number | null }
+    control: { rows: number; mean: number | null }
+  }
+  /** 処置の割合 */
+  treated_rate: number | null
+  /** 結果の平均の差 (全体の効果) */
+  effect: number | null
+  balance: UpliftBalance[]
+  findings: Finding[]
+}
+
+/** 介入の記録の要約を求める欄 */
+export interface UpliftRequest {
+  treatment: string
+  outcome: string
+  outcome_kind?: UpliftOutcome
+  id?: string
 }
 
 /** 異常の検知の分割 1 つの行の数 (ML-EDA の説明の anomaly.rows の 1 つ) */
@@ -363,6 +439,8 @@ export interface PreviewResult {
   classes?: string[]
   /** 異常の検知の行の数 (他のタスクは null) */
   anomaly?: AnomalySummary | null
+  /** 効果を見積もるの分割ごとの群の数 (他のタスクは null) */
+  uplift?: UpliftSplits | null
 }
 
 /** 書き出したデータセットに合わせてモデルを組むときの数 */
@@ -424,6 +502,8 @@ export interface TableDataset extends DatasetBase {
   model: ModelInputs
   /** 異常の検知の説明 (他のタスクは null) */
   anomaly?: AnomalySummary | null
+  /** 効果を見積もるの説明 (他のタスクは null) */
+  uplift?: UpliftSplits | null
 }
 
 /** 正解の出どころ (ML-EDA の target.origin) */

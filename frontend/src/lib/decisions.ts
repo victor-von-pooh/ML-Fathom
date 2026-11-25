@@ -240,10 +240,10 @@ export function findDecisions({
   // 分割の方法
   const split = (method: string): Recipe => ({ ...recipe, split: { ...recipe.split, method } })
   // グループと時刻の組も時刻の順に分ける (後から現れた相手を検証用に) ので勧めない.
-  // 異常の検知は無作為だけ (ML-EDA の決まり) なので勧めない
+  // 異常の検知は無作為だけ, 効果を見積もるは層化だけ (ML-EDA の決まり) なので勧めない
   if (
     kind === 'timeseries' &&
-    recipe.task !== 'anomaly' &&
+    !['anomaly', 'uplift'].includes(recipe.task) &&
     !['time', 'group_time'].includes(recipe.split.method)
   ) {
     found.push({

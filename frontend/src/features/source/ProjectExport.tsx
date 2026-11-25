@@ -4,9 +4,10 @@ import { FolderOutput } from 'lucide-react'
 import { api, ApiError } from '../../api/client'
 import type { Recipe } from '../../api/types'
 import { Button, ErrorBox, Spinner } from '../../components/ui'
-import { anomalyOf } from '../../lib/recipe'
+import { anomalyOf, upliftOf } from '../../lib/recipe'
 import { AnomalyRows } from './AnomalyRows'
 import { ModelHintsView } from './ModelHintsView'
+import { UpliftRows } from './UpliftRows'
 
 /**
  * 問題の設定から始めたデータを, 問題の設定に記録したプロジェクトの書き出し先
@@ -56,6 +57,8 @@ export function ProjectExport({
   const done = exporter.data && same ? exporter.data : null
   // 異常の検知のデータセットの説明の anomaly (他のタスクは null)
   const doneAnomaly = done ? anomalyOf(done.info) : null
+  // 効果を見積もるのデータセットの説明の uplift (他のタスクは null)
+  const doneUplift = done ? upliftOf(done.info) : null
   const failed = exporter.error && same ? exporter.error : null
   if (place.isPending) return <Spinner label="プロジェクトの書き出し先を調べています" />
   // 問題の設定を読めない理由は問題の設定のカードに出るので, ここは短く
@@ -117,7 +120,14 @@ export function ProjectExport({
             プロジェクトへ書き出しました: {done.path}
           </p>
           {doneAnomaly && <AnomalyRows summary={doneAnomaly} />}
-          {done.hints && <ModelHintsView hints={done.hints} anomaly={doneAnomaly !== null} />}
+          {doneUplift && <UpliftRows summary={doneUplift} />}
+          {done.hints && (
+            <ModelHintsView
+              hints={done.hints}
+              anomaly={doneAnomaly !== null}
+              uplift={doneUplift !== null}
+            />
+          )}
         </div>
       )}
     </section>

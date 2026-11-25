@@ -280,3 +280,48 @@ test('異常の検知のデータセットは, 正解の数と異常の割合と
   expect(card.getByText(/2 \(モデルが入力を作り直す値の数/)).toBeInTheDocument()
   expect(card.getByRole('table').textContent).toContain('14')
 })
+
+test('効果を見積もるのデータセットは, 分割ごとの群の数と結果の差を出す', async () => {
+  vi.spyOn(api, 'datasets').mockResolvedValue([
+    {
+      form: 'table',
+      name: 'coupons',
+      path: '/home/datasets/coupons',
+      format_version: 1,
+      created_at: '2026-11-21T10:00:00+09:00',
+      kind: 'table',
+      task: 'uplift',
+      target: 'purchased',
+      splits: { train: 120, valid: 40, test: 40 },
+      features: 2,
+      model: {
+        inputs: [{ name: 'x', shape: [null, 2], dtype: 'float32' }],
+        task: 'uplift',
+        target: 'purchased',
+        classes: [],
+        outputs: 1,
+      },
+      anomaly: null,
+      uplift: {
+        id: 'customer_id',
+        treatment: 'coupon',
+        outcome: 'binary',
+        unlabeled: 'drop',
+        splits: {
+          train: { treated: 61, control: 59, treated_mean: 0.4, control_mean: 0.2, effect: 0.2 },
+          valid: { treated: 21, control: 19, treated_mean: 0.38, control_mean: 0.21, effect: 0.17 },
+          test: { treated: 20, control: 20, treated_mean: 0.45, control_mean: 0.15, effect: 0.3 },
+        },
+      },
+    },
+  ])
+  renderPage()
+  const card = within((await screen.findByText('coupons')).closest('section')!)
+  expect(card.getByText(/効果を見積もる/)).toBeInTheDocument()
+  expect(card.getByText(/1 \(出力の頭 1 つが出す値の数/)).toBeInTheDocument()
+  const table = card.getByRole('table', {
+    name: '分割ごとの処置の群と対照の群の行の数, 群ごとの結果の平均と差',
+  })
+  expect(table.textContent).toContain('0.17')
+  expect(card.getByText(/処置の列:/).textContent).toContain('coupon')
+})
