@@ -5,7 +5,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router'
 
 import { api } from '../../api/client'
-import type { Source } from '../../api/types'
+import type { ProblemStarted, Source } from '../../api/types'
 import { Dialog } from '../../components/Dialog'
 import { Button, ErrorBox, Spinner } from '../../components/ui'
 import { formatBytes, KIND_LABELS } from '../../lib/format'
@@ -95,7 +95,7 @@ export function AddSourceDialog({
 }: {
   onClose: () => void
   /** 登録したデータと, 開くタブ (まとめるの問題の設定から始めた群分けなど) */
-  onAdded: (source: Source, tab?: string | null) => void
+  onAdded: (source: Source, tab?: ProblemStarted['tab']) => void
   mode?: 'data' | 'problem'
 }) {
   const fromProblem = mode === 'problem'

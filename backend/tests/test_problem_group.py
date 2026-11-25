@@ -10,10 +10,12 @@ import pandas as pd
 import pytest
 import yaml
 from fastapi.testclient import TestClient
-from ml_quest.examples import example_problem
+from ml_quest import example_problem
 
+from ml_fathom import problems
 from ml_fathom.api import STAMPS
 from ml_fathom.app import create_app
+from ml_fathom.groups import group_answers
 
 # テストで使うトークン
 TOKEN = "test-token"
@@ -447,3 +449,82 @@ def test_group_not_startable(client: TestClient, tmp_path: Path) -> None:
     assert response.status_code == 422
     assert "customer" in response.json()["detail"]
     assert client.get("/api/sources").json() == []
+
+
+def test_group_start_refusals(
+    client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """
+    入れた表が無いか, ファイルでないか, 表として読めない場合は, 理由を
+    付けて登録しないことを確かめる関数
+
+    Parameters
+    ----------
+    client: TestClient
+        クライアント
+    tmp_path: Path
+        一時ディレクトリ
+    monkeypatch: pytest.MonkeyPatch
+        読み込みの差し替え
+
+    Returns
+    ----------
+    None
+    """
+    # 入れた表 (写しも元も) が消えていれば 404
+    path = problem_place(tmp_path)
+    raw = write_rows(tmp_path / "raw")
+    problem = ml_quest.attach_data(group_problem(), str(raw))
+    ml_quest.save_problem(problem, path)
+    raw.unlink()
+    response = client.post("/api/problems/start", json={"path": str(path)})
+    assert response.status_code == 404
+    assert "customers.csv" in response.json()["detail"]
+
+    # 入れた場所がディレクトリなら 422
+    raw.mkdir()
+    response = client.post("/api/problems/start", json={"path": str(path)})
+    assert response.status_code == 422
+    assert "ファイルではありません" in response.json()["detail"]
+    raw.rmdir()
+
+    # 表か時系列として読めなければ 422 (読み込みの種類を出す)
+    write_rows(tmp_path / "raw")
+    loaded = problems.load_source
+
+    def as_image(source: dict[str, Any]) -> Any:
+        data = loaded(source)
+        return SimpleNamespace(kind="image", frame=data.frame)
+
+    monkeypatch.setattr(problems, "load_source", as_image)
+    response = client.post("/api/problems/start", json={"path": str(path)})
+    assert response.status_code == 422
+    assert "image" in response.json()["detail"]
+    assert client.get("/api/sources").json() == []
+
+
+@pytest.mark.parametrize("value, expected", [
+    (4, 4), (4.0, 4), (True, None), (2.5, None), ("4", None), (None, None),
+])
+def test_group_answers_k(value: Any, expected: Optional[int]) -> None:
+    """
+    群の数の答えは整数の値だけを返し, 他は答えていないものとすることを
+    確かめる関数
+
+    Parameters
+    ----------
+    value: Any
+        問題の設定に書いた群の数
+    expected: Optional[int]
+        返す群の数
+
+    Returns
+    ----------
+    None
+    """
+    # 形の崩れた値も, 画面に数でないものを渡さない
+    problem = group_problem()
+    problem["ml"]["parts"][0]["group"]["k"] = value
+    assert group_answers(problem)["k"] == expected
+    problem["ml"]["parts"][0]["group"]["stability"] = "other"
+    assert group_answers(problem)["stability"] is None

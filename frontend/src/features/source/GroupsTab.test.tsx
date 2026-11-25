@@ -151,8 +151,10 @@ test('群を作る列と行を見分ける列で, 群分けの表を書き出す
       overwrite: false,
     }),
   )
-  expect(await screen.findByRole('status')).toHaveTextContent(
-    '書き出しました: /home/datasets/customers_groups',
+  await waitFor(() =>
+    expect(screen.getByRole('status')).toHaveTextContent(
+      '書き出しました: /home/datasets/customers_groups',
+    ),
   )
   expect(screen.getByText(/半分より多い種類の値/)).toBeInTheDocument()
   expect(
@@ -162,7 +164,7 @@ test('群を作る列と行を見分ける列で, 群分けの表を書き出す
   // 分けない場合は検証用の割合を出さない
   fireEvent.change(screen.getByLabelText('分割'), { target: { value: 'none' } })
   expect(screen.queryByLabelText('検証用の割合')).not.toBeInTheDocument()
-  expect(screen.queryByRole('status')).not.toBeInTheDocument()
+  expect(screen.getByRole('status')).toBeEmptyDOMElement()
 })
 
 test('同じ名前があれば置き換えの案内を添える', async () => {
@@ -334,4 +336,22 @@ test('問題の設定を読めなくても群分けを続けられる', async ()
   expect(await screen.findByRole('alert')).toHaveTextContent('別の問題の設定に置き換わっています')
   expect(screen.getByRole('button', { name: '群を作る' })).toBeEnabled()
   expect(screen.queryByText('プロジェクトへ書き出す')).not.toBeInTheDocument()
+})
+
+test('群の数を答えていない問題の設定は, 開いただけでは答えと違うと知らせない', async () => {
+  vi.spyOn(api, 'groupProblem').mockResolvedValue({
+    ...GROUP_PROBLEM,
+    group: { ...GROUP_PROBLEM.group!, columns: ['spend', 'region'], k: null },
+  })
+  renderLinked()
+  expect(await screen.findByLabelText('群の数')).toHaveValue(3)
+  expect(screen.getByText('答えていません')).toBeInTheDocument()
+  expect(screen.queryByText(/問題の設定の答えと違います/)).not.toBeInTheDocument()
+
+  // 群の数は答えていないので変えても知らせず, 列を変えると知らせる
+  fireEvent.change(screen.getByLabelText('群の数'), { target: { value: '5' } })
+  expect(screen.queryByText(/問題の設定の答えと違います/)).not.toBeInTheDocument()
+  const fields = within(screen.getByRole('group', { name: '群を作る列' }))
+  fireEvent.click(fields.getByRole('checkbox', { name: /region/ }))
+  expect(screen.getByText(/問題の設定の答えと違います/)).toBeInTheDocument()
 })

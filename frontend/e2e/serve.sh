@@ -93,7 +93,7 @@ from pathlib import Path
 
 import ml_quest
 import pandas as pd
-from ml_quest.examples import example_problem
+from ml_quest import example_problem
 
 work = Path(sys.argv[1])
 rows = [
@@ -116,7 +116,7 @@ import sys
 from pathlib import Path
 
 import ml_quest
-from ml_quest.examples import example_problem
+from ml_quest import example_problem
 
 work = Path(sys.argv[1])
 project = work / "project"
@@ -234,7 +234,7 @@ import sys
 from pathlib import Path
 
 import ml_quest
-from ml_quest.examples import example_problem
+from ml_quest import example_problem
 
 work = Path(sys.argv[1])
 problem = example_problem("総菜の作る量")
@@ -267,7 +267,7 @@ from pathlib import Path
 import ml_quest
 import numpy as np
 import pandas as pd
-from ml_quest.examples import example_problem
+from ml_quest import example_problem
 
 work = Path(sys.argv[1])
 rng = np.random.default_rng(4)
@@ -308,7 +308,7 @@ from pathlib import Path
 import ml_quest
 import numpy as np
 import pandas as pd
-from ml_quest.examples import example_problem
+from ml_quest import example_problem
 
 work = Path(sys.argv[1])
 rng = np.random.default_rng(5)
@@ -376,7 +376,7 @@ import sys
 from pathlib import Path
 
 import ml_quest
-from ml_quest.examples import example_problem
+from ml_quest import example_problem
 
 work = Path(sys.argv[1])
 problem = example_problem("解約の引き止め")

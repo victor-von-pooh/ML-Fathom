@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest'
 
-import type { ColumnInfo } from '../api/types'
+import type { ColumnInfo, GroupAnswers } from '../api/types'
 import {
   answerColumns,
   answerK,
@@ -55,7 +55,7 @@ test('書き出した表の読み方の例に場所と群の数を入れる', ()
 })
 
 test('問題の設定の答えの列は表にあるものを表の順に, 違う選び方は列の順を問わずに見分ける', () => {
-  const answers = {
+  const answers: GroupAnswers = {
     columns: ['region', 'spend', 'income'],
     id: null,
     k: 4,
@@ -70,4 +70,19 @@ test('問題の設定の答えの列は表にあるものを表の順に, 違う
   expect(differsFromAnswers(same, ['spend', 'region'], 3)).toBe(true)
   expect(differsFromAnswers(same, ['spend'], 4)).toBe(true)
   expect(differsFromAnswers(answers, ['spend', 'region'], 4)).toBe(true)
+})
+
+test('答えていない群の数と列は, 答えとの違いに数えない', () => {
+  const unanswered: GroupAnswers = {
+    columns: ['region', 'spend'],
+    id: null,
+    k: null,
+    stability: null,
+    stability_label: null,
+  }
+  // 未答の群の数は初めの 3 で埋めても, 違いとしない
+  expect(differsFromAnswers(unanswered, ['spend', 'region'], answerK(unanswered))).toBe(false)
+  expect(differsFromAnswers(unanswered, ['spend', 'region'], 5)).toBe(false)
+  expect(differsFromAnswers(unanswered, ['spend'], 3)).toBe(true)
+  expect(differsFromAnswers({ ...unanswered, columns: [] }, ['spend'], 3)).toBe(false)
 })

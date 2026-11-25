@@ -102,19 +102,26 @@ def group_answers(problem: dict[str, Any]) -> dict[str, Any]:
     ----------
     answers: dict[str, Any]
         columns (列の名前の並び. 答えていなければ空), id (列の名前か
-        None), k (群の数の答え), stability (数え方の値か None)
+        None), k (群の数の整数か None), stability (seed か sample か
+        None)
     """
     # ml.parts.<n>.group の答え (文字でない列の名前は答えていないもの)
     base = f"{ml_quest.PART}.group"
     columns = ml_quest.active_value(problem, f"{base}.columns")
     key = ml_quest.active_value(problem, f"{base}.id")
     stability = ml_quest.active_value(problem, f"{base}.stability")
+    # 群の数は整数の値だけ (真偽値, 端数のある数, 文字は答えていないもの)
+    k = ml_quest.active_value(problem, f"{base}.k")
+    if isinstance(k, bool) or not isinstance(k, (int, float)) or not (
+        float(k).is_integer()
+    ):
+        k = None
     answers: dict[str, Any] = {
         "columns": [str(name) for name in columns]
         if isinstance(columns, list) else [],
         "id": key if isinstance(key, str) and key else None,
-        "k": ml_quest.active_value(problem, f"{base}.k"),
-        "stability": stability if isinstance(stability, str) else None,
+        "k": None if k is None else int(k),
+        "stability": stability if stability in ("seed", "sample") else None,
     }
 
     return answers

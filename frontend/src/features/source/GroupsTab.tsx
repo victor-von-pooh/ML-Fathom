@@ -155,13 +155,11 @@ function ProblemAnswersCard({ problem, differs }: { problem: GroupProblem; diffe
               ここの調整ランド指数は乱数の種を変えて作り直したものです.
             </p>
           )}
-          {differs && (
-            <p role="status" className="mt-2 text-xs text-warning-text">
-              群を作る列か群の数が問題の設定の答えと違います.
-              学習のプロジェクトの骨組みは問題の設定の答えで群を作ります. この選び方にするなら,
-              ML-Pathfinder で答え直してください.
-            </p>
-          )}
+          {/* 読み上げに知らせるため, 枠は常に置いて中身だけ変える */}
+          <p role="status" className="mt-2 text-xs text-warning-text empty:hidden">
+            {differs &&
+              '群を作る列か群の数が問題の設定の答えと違います. 学習のプロジェクトの骨組みは問題の設定の答えで群を作ります. この選び方にするなら, ML-Pathfinder で答え直してください.'}
+          </p>
         </>
       ) : (
         <p className="mt-2 text-xs text-warning-text">
@@ -241,15 +239,17 @@ function ProjectExportCard({
         </Button>
       )}
       {exporter.error && <ErrorBox error={exporter.error} />}
-      {done && (
-        <p role="status" className="mt-3 text-sm text-good-text">
-          {done.copied
-            ? `プロジェクトへ書き出しました: ${done.path}`
-            : `書き出し先は登録した表そのものなので, 写さずにそのまま使います: ${done.path}`}{' '}
-          ({formatNumber(done.rows)} 行. 骨組みが群を作る列 {done.columns.join(', ')}
-          {done.id ? `, 行を見分ける列 ${done.id}` : ''})
-        </p>
-      )}
+      {/* 読み上げに知らせるため, 枠は常に置いて中身だけ変える */}
+      <p role="status" className="mt-3 text-sm text-good-text empty:hidden">
+        {done &&
+          `${
+            done.copied
+              ? `プロジェクトへ書き出しました: ${done.path}`
+              : `書き出し先は登録した表そのものなので, 写さずにそのまま使います: ${done.path}`
+          } (${formatNumber(done.rows)} 行. 骨組みが群を作る列 ${done.columns.join(', ')}${
+            done.id ? `, 行を見分ける列 ${done.id}` : ''
+          })`}
+      </p>
     </Card>
   )
 }
@@ -411,11 +411,12 @@ function ExportCard({
           )}
         </ErrorBox>
       )}
+      {/* 読み上げに知らせるため, 枠は常に置いて中身だけ変える */}
+      <p role="status" className="mt-3 text-sm text-good-text empty:hidden">
+        {done && `書き出しました: ${done.path}`}
+      </p>
       {done && (
-        <div className="mt-3 space-y-2 text-sm">
-          <p role="status" className="text-good-text">
-            書き出しました: {done.path}
-          </p>
+        <div className="mt-2 space-y-2 text-sm">
           {done.notes.length > 0 && (
             <ul className="list-disc pl-4 text-xs text-warning-text">
               {done.notes.map((note) => (

@@ -796,8 +796,8 @@ export interface GroupAnswers {
   id: string | null
   /** 群の数の答え (答えていなければ null) */
   k: number | null
-  /** 安定性の数え方 (seed か sample) と, その言葉 */
-  stability: string | null
+  /** 安定性の数え方 (種を変えるか標本を変えるか) と, その言葉 */
+  stability: 'seed' | 'sample' | null
   stability_label: string | null
 }
 

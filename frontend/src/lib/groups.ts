@@ -41,12 +41,16 @@ export function answerK(answers: GroupAnswers): number {
   return answers.k ?? 3
 }
 
-/** 欄の群を作る列か群の数が, 問題の設定の答えと違うか (列の順は問わない) */
+/**
+ * 欄の群を作る列か群の数が, 問題の設定の答えと違うか (列の順は問わない). 答えていない
+ * 項目 (列が空, 群の数が null) は比べない (未答の問題の設定を開いただけで知らせないため)
+ */
 export function differsFromAnswers(answers: GroupAnswers, columns: string[], k: number): boolean {
   const wanted = new Set(answers.columns)
-  return (
-    answers.k !== k || columns.length !== wanted.size || columns.some((name) => !wanted.has(name))
-  )
+  const kDiffers = answers.k !== null && answers.k !== k
+  const columnsDiffer =
+    wanted.size > 0 && (columns.length !== wanted.size || columns.some((name) => !wanted.has(name)))
+  return kDiffers || columnsDiffer
 }
 
 /** 群の要約の行から, 群を作った列の名前を表の順に返す */
