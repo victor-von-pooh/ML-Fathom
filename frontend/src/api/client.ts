@@ -166,6 +166,8 @@ export const api = {
     version: string
     export: PairSettings
     overwrite: boolean
+    /** 外を指すリンクの先も写すか (問題の設定には書き戻さない) */
+    follow_links: boolean
   }) => request<ProblemPairsResult>('/api/problems/pairs/export', json('POST', body)),
   checkProblem: (id: string, recipe: Recipe) =>
     request<ProblemCheck>(`/api/sources/${id}/problem/check`, json('POST', { recipe })),

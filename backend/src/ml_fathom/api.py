@@ -211,6 +211,10 @@ class PairExport(BaseModel):
     item_steps: Optional[dict[str, list[dict[str, Any]]]] = Field(
         None, description="項目の名前から中身の手順の並び"
     )
+    follow_links: bool = Field(
+        False, description="入力と正解のディレクトリの外を指すリンクの先も"
+        "写すか"
+    )
 
 
 class ImageMaskExport(PairExport):
@@ -1625,7 +1629,7 @@ def pair_options(body: PairExport) -> dict[str, Any]:
     Returns
     ----------
     options: dict[str, Any]
-        split, groups, origin, name, overwrite, item_steps
+        split, groups, origin, name, overwrite, item_steps, follow_links
     """
     # 分割のしかたは, 選んだ場合だけ method を渡す (既定はグループの有無で)
     split: dict[str, Any] = {
@@ -1640,6 +1644,7 @@ def pair_options(body: PairExport) -> dict[str, Any]:
         "split": split, "groups": body.groups or None,
         "origin": body.origin.model_dump(), "name": body.name,
         "overwrite": body.overwrite, "item_steps": body.item_steps or None,
+        "follow_links": body.follow_links,
     }
 
     return options
@@ -1731,7 +1736,8 @@ def export_image_masks(
         リクエスト
     body: ImageMaskExport
         画像と領域のディレクトリ, 値の名前, 領域の名前の終わり, 分割,
-        グループ, 正解の出どころ, 名前, 置き換えるか
+        グループ, 正解の出どころ, 名前, 置き換えるか, 外を指すリンクの
+        先も写すか
 
     Returns
     ----------
@@ -1777,7 +1783,7 @@ def export_capture_clouds(
         リクエスト
     body: CaptureCloudExport
         撮影と点群のディレクトリ, 点群の単位, 分割, グループ, 正解の
-        出どころ, 名前, 置き換えるか
+        出どころ, 名前, 置き換えるか, 外を指すリンクの先も写すか
 
     Returns
     ----------

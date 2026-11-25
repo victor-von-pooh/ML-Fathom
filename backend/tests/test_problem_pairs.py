@@ -305,6 +305,67 @@ def test_start_and_export(
     assert "item_steps" not in saved["data"]["export"]["options"]
 
 
+def test_export_follow_links(client: TestClient, tmp_path: Path) -> None:
+    """
+    プロジェクトへの書き出しで, 外を指すリンクの先を既定では写さず,
+    follow_links が真ならプロジェクトの書き出し先に写し, 問題の設定には
+    書き戻さないことを確かめる関数
+
+    Parameters
+    ----------
+    client: TestClient
+        クライアント
+    tmp_path: Path
+        一時ディレクトリ
+
+    Returns
+    ----------
+    None
+    """
+    # 画像を 1 枚外に動かし, 元の場所に外を指すリンクを置く
+    path = write_kind_problem(tmp_path, "mask")
+    outside = tmp_path / "shared"
+    outside.mkdir()
+    image = tmp_path / "raw" / "images" / "sample_000.png"
+    image.rename(outside / image.name)
+    image.symlink_to(outside / image.name)
+    draft = client.get(
+        "/api/problems/pairs", params={"path": str(path)}
+    ).json()
+    url = "/api/problems/pairs/export"
+    target = tmp_path / "project" / "outputs" / "dataset"
+
+    # 既定は除いて, 数と例を注意に出す
+    response = client.post(url, json=export_body(path, draft))
+    assert response.status_code == 200, response.text
+    result = response.json()
+    assert any("外を指すリンク" in note for note in result["notes"])
+    assert sum(split["items"] for split in result["info"]["splits"].values()
+               ) == 7
+
+    # 選べば写す. 書き出し先はプロジェクトの中のまま, 印は書き戻さない
+    body = export_body(path, draft)
+    body.update(version=current(path), overwrite=True, follow_links=True)
+    response = client.post(url, json=body)
+    assert response.status_code == 200, response.text
+    result = response.json()
+    assert result["path"] == str(target)
+    assert not any("外を指すリンク" in note for note in result["notes"])
+    assert sum(split["items"] for split in result["info"]["splits"].values()
+               ) == 8
+    assert not any(item.is_symlink() for item in target.rglob("*"))
+    saved = ml_quest.load_problem(path)["data"]["export"]
+    assert "follow_links" not in saved
+    assert "follow_links" not in saved["options"]
+
+    # 書き出しの設定の他の引数には持てない (ML-Quest が断る)
+    body = export_body(path, draft)
+    body.update(version=current(path), overwrite=True)
+    body["export"]["options"]["follow_links"] = True
+    response = client.post(url, json=body)
+    assert response.status_code == 422
+    assert "follow_links" in response.json()["detail"]
+
 def test_export_refusals(client: TestClient, tmp_path: Path) -> None:
     """
     書き出せない場合に, 書き出さず書き戻さないことを確かめる関数

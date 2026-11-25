@@ -453,6 +453,8 @@ export interface PairExportBase {
   origin: PairOrigin
   /** 項目の名前から中身の手順の並び (渡すと版 3 で書き出す) */
   item_steps?: Record<string, RecipeStep[]>
+  /** 入力と正解のディレクトリの外を指すリンクの先も写すか (無ければ写さない) */
+  follow_links?: boolean
 }
 
 export interface ImageMaskExport extends PairExportBase {
