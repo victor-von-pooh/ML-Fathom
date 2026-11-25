@@ -1328,7 +1328,8 @@ def preview(
     ----------
     result: dict[str, Any]
         前と後の行数, 列, 先頭の行, 足した列と消えた列,
-        upto が全ての手順なら学習に使う列, 注意, 分割の後の気付き
+        upto が全ての手順なら学習に使う列, 注意, 分割の後の気付き,
+        異常の検知の行の数 (anomaly)
     """
     data = load_source(find_source(request, source_id))
     try:
@@ -1345,6 +1346,9 @@ def preview(
                 for name, frame in prepared.frames.items()
             }
             result["classes"] = prepared.classes
+            # 異常の検知の正解の有る無しと分割ごとの行の数 (書き出しの説明の
+            # anomaly と同じ形. 他のタスクでは None)
+            result["anomaly"] = prepared.anomaly
     except (ValueError, KeyError, TypeError, AttributeError) as error:
         raise HTTPException(422, str(error)) from error
 

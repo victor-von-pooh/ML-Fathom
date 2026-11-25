@@ -13,6 +13,7 @@ import type {
 import { Card, EmptyState, ErrorBox, PageHeader, Spinner } from '../../components/ui'
 import { stepText } from '../../lib/entrySteps'
 import { formatNumber, KIND_LABELS, TASK_LABELS } from '../../lib/format'
+import { AnomalyRows } from '../source/AnomalyRows'
 import {
   conventionText,
   depthConventionText,
@@ -48,6 +49,8 @@ function Footer({ item }: { item: DatasetSummary }) {
 function outputsText(model: ModelInputs): string {
   if (model.outputs === null) return 'なし (タスクを決めていません)'
   if (model.task === 'classification') return `${model.outputs} (クラスの数)`
+  if (model.task === 'anomaly')
+    return `${model.outputs} (モデルが入力を作り直す値の数. 学習に使う列の数と同じ)`
   return `${model.outputs} (値)`
 }
 
@@ -109,6 +112,14 @@ function TableCard({ item }: { item: TableDataset }) {
         <dd>{item.features}</dd>
         <dt className="text-ink-3">分割</dt>
         <dd>{splitText(item.splits, '')}</dd>
+        {item.anomaly && (
+          <>
+            <dt className="text-ink-3">正解と異常</dt>
+            <dd>
+              <AnomalyRows summary={item.anomaly} />
+            </dd>
+          </>
+        )}
         <dt className="text-ink-3">モデルに要るもの</dt>
         <dd>
           <ModelNeeds model={item.model} />

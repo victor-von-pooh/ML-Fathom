@@ -303,6 +303,8 @@ export interface Recipe {
   format_version: number
   target: string | null
   task: string
+  /** 異常の検知 (task: anomaly) の行の id の列 (無ければ ML-EDA が行の位置の row_id を置く) */
+  id?: string
   steps: RecipeStep[]
   item_steps?: RecipeStep[]
   split: {
@@ -311,9 +313,35 @@ export interface Recipe {
     test?: number
     seed?: number
     column?: string
-    /** 目的の列の欠けた行を落とすか, unlabeled の分割に残すか (無ければ落とす) */
-    unlabeled?: 'drop' | 'keep'
+    /**
+     * 目的の列の欠けた行を落とすか, unlabeled の分割に残すか, 正常と見なすか (無ければ落とす.
+     * normal は異常の検知だけ)
+     */
+    unlabeled?: 'drop' | 'keep' | 'normal'
   }
+}
+
+/** 異常の検知の分割 1 つの行の数 (ML-EDA の説明の anomaly.rows の 1 つ) */
+export interface AnomalySplitRows {
+  /** 正解が正常 */
+  normal: number
+  /** 正解が無く正常と見なした行 */
+  presumed: number
+  /** 正解が異常 */
+  anomaly: number
+  /** unlabeled の分割の行 */
+  unlabeled: number
+}
+
+/** 異常の検知の正解の有る無しと分割ごとの行の数 (ML-EDA の説明の anomaly) */
+export interface AnomalySummary {
+  /** 行の id の列の名前 */
+  id: string
+  /** 正解の列があるか */
+  labeled: boolean
+  /** 正解の欠けた行の扱い */
+  unlabeled: 'drop' | 'keep' | 'normal'
+  rows: Record<string, AnomalySplitRows>
 }
 
 export interface FrameView {
@@ -333,6 +361,8 @@ export interface PreviewResult {
   findings?: Finding[]
   splits?: Record<string, number>
   classes?: string[]
+  /** 異常の検知の行の数 (他のタスクは null) */
+  anomaly?: AnomalySummary | null
 }
 
 /** 書き出したデータセットに合わせてモデルを組むときの数 */
@@ -392,6 +422,8 @@ export interface TableDataset extends DatasetBase {
   features: number
   /** モデルに要るもの */
   model: ModelInputs
+  /** 異常の検知の説明 (他のタスクは null) */
+  anomaly?: AnomalySummary | null
 }
 
 /** 正解の出どころ (ML-EDA の target.origin) */

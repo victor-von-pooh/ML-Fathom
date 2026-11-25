@@ -56,7 +56,7 @@ def table_summary(path: Path) -> dict[str, Any]:
     ----------
     summary: dict[str, Any]
         種類, タスク, 目的の列, 分割ごとの行数, 学習に使う列の数, モデルに
-        要るもの (model_inputs の結果)
+        要るもの (model_inputs の結果), 異常の検知の説明 (anomaly)
     """
     # load_dataset で読めることを確かめる
     info = ml_eda.load_dataset(path).info
@@ -69,6 +69,9 @@ def table_summary(path: Path) -> dict[str, Any]:
         },
         "features": len(info.get("features", [])),
         "model": ml_eda.model_inputs(path),
+        # 異常の検知 (task: anomaly) の行の id の列, 正解の有る無しと分割
+        # ごとの行の数 (他のタスクは None)
+        "anomaly": info.get("anomaly"),
     }
 
     return summary

@@ -20,6 +20,9 @@ import { Button, Card, ErrorBox, Spinner } from '../../components/ui'
 import { defaultDatasetName, formatNumber, TASK_LABELS } from '../../lib/format'
 import { findDecisions, withAutoItems } from '../../lib/decisions'
 import {
+  ANOMALY_KINDS,
+  rowIdColumns,
+  anomalyOf,
   canKeepUnlabeled,
   fitUnlabeled,
   itemLimitErrors,
@@ -27,12 +30,16 @@ import {
   splitLabel,
   untargetedDraft,
   usageSnippet,
+  withRowId,
+  withTask,
   withUnlabeled,
+  type UnlabeledMode,
 } from '../../lib/recipe'
 import { autoRecipe, ITEM_KINDS, suggestSteps } from '../../lib/suggest'
 import { useDecided } from '../../lib/useDecided'
 import { DecisionsCard } from './DecisionsCard'
 import { Findings } from './Findings'
+import { AnomalyRows } from './AnomalyRows'
 import { GroupProblemNote, ProblemCard } from './ProblemCard'
 import { ProjectExport } from './ProjectExport'
 import { ItemPreviewCard } from './ItemPreviewCard'
@@ -428,12 +435,20 @@ export function RecipeTab({
   // 予測では使えない (ML-EDA の load_recipe が止める)
   const grouped = ['group', 'group_time', 'stratified_group'].includes(recipe.split.method)
   const stratifiable = !['regression', 'forecasting'].includes(recipe.task)
+  // 異常の検知は表と時系列だけで, 分割は無作為だけ (ML-EDA の異常の検知の表の決まり)
+  const anomaly = recipe.task === 'anomaly'
+  const anomalyKind = ANOMALY_KINDS.includes(kind)
+  // 行の id の列の候補. 分析で欠けも同じ値も無い列だけ (ML-EDA が他の列を誤りにする).
+  // 目的の列は選べない
+  const idColumns = rowIdColumns(profile.columns, target)
   // 時刻で分ける分割を, 時刻の列の無い読み方 (表) で選んだか. 日時の型の列があれば読み方を案内する
   const timeSplit =
     ['time', 'group_time'].includes(recipe.split.method) && !profile.overview.roles?.time
   const datetimes = Object.entries(profile.columns)
     .filter(([, info]) => looksLikeDatetime(info))
     .map(([name]) => name)
+  // 書き出した異常の検知のデータセットの説明の anomaly (他のタスクは null)
+  const exportedAnomaly = exporter.data ? anomalyOf(exporter.data.info) : null
   // 分割の後の気付きは重要度つきで出し, 同じ文は注意の並びから除く
   const findings = result?.findings ?? []
   const notes = (result?.notes ?? []).filter(
@@ -484,12 +499,16 @@ export function RecipeTab({
             <select
               id="task"
               value={recipe.task}
-              onChange={(event) => update({ ...recipe, task: event.target.value })}
+              onChange={(event) => update(withTask(recipe, event.target.value))}
               className="h-8 rounded border border-line bg-surface px-2 min-w-0 max-w-full"
             >
               {Object.entries(TASK_LABELS).map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
+                <option
+                  key={value}
+                  value={value}
+                  disabled={value === 'anomaly' && !anomalyKind && !anomaly}
+                >
+                  {value === 'anomaly' && !anomalyKind ? `${label} (表と時系列だけ)` : label}
                 </option>
               ))}
             </select>
@@ -508,20 +527,42 @@ export function RecipeTab({
               className="h-8 rounded border border-line bg-surface px-2 min-w-0 max-w-full"
             >
               <option value="random">無作為</option>
-              <option value="stratified">層化 (クラスの割合を保つ)</option>
-              <option value="time">時刻の順 (最後を検証用に)</option>
-              <option value="group">グループごと</option>
-              <option value="group_time">グループと時刻の組 (新しい相手を検証用に)</option>
+              {(
+                [
+                  ['stratified', '層化 (クラスの割合を保つ)'],
+                  ['time', '時刻の順 (最後を検証用に)'],
+                  ['group', 'グループごと'],
+                  ['group_time', 'グループと時刻の組 (新しい相手を検証用に)'],
+                ] as const
+              ).map(([value, label]) => (
+                <option
+                  key={value}
+                  value={value}
+                  disabled={anomaly && recipe.split.method !== value}
+                >
+                  {label}
+                </option>
+              ))}
               <option
                 value="stratified_group"
-                disabled={!stratifiable && recipe.split.method !== 'stratified_group'}
+                disabled={(!stratifiable || anomaly) && recipe.split.method !== 'stratified_group'}
               >
                 {stratifiable
                   ? 'グループの層化 (クラスの割合を保つ)'
                   : 'グループの層化 (回帰と時系列では使えない)'}
               </option>
-              <option value="none">分けない</option>
+              <option value="none" disabled={anomaly && recipe.split.method !== 'none'}>
+                分けない
+              </option>
             </select>
+            {/* 異常の検知は正常の行を無作為に分け, 異常の行を検証用とテスト用に配る (ML-EDA は
+                他の分け方を load_recipe で止める) */}
+            {anomaly && recipe.split.method !== 'random' && (
+              <p role="alert" className="col-start-2 text-xs text-critical-text">
+                異常の検知の分割は無作為だけです (正常の行を無作為に分け,
+                異常の行を検証用とテスト用に置くため). 分割を無作為にしてください
+              </p>
+            )}
             {/* タスクを変えてグループの層化が残った場合 (ML-EDA は load_recipe で止める) */}
             {recipe.split.method === 'stratified_group' && !stratifiable && (
               <p role="alert" className="col-start-2 text-xs text-critical-text">
@@ -603,23 +644,63 @@ export function RecipeTab({
                 <select
                   id="split-unlabeled"
                   aria-describedby="split-unlabeled-help"
-                  value={recipe.split.unlabeled === 'keep' ? 'keep' : 'drop'}
+                  value={recipe.split.unlabeled ?? 'drop'}
                   disabled={
                     !canKeepUnlabeled(recipe, profile.columns[target], profile.overview.sampled)
                   }
-                  onChange={(event) => update(withUnlabeled(recipe, event.target.value === 'keep'))}
+                  onChange={(event) =>
+                    update(withUnlabeled(recipe, event.target.value as UnlabeledMode))
+                  }
                   className="h-8 rounded border border-line bg-surface px-2 disabled:opacity-60"
                 >
                   <option value="drop">落とす</option>
                   <option value="keep">unlabeled の分割に残す</option>
+                  {/* 正常と見なすは異常の検知だけ (ML-EDA が他のタスクで誤りにする) */}
+                  {(anomaly || recipe.split.unlabeled === 'normal') && (
+                    <option value="normal">正常と見なす</option>
+                  )}
                 </select>
                 <p id="split-unlabeled-help" className="col-span-2 text-xs text-ink-3">
                   {profile.columns[target] &&
                     `目的の列の欠けた行: ${formatNumber(profile.columns[target].missing)} 行${
                       profile.overview.sampled ? ' (間引いて分析した行で)' : ''
                     }. `}
-                  半教師あり学習や異常の検知のように, 正解の無い行も学習に使う場合は残します. train,
-                  valid, test の中身は変わらず, 残した行には学習用で当てはめた前処理をかけます.
+                  {anomaly
+                    ? '「正常と見なす」は, 正解の列が空の行を正常 (正解 0) として扱い, 正常の行と同じく学習用, 検証用, テスト用に分けます. 異常の行にだけ 1 を入れた表で選びます. 空の行を学習に使わずに別に取っておく場合は「unlabeled の分割に残す」を選びます.'
+                    : '半教師あり学習や異常の検知のように, 正解の無い行も学習に使う場合は残します. train, valid, test の中身は変わらず, 残した行には学習用で当てはめた前処理をかけます.'}
+                </p>
+              </>
+            )}
+            {/* 行の id の列は異常の検知だけ (度合いを出した行を元の表と突き合わせる. ML-EDA のレシピの id) */}
+            {anomaly && (
+              <>
+                <label htmlFor="row-id" className="text-ink-3">
+                  行の id の列
+                </label>
+                <select
+                  id="row-id"
+                  aria-describedby="row-id-help"
+                  value={recipe.id ?? ''}
+                  onChange={(event) => update(withRowId(recipe, event.target.value))}
+                  className="h-8 rounded border border-line bg-surface px-2 font-mono min-w-0 max-w-full"
+                >
+                  <option value="">なし (行の順番の番号 row_id を付ける)</option>
+                  {idColumns.map((column) => (
+                    <option key={column}>{column}</option>
+                  ))}
+                  {/* 候補でない列 (今のデータに無い, 欠けか同じ値がある) も, 選んだままと分かるように出す */}
+                  {recipe.id && !idColumns.includes(recipe.id) && (
+                    <option value={recipe.id}>{recipe.id}</option>
+                  )}
+                </select>
+                <p id="row-id-help" className="col-span-2 text-xs text-ink-3">
+                  1 行ごとの番号 (ID) の列です. 学習には使わず,
+                  書き出す全ての分割にそのまま残すので,
+                  異常らしいと出た行を元の表の行と突き合わせられます.
+                  候補は欠けも同じ値も無い列だけです.{' '}
+                  {target
+                    ? '目的の列は異常の正解の列 (異常は 1 か真, 正常は 0 か偽) です.'
+                    : '目的の列が無いので, 全ての行を正常と見なします.'}
                 </p>
               </>
             )}
@@ -889,13 +970,17 @@ export function RecipeTab({
           {exporter.data && (
             <div className="mt-3 space-y-2 text-sm">
               <p className="text-good-text">書き出しました: {exporter.data.path}</p>
-              {exporter.data.hints && <ModelHintsView hints={exporter.data.hints} />}
+              {exportedAnomaly && <AnomalyRows summary={exportedAnomaly} />}
+              {exporter.data.hints && (
+                <ModelHintsView hints={exporter.data.hints} anomaly={exportedAnomaly !== null} />
+              )}
               <p className="text-xs text-ink-3">ML-Found の学習スクリプトでの使い方:</p>
               <pre className="overflow-auto rounded bg-surface-2 p-2 text-xs">
                 {usageSnippet(
                   exporter.data.path,
                   (exporter.data.info.splits as Record<string, unknown> | undefined) ?? {},
                   media,
+                  exportedAnomaly !== null,
                 )}
               </pre>
             </div>
@@ -973,6 +1058,11 @@ export function RecipeTab({
                   <div>学習に使う列: {result.features?.length ?? 0}</div>
                   {result.classes && result.classes.length > 0 && (
                     <div>クラス: {result.classes.join(', ')}</div>
+                  )}
+                  {result.anomaly && (
+                    <div className="mt-2">
+                      <AnomalyRows summary={result.anomaly} />
+                    </div>
                   )}
                   {/* 選んだ列などで変わる注意と気付きを, 読み上げにも知らせる */}
                   <div role="status" aria-live="polite">

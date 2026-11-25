@@ -1,14 +1,90 @@
-import type { ColumnInfo, ItemStepInfo, Recipe, RecipeStep } from '../api/types'
+import type { AnomalySummary, ColumnInfo, ItemStepInfo, Recipe, RecipeStep } from '../api/types'
+
+/** 目的の列の欠けた行の扱い (ML-EDA の split.unlabeled. normal は異常の検知だけ) */
+export type UnlabeledMode = 'drop' | 'keep' | 'normal'
 
 /**
  * 目的の列の欠けた行の扱いを変えたレシピ (ML-EDA の split.unlabeled).
  * 落とすは既定と同じなので項目を消す (項目の無いレシピと見分けない)
  */
-export function withUnlabeled(recipe: Recipe, keep: boolean): Recipe {
+export function withUnlabeled(recipe: Recipe, mode: UnlabeledMode): Recipe {
   const split: Recipe['split'] = { ...recipe.split }
-  if (keep) split.unlabeled = 'keep'
-  else delete split.unlabeled
+  if (mode === 'drop') delete split.unlabeled
+  else split.unlabeled = mode
   return { ...recipe, split }
+}
+
+/**
+ * 行の id の列の候補. 分析で欠けも同じ値も無い列だけ (ML-EDA が他の列を誤りにする).
+ * 目的の列は除く
+ */
+export function rowIdColumns(columns: Record<string, ColumnInfo>, target: string | null): string[] {
+  return Object.entries(columns)
+    .filter(([name, info]) => name !== target && info.missing === 0 && info.unique === info.count)
+    .map(([name]) => name)
+}
+
+/**
+ * タスクを変えたレシピ. 異常の検知 (anomaly) でなくなると, 異常の検知だけの書き方
+ * (行の id の列 id と split.unlabeled: normal) を消す (ML-EDA が他のタスクで誤りにし,
+ * 欄も出さないので隠れたまま残さない). 分割は変えない (欄の下の誤りで知らせる)
+ */
+export function withTask(recipe: Recipe, task: string): Recipe {
+  const next: Recipe = { ...recipe, task }
+  if (task === 'anomaly') return next
+  delete next.id
+  return next.split.unlabeled === 'normal' ? withUnlabeled(next, 'drop') : next
+}
+
+/** 行の id の列を変えたレシピ (空なら項目を消し, ML-EDA が行の位置の row_id を置く) */
+export function withRowId(recipe: Recipe, column: string): Recipe {
+  const next: Recipe = { ...recipe }
+  if (column) next.id = column
+  else delete next.id
+  return next
+}
+
+/** 異常の検知 (task: anomaly) を選べるデータの種類 (ML-EDA が他の種類を誤りにする) */
+export const ANOMALY_KINDS = ['table', 'timeseries']
+
+/** 書き出しの説明 (dataset.yaml の中身) の異常の検知の anomaly (他のタスクは null) */
+export function anomalyOf(info: Record<string, unknown>): AnomalySummary | null {
+  const value = info.anomaly
+  if (typeof value !== 'object' || value === null || !('rows' in value)) return null
+  return value as AnomalySummary
+}
+
+/** 異常の検知の行の数の合計と異常の割合 */
+export interface AnomalyTotals {
+  /** 正解の付いた行 (正解が正常と異常) */
+  labeled: number
+  normal: number
+  presumed: number
+  anomaly: number
+  unlabeled: number
+  /**
+   * 正常の行 (正解が正常と, 正常と見なした行) と異常の行を合わせた数に対する異常の行の割合
+   * (行が無ければ null. 正解なしの行は数えない)
+   */
+  ratio: number | null
+}
+
+/** ML-EDA の説明の anomaly から, 分割を合わせた行の数と異常の割合を求める */
+export function anomalyTotals(summary: AnomalySummary): AnomalyTotals {
+  const sum = (key: 'normal' | 'presumed' | 'anomaly' | 'unlabeled') =>
+    Object.values(summary.rows).reduce((total, rows) => total + (rows[key] ?? 0), 0)
+  const normal = sum('normal')
+  const presumed = sum('presumed')
+  const anomaly = sum('anomaly')
+  const counted = normal + presumed + anomaly
+  return {
+    labeled: normal + anomaly,
+    normal,
+    presumed,
+    anomaly,
+    unlabeled: sum('unlabeled'),
+    ratio: counted > 0 ? anomaly / counted : null,
+  }
 }
 
 /**
@@ -17,7 +93,7 @@ export function withUnlabeled(recipe: Recipe, keep: boolean): Recipe {
  */
 export function fitUnlabeled(recipe: Recipe, target: string | null): Recipe {
   if (target || recipe.split.unlabeled === undefined) return recipe
-  return withUnlabeled(recipe, false)
+  return withUnlabeled(recipe, 'drop')
 }
 
 /**
@@ -30,7 +106,7 @@ export function canKeepUnlabeled(
   sampled: boolean,
 ): boolean {
   if (!recipe.target) return false
-  if (recipe.split.unlabeled === 'keep') return true
+  if (recipe.split.unlabeled === 'keep' || recipe.split.unlabeled === 'normal') return true
   return column === undefined || sampled || column.missing > 0
 }
 
@@ -43,17 +119,19 @@ export function canKeepUnlabeled(
 export function untargetedDraft(draft: Recipe | null, saved: Recipe | null): Recipe | null {
   const base = draft ?? saved
   if (!base || base.split.unlabeled === undefined) return null
-  return withUnlabeled(base, false)
+  return withUnlabeled(base, 'drop')
 }
 
 /**
  * 書き出したデータセットを ML-Found の学習スクリプトで読む例.
- * 検証用と unlabeled の行は, その分割がある場合だけ
+ * 検証用と unlabeled の行は, その分割がある場合だけ. 異常の検知は, 学習用が
+ * 正常の行だけで, 検証用とテスト用の正解で度合いを確かめることを添える
  */
 export function usageSnippet(
   path: string,
   splits: Record<string, unknown>,
   media: boolean,
+  anomaly = false,
 ): string {
   const valid =
     'valid' in splits
@@ -61,9 +139,11 @@ export function usageSnippet(
       : null
   const unlabeled =
     'unlabeled' in splits ? '# 正解の無い行: dataset.tensors("unlabeled") (入力だけ)' : null
-  const sizes = media
-    ? '# 入力の形: dataset.info["splits"]["train"]["shape"][1:], クラスの数: len(dataset.info["classes"])'
-    : '# 入力の次元: len(dataset.features), クラスの数: len(dataset.info["classes"])'
+  const sizes = anomaly
+    ? '# 入力の次元: len(dataset.features). train は正常の行だけ. valid と test の正解 (異常は 1) で度合いを確かめる\n# 分割ごとの行の数: dataset.info["anomaly"]["rows"]'
+    : media
+      ? '# 入力の形: dataset.info["splits"]["train"]["shape"][1:], クラスの数: len(dataset.info["classes"])'
+      : '# 入力の次元: len(dataset.features), クラスの数: len(dataset.info["classes"])'
   const lines = [
     'from ml_eda import load_dataset',
     'from torch.utils.data import DataLoader, TensorDataset',
@@ -78,7 +158,6 @@ export function usageSnippet(
   return snippet
 }
 
-/** 分割の名前の表示 (unlabeled は正解の無い分割と分かるように) */
 /** 日付か日時の文字の形 (2025-01-01, 2025/1/1 12:00 など) */
 const DATE_TEXT =
   /^\d{4}[-/]\d{1,2}[-/]\d{1,2}([ T]\d{1,2}:\d{2}(:\d{2}(\.\d+)?)?)?(Z|[+-]\d{2}:?\d{2})?$/
@@ -93,6 +172,7 @@ export function looksLikeDatetime(info: ColumnInfo): boolean {
   return values.length > 0 && values.every((value) => DATE_TEXT.test(value.trim()))
 }
 
+/** 分割の名前の表示 (unlabeled は正解の無い分割と分かるように) */
 export function splitLabel(name: string): string {
   return name === 'unlabeled' ? 'unlabeled (正解なし)' : name
 }

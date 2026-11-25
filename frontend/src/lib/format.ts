@@ -84,6 +84,7 @@ export const TASK_LABELS: Record<string, string> = {
   classification: '分類',
   regression: '回帰',
   forecasting: '予測 (時系列)',
+  anomaly: '異常の検知',
   none: '決めない',
 }
 
