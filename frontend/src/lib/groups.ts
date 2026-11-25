@@ -98,7 +98,7 @@ export function cellText(value: GroupRow[string]): string {
   return value
 }
 
-/** 書き出した群分けの表を学習のスクリプトで読む例 */
+/** 分析用に書き出した群分けの表を読み直し, 群の要約を求める例 */
 export function groupUsage(path: string, k: number): string {
   return [
     'import ml_eda',

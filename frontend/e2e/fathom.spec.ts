@@ -951,7 +951,7 @@ test('並べるの問題の設定から始め, 反応の表の偏りを見てプ
   })
 })
 
-test('正解の無い表で群を作る列と群の数を選び, 群の要約を見て群分けの表を書き出す', async ({
+test('正解の無い表で群を作る列と群の数を選び, 群の要約を見て群分けの表を分析用に書き出す', async ({
   page,
 }) => {
   await page.goto('/')
@@ -981,7 +981,7 @@ test('正解の無い表で群を作る列と群の数を選び, 群の要約を
   // 会員の番号で行を見分けて書き出し, 一覧に群分けの表として並ぶ
   await page.getByLabel('行を見分ける列').selectOption('member')
   await page.getByLabel('データセットの名前').fill('segments_groups')
-  await page.getByRole('button', { name: '群分けの表を書き出す' }).click()
+  await page.getByRole('button', { name: '群分けの表を分析用に書き出す' }).click()
   await expect(page.getByRole('status')).toContainText('書き出しました', { timeout: 20_000 })
   await page.getByRole('link', { name: 'データセット' }).click()
   const card = page.locator('section', { has: page.getByText('segments_groups', { exact: true }) })

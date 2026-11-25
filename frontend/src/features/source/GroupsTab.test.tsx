@@ -118,7 +118,7 @@ test('選び方を変えると前の要約を消し, 列が無いか群の数が
   fireEvent.click(fields.getByRole('checkbox', { name: /spend/ }))
   fireEvent.click(fields.getByRole('checkbox', { name: /region/ }))
   expect(screen.getByRole('button', { name: '群を作る' })).toBeDisabled()
-  expect(screen.getByRole('button', { name: '群分けの表を書き出す' })).toBeDisabled()
+  expect(screen.getByRole('button', { name: '群分けの表を分析用に書き出す' })).toBeDisabled()
 })
 
 test('群を作れない理由を出す', async () => {
@@ -130,7 +130,7 @@ test('群を作れない理由を出す', async () => {
   expect(await screen.findByRole('alert')).toHaveTextContent('群の数 3 が行の数 2 より多いです')
 })
 
-test('群を作る列と行を見分ける列で, 群分けの表を書き出す', async () => {
+test('群を作る列と行を見分ける列で, 群分けの表を分析用に書き出す', async () => {
   const exporter = vi.spyOn(api, 'exportGroups').mockResolvedValue({
     path: '/home/datasets/customers_groups',
     info: {},
@@ -139,6 +139,10 @@ test('群を作る列と行を見分ける列で, 群分けの表を書き出す
   renderTab()
   const name = screen.getByLabelText('データセットの名前')
   expect(name).toHaveValue('customers_groups')
+  // 版 2 は分析の保存で, 学習のプロジェクトへは表のファイルを渡すと案内する
+  expect(screen.getByText(/分析の保存として版 2/)).toHaveTextContent(
+    '学習には使いません. 学習のプロジェクトへは',
+  )
 
   // 行を見分ける列は群を作る列の他から選ぶ
   const id = screen.getByLabelText('行を見分ける列')
@@ -148,7 +152,7 @@ test('群を作る列と行を見分ける列で, 群分けの表を書き出す
   expect(options).toEqual(['なし (行の位置)', 'member', 'memo'])
   fireEvent.change(id, { target: { value: 'member' } })
   fireEvent.change(screen.getByLabelText('検証用の割合'), { target: { value: '0.25' } })
-  fireEvent.click(screen.getByRole('button', { name: '群分けの表を書き出す' }))
+  fireEvent.click(screen.getByRole('button', { name: '群分けの表を分析用に書き出す' }))
   await waitFor(() =>
     expect(exporter).toHaveBeenCalledWith('s1', {
       columns: ['spend', 'region'],
@@ -179,7 +183,7 @@ test('同じ名前があれば置き換えの案内を添える', async () => {
     new ApiError(409, 'customers_groups は既にあります'),
   )
   renderTab()
-  fireEvent.click(screen.getByRole('button', { name: '群分けの表を書き出す' }))
+  fireEvent.click(screen.getByRole('button', { name: '群分けの表を分析用に書き出す' }))
   expect(await screen.findByRole('alert')).toHaveTextContent(
     '「同じ名前があれば置き換える」に印を付けてください',
   )
@@ -200,7 +204,7 @@ test('行を見分ける列を群を作る列にも入れると, 見せる値と
   const fields = within(screen.getByRole('group', { name: '群を作る列' }))
   fireEvent.click(fields.getByRole('checkbox', { name: /member/ }))
   expect(id).toHaveValue('')
-  fireEvent.click(screen.getByRole('button', { name: '群分けの表を書き出す' }))
+  fireEvent.click(screen.getByRole('button', { name: '群分けの表を分析用に書き出す' }))
   await waitFor(() =>
     expect(exporter).toHaveBeenCalledWith(
       's1',
@@ -217,7 +221,7 @@ test('書き出した後に群を作る列か群の数を変えると結果を�
   })
   renderTab()
   fireEvent.change(screen.getByLabelText('群の数'), { target: { value: '4' } })
-  fireEvent.click(screen.getByRole('button', { name: '群分けの表を書き出す' }))
+  fireEvent.click(screen.getByRole('button', { name: '群分けの表を分析用に書き出す' }))
   expect(await screen.findByText(/describe_groups\(dataset, k=4\)/)).toBeInTheDocument()
 
   // 群の数を変えると書き出しの結果を消す
@@ -225,7 +229,7 @@ test('書き出した後に群を作る列か群の数を変えると結果を�
   expect(screen.queryByText(/書き出しました/)).not.toBeInTheDocument()
 
   // もう一度書き出し, 列を外すと消す
-  fireEvent.click(screen.getByRole('button', { name: '群分けの表を書き出す' }))
+  fireEvent.click(screen.getByRole('button', { name: '群分けの表を分析用に書き出す' }))
   expect(await screen.findByText(/describe_groups\(dataset, k=5\)/)).toBeInTheDocument()
   const fields = within(screen.getByRole('group', { name: '群を作る列' }))
   fireEvent.click(fields.getByRole('checkbox', { name: /region/ }))
@@ -349,6 +353,8 @@ test('前に置いた表は確かめてから置き換え, 写した場所と骨
   })
   renderLinked()
   const button = await screen.findByRole('button', { name: 'プロジェクトへ書き出す' })
+  // 学習のプロジェクトへ渡すのはこちらで, 版 2 の書き出しは分析の保存と案内する
+  expect(screen.getByText(/学習のプロジェクトへ渡すのはこの書き出しです/)).toBeInTheDocument()
 
   // 置き換えを断れば送らない
   fireEvent.click(button)
