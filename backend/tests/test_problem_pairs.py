@@ -427,6 +427,56 @@ def test_export_swapped(
     assert current(path) == before
 
 
+@pytest.mark.parametrize("kind", ["mask", "point_cloud"])
+def test_export_while_writing(
+    client: TestClient, tmp_path: Path,
+    swap_while_writing: Callable[[Path, Path], None], kind: str
+) -> None:
+    """
+    ML-EDA がファイルの組を書き出している最中に書き出し先の途中が外を
+    指すリンクに替わっても, プロジェクトの外に書かず, 開いた親に書く
+    ことを確かめる関数
+
+    Parameters
+    ----------
+    client: TestClient
+        クライアント
+    tmp_path: Path
+        一時ディレクトリ
+    swap_while_writing: Callable[[Path, Path], None]
+        書いている最中に途中の場所をリンクに替える差し替え
+    kind: str
+        正解の種類
+
+    Returns
+    ----------
+    None
+    """
+    # 書き出し先 outputs/dataset の outputs を, 書いている最中に替える
+    path = write_kind_problem(tmp_path, kind)
+    draft = client.get(
+        "/api/problems/pairs", params={"path": str(path)}
+    ).json()
+    outputs = tmp_path / "project" / "outputs"
+    outputs.mkdir(parents=True, exist_ok=True)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    swap_while_writing(outputs, outside)
+
+    # 外には何も書かず, 開いた親 (退けた元の outputs) に書く
+    response = client.post(
+        "/api/problems/pairs/export", json=export_body(path, draft)
+    )
+    assert response.status_code == 200, response.text
+    assert outputs.is_symlink()
+    assert list(outside.iterdir()) == []
+    moved = outputs.with_name("outputs.moved")
+    assert "dataset" in [item.name for item in moved.iterdir()]
+    assert ml_eda.load_items(moved / "dataset").info["target"]["kind"] == (
+        kind
+    )
+
+
 def test_without_project_and_column(
     client: TestClient, tmp_path: Path
 ) -> None:

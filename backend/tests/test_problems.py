@@ -842,6 +842,54 @@ def test_export_project_swapped(
         assert moved.is_dir() and list(moved.iterdir()) == []
 
 
+def test_export_project_while_writing(
+    client: TestClient, tmp_path: Path,
+    swap_while_writing: Callable[[Path, Path], None]
+) -> None:
+    """
+    ML-EDA が書き出している最中に書き出し先の途中が外を指すリンクに
+    替わっても, プロジェクトの外に書かず, 開いた親に書き, 替わった先を
+    読まずに断ることを確かめる関数
+
+    Parameters
+    ----------
+    client: TestClient
+        クライアント
+    tmp_path: Path
+        一時ディレクトリ
+    swap_while_writing: Callable[[Path, Path], None]
+        書いている最中に途中の場所をリンクに替える差し替え
+
+    Returns
+    ----------
+    None
+    """
+    # プロジェクトの中の data/dataset に向け, 書いている最中に data を替える
+    path = write_problem(tmp_path)
+    source = client.post(
+        "/api/problems/start", json={"path": str(path)}
+    ).json()["source"]
+    url = f"/api/sources/{source['id']}"
+    recipe = client.get(f"{url}/recipe").json()
+    project = tmp_path / "proj"
+    (project / "data").mkdir(parents=True)
+    with_project(path, project, project / "data" / "dataset")
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    swap_while_writing(project / "data", outside)
+
+    # 外には何も書かず, 開いた親 (退けた元の data) に書き, 替わった先を
+    # 読まずに理由付きの 422
+    exported = client.post(f"{url}/export_project", json={"recipe": recipe})
+    assert exported.status_code == 422, exported.text
+    assert "替わりました" in exported.json()["detail"]
+    assert (project / "data").is_symlink()
+    assert list(outside.iterdir()) == []
+    moved = project / "data.moved"
+    assert sorted(item.name for item in moved.iterdir()) == ["dataset"]
+    assert (moved / "dataset" / "dataset.yaml").is_file()
+
+
 def test_write_keeps_project(client: TestClient, tmp_path: Path) -> None:
     """
     問題の設定に書き戻しても, プロジェクトの記録が残ることを確かめる関数

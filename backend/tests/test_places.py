@@ -110,3 +110,31 @@ def test_pinned_parent_refuses_swap(
     assert list(outside.iterdir()) == []
     # 替えたもの (b) の入った a は空でないので消さず, b にも手を付けない
     assert [item.name for item in (project / "a").iterdir()] == ["b"]
+
+
+def test_same_parent(tmp_path: Path) -> None:
+    """
+    書き出し先のパスが開いた親を通るかを, 途中の差し替えで見分けることを
+    確かめる関数
+
+    Parameters
+    ----------
+    tmp_path: Path
+        一時ディレクトリ
+
+    Returns
+    ----------
+    None
+    """
+    # 開いたままなら同じ, 途中を外を指すリンクに替えると違う
+    project = tmp_path / "proj"
+    project.mkdir()
+    outside = tmp_path / "outside"
+    (outside / "b").mkdir(parents=True)
+    with pinned_parent(project, project / "a" / "b" / "dataset") as parent:
+        assert places.same_parent(parent)
+        (project / "a").rename(project / "a.moved")
+        (project / "a").symlink_to(outside, target_is_directory=True)
+        assert not places.same_parent(parent)
+        (project / "a").unlink()
+        assert not places.same_parent(parent)

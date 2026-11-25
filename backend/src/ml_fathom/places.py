@@ -20,14 +20,45 @@ class Parent:
     ----------
     fd: int
         親のディレクトリの記述子 (反応の表と群分けの表の写し (copy_file)
-        はこれに対して書くので, 途中が替わっても同じディレクトリに書く)
+        と, ML-EDA の版 1 とファイルの組の書き出し (引数 parent) はこれに
+        対して書くので, 途中が替わっても同じディレクトリに書く)
     place: Path
-        書き出し先 (親の実体のパスの下の名前. 版 1 とファイルの組は ML-EDA
-        にこのパスを渡すので, ML-EDA が書いている最中の差し替えは防がない)
+        書き出し先 (親の実体のパスの下の名前. 様子の確かめと理由の文に
+        使い, ML-EDA は最後の部分だけを親の中の名前に使う)
     """
 
     fd: int
     place: Path
+
+
+def same_parent(parent: Parent) -> bool:
+    """
+    書き出し先のパスが, 今も開いた親を通るかを返す関数
+
+    ML-EDA は開いた親に対して書くので, 書いている最中に途中の場所が
+    替わっても外には書かない. ただ書いた後にパスで読む (モデルの入力の
+    数など) と替わった先を読むので, 読む前にこれで確かめる
+
+    Parameters
+    ----------
+    parent: Parent
+        開いた書き出し先の親
+
+    Returns
+    ----------
+    same: bool
+        パスの親 (リンクをたどった後) と開いた親が同じディレクトリか
+    """
+    # 装置と i-node の番号の比べ (パスで開けなければ違うとみなす)
+    try:
+        now = os.stat(parent.place.parent)
+    except OSError:
+        same = False
+        return same
+    opened = os.fstat(parent.fd)
+    same = (now.st_dev, now.st_ino) == (opened.st_dev, opened.st_ino)
+
+    return same
 
 
 def changed_reason(part: Path, fd: int, name: str) -> str:
