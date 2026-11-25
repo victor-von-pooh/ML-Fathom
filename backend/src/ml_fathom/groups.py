@@ -24,10 +24,6 @@ MAX_GROUPS = 50
 # が持つ)
 MAX_COLUMNS = 200
 
-# 群の要約の表の列 (群を作る列と同じ名前にはできない. ML-EDA の群の要約と
-# ML-Quest のまとめるの骨組みと同じ組)
-SUMMARY_KEYS = ("group", "rows", "share", "stability")
-
 # 誤りとして理由を返す ML-EDA の例外 (列の誤り, 群の数の誤りなど)
 INPUT_ERRORS = (ValueError, TypeError, KeyError)
 
@@ -134,7 +130,8 @@ def check_group_columns(
     問題の設定の答えの列を, 骨組みが読めるかを確かめる関数
 
     骨組みの学習のスクリプトが止める誤り (答えの無い群を作る列, 表に無い
-    列, 群の要約の列と同じ名前) を先に出す
+    列, 骨組みが使えない名前の列) を先に出す. 使えない名前は ML-Quest の
+    公開の名前 (GROUP_TAKEN と GROUP_ASSIGNED) で確かめる
 
     Parameters
     ----------
@@ -167,11 +164,21 @@ def check_group_columns(
             422, f"表に {', '.join(missing)} の列がありません. ML-Pathfinder "
             "で群を作る列か行を見分ける列を答え直してください"
         )
-    taken = [name for name in names if name in SUMMARY_KEYS]
+    # 骨組みが使えない名前 (群の要約と 1 件の鍵, 群の割り当ての表の列)
+    taken = [name for name in names if name in ml_quest.GROUP_TAKEN]
     if taken:
         raise HTTPException(
-            422, f"群を作る列 {', '.join(taken)} は群の要約の列と同じ名前です. "
-            "名前を変えた列を持つ表を入れ直してください"
+            422, f"群を作る列 {', '.join(taken)} は, 群の要約の列か 1 件の"
+            f"決まった列 ({', '.join(ml_quest.GROUP_TAKEN)}) と同じ名前なので"
+            " 群を作るのに使えません. 名前を変えた列を持つ表を入れ直して"
+            "ください"
+        )
+    if answers["id"] in ml_quest.GROUP_ASSIGNED:
+        raise HTTPException(
+            422, f"行を見分ける列 {answers['id']} は, 群の割り当ての表の列 ("
+            f"{', '.join(ml_quest.GROUP_ASSIGNED)}) と同じ名前なので行を"
+            "見分けるのに使えません. 名前を変えた列を持つ表を入れ直すか, "
+            "ML-Pathfinder で行を見分ける列を答え直してください"
         )
 
 
