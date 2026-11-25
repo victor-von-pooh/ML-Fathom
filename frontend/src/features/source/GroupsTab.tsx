@@ -32,6 +32,12 @@ import { useDebounced } from '../../lib/useDebounced'
 import { Stat } from './ColumnsTab'
 import { Notes } from './TrajectoryView'
 
+/** 返した数え方での作り直し方 (標本を変えるなら, 引く行の割合も) */
+function remade(stability: GroupSummary['stability']): string {
+  if (stability?.method !== 'sample') return '乱数の種を変えて'
+  return `乱数の種を変えて全ての行から ${formatPercent(stability.fraction, 0)} の行を引き直し, 引いた行で`
+}
+
 /** 群の数, 安定性, まとまりの数と, 指標の意味 */
 function Measures({ summary }: { summary: GroupSummary }) {
   const stability = summary.stability
@@ -48,7 +54,7 @@ function Measures({ summary }: { summary: GroupSummary }) {
         <StatTile label="シルエット係数 (まとまり)" value={formatNumber(summary.silhouette)} />
       </div>
       <p className="text-xs text-ink-3">
-        調整ランド指数は, 乱数の種を変えて群を {formatNumber(stability?.repeats ?? null)}{' '}
+        調整ランド指数は, {remade(stability)}群を {formatNumber(stability?.repeats ?? null)}{' '}
         回作り直したときに, 行の分かれ方が今の群とどれだけ一致するかの平均です. 1
         で全く同じ分かれ方, 0 で偶然と同じ程度です. シルエット係数は群のまとまりで, -1 から 1
         の値を取り, 1 に近いほど同じ群の行どうしが近く, 他の群から離れています.
@@ -170,8 +176,8 @@ function ProblemAnswersCard({
           <Stat label="安定性の数え方" value={answers.stability_label ?? '答えていません'} />
           {answers.stability === 'sample' && (
             <p className="mt-2 text-xs text-ink-3">
-              骨組みは標本を変えて作り直して安定性を数えます.
-              ここの調整ランド指数は乱数の種を変えて作り直したものです.
+              ここの調整ランド指数も骨組みと同じく標本を変えて数えます. 骨組みは学習用の行から引き,
+              ここは全ての行から引きます.
             </p>
           )}
           {/* 読み上げに知らせるため, 枠は常に置いて中身だけ変える (空の間は見た目だけ隠し, 読み上げの木に残す) */}
@@ -576,7 +582,10 @@ export function GroupsTab({ source, profile }: { source: Source; profile: Profil
   // ときの欄の鍵, to は書き戻した後の答えの鍵
   const [own, setOwn] = useState<{ from: string; to: string } | null>(null)
   if (linked && problem.isPending) return <Spinner label="問題の設定を読んでいます" />
-  const answers = problem.data?.group ?? null
+  // 読み直しが失敗したら前の答えを使わない (react-query は前の data を残すので,
+  // 読めない答えの数え方で群を作らないように. 答えが無いのと同じく種を変えて数える)
+  const read = problem.error ? null : (problem.data ?? null)
+  const answers = read?.group ?? null
   const current = answersKey(answers)
   const key = own && own.to === current ? own.from : current
   return (
@@ -592,7 +601,7 @@ export function GroupsTab({ source, profile }: { source: Source; profile: Profil
         key={key}
         source={source}
         profile={profile}
-        problem={problem.data ?? null}
+        problem={read}
         fetching={problem.isFetching}
         onWritten={(result) => setOwn({ from: key, to: answersKey(result.group) })}
       />
@@ -626,7 +635,9 @@ function GroupsBody({
   const chosenId = ids.includes(idColumn) ? idColumn : ''
   const [seed, setSeed] = useState(0)
   const grouping = useMutation({
-    mutationFn: () => api.groups(source.id, { columns, k, seed }),
+    // 安定性は問題の設定の答えの数え方で数える (タブでは選ばない. 答えが無ければ種を変える)
+    mutationFn: () =>
+      api.groups(source.id, { columns, k, seed, stability: answers?.stability ?? 'seed' }),
   })
   const kId = useId()
   const seedId = useId()
@@ -652,6 +663,8 @@ function GroupsBody({
         : !Number.isInteger(seed) || seed < 0
           ? '乱数の種は 0 以上の整数にしてください'
           : null
+  // 問題の設定を読み直している間は, 古い答えの数え方で群を作らない
+  const waiting = fetching ? '問題の設定を読み直しています' : null
   const summary = grouping.data
   const differs = answers !== null && differsFromAnswers(answers, columns, k, chosenId)
   return (
@@ -718,16 +731,16 @@ function GroupsBody({
           <Button
             variant="primary"
             icon={Shapes}
-            disabled={grouping.isPending || reason !== null}
-            aria-describedby={reason ? reasonId : undefined}
+            disabled={grouping.isPending || reason !== null || waiting !== null}
+            aria-describedby={reason || waiting ? reasonId : undefined}
             onClick={() => grouping.mutate()}
           >
             {grouping.isPending ? '群を作っています…' : '群を作る'}
           </Button>
         </div>
-        {reason && (
+        {(reason || waiting) && (
           <p id={reasonId} className="mt-2 text-xs text-warning-text">
-            {reason}
+            {reason ?? waiting}
           </p>
         )}
       </Card>

@@ -1009,10 +1009,18 @@ test('まとめるの問題の設定から始め, 答えの列で群を作って
   await expect(fields.getByRole('checkbox', { name: /region/ })).not.toBeChecked()
   await expect(page.getByLabel('群の数')).toHaveValue('3')
 
-  // 答えの列で群を作ると, 40 行ずつの 3 つの群になる
+  // 安定性の数え方は答えの「標本を変えて作り直す」で, 骨組みと同じ数え方と添える
+  await expect(page.getByText('標本を変えて作り直す')).toBeVisible()
+  await expect(page.getByText(/ここの調整ランド指数も骨組みと同じく標本を変えて/)).toBeVisible()
+
+  // 答えの列で群を作ると, 40 行ずつの 3 つの群になり, 行の 8 割を引き直して数える.
+  // はっきりした群なので, 引き直しても同じ群になる
   await page.getByRole('button', { name: '群を作る' }).click()
   const table = page.getByRole('table', { name: '群ごとの行の数, 割合, 安定性と列の特徴' })
   await expect(table.getByText('40', { exact: true })).toHaveCount(3, { timeout: 20_000 })
+  await expect(page.getByText(/全ての行から 80% の行を引き直し/)).toBeVisible()
+  const ari = page.getByText('調整ランド指数 (安定性)').locator('..').locator('div').nth(1)
+  await expect(ari).toHaveText('1')
 
   // 答えと違う列を選ぶと知らせ, 戻すと消える
   await fields.getByRole('checkbox', { name: /region/ }).check()
