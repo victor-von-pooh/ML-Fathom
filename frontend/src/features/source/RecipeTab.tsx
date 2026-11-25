@@ -33,7 +33,7 @@ import { autoRecipe, ITEM_KINDS, suggestSteps } from '../../lib/suggest'
 import { useDecided } from '../../lib/useDecided'
 import { DecisionsCard } from './DecisionsCard'
 import { Findings } from './Findings'
-import { ProblemCard } from './ProblemCard'
+import { GroupProblemNote, ProblemCard } from './ProblemCard'
 import { ProjectExport } from './ProjectExport'
 import { ItemPreviewCard } from './ItemPreviewCard'
 import { ModelHintsView } from './ModelHintsView'
@@ -298,6 +298,16 @@ export function RecipeTab({
   const [addingItem, setAddingItem] = useState('')
   const queryClient = useQueryClient()
   const saved = useQuery({ queryKey: ['recipe', sourceId], queryFn: () => api.recipe(sourceId) })
+  // 始めた問題の設定の受け持ちを開くたびに読み直す. まとめるはレシピを持たないので,
+  // 確かめと「プロジェクトへ書き出す」の代わりに群分けのタブへ導く
+  // (読めなければ問題の設定のカードが理由を出す)
+  const linked = useQuery({
+    queryKey: ['group_problem', sourceId],
+    queryFn: () => api.groupProblem(sourceId),
+    enabled: Boolean(problem),
+    retry: false,
+  })
+  const grouping = linked.data?.group ? linked.data : null
   // 編集中のレシピ (編集するまでは保存したもの. タブを移っても残す).
   // 目的の列は上の指定に合わせる
   const [draft, setDraft] = useRecipeDraft(sourceId)
@@ -425,7 +435,9 @@ export function RecipeTab({
   return (
     <div className="grid gap-4 xl:grid-cols-[minmax(0,30rem)_1fr]">
       <div className="space-y-4">
-        {problem && (
+        {problem && linked.isPending && <Spinner label="問題の設定を読んでいます" />}
+        {grouping && <GroupProblemNote problem={grouping} notes={problemNotes} />}
+        {problem && !linked.isPending && !grouping && (
           <ProblemCard
             sourceId={sourceId}
             notes={problemNotes}
@@ -878,7 +890,7 @@ export function RecipeTab({
               </pre>
             </div>
           )}
-          {problem && (
+          {problem && !linked.isPending && !grouping && (
             <ProjectExport
               sourceId={sourceId}
               recipe={recipe}

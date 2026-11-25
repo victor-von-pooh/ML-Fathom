@@ -2,9 +2,10 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tansta
 import clsx from 'clsx'
 import { ClipboardList } from 'lucide-react'
 import { useId, useState } from 'react'
+import { Link } from 'react-router'
 
 import { api, ApiError } from '../../api/client'
-import type { ProblemFinding, Recipe } from '../../api/types'
+import type { GroupProblem, ProblemFinding, Recipe } from '../../api/types'
 import { Button, Card, ErrorBox, Spinner } from '../../components/ui'
 
 /** 食い違いの重さの名前と色 */
@@ -201,6 +202,61 @@ export function ProblemCard({
             )}
           </>
         )}
+      </div>
+    </Card>
+  )
+}
+
+/**
+ * まとめるで学習する問題の設定から始めたデータの「問題の設定」のカード.
+ * まとめるはレシピを持たないので, 確かめと書き戻しをせず, 理由を案内として出して
+ * 群分けのタブ (プロジェクトへ書き出す所) へ導く
+ */
+export function GroupProblemNote({
+  problem,
+  notes = [],
+}: {
+  problem: GroupProblem
+  /** 始めたときの知らせ */
+  notes?: string[]
+}) {
+  return (
+    <Card
+      title={
+        <span className="flex items-center gap-1.5">
+          <ClipboardList className="size-4 text-accent" aria-hidden />
+          問題の設定{problem.name ? `: ${problem.name}` : ''}
+        </span>
+      }
+      className="border-accent/50"
+    >
+      <div className="space-y-3 text-sm">
+        <p className="text-ink-2">
+          まとめる (群分け) の問題の設定から始めたデータは, レシピを持ちません.
+          学習のプロジェクトは表をファイル 1 つのまま読み, 分割も学習のプロジェクトが行うため,
+          ここでの前処理は問題の設定に書き戻さず, プロジェクトへも書き出しません.
+        </p>
+        {notes.length > 0 && (
+          <section aria-label="始めたときの知らせ">
+            <h3 className="text-xs font-semibold text-ink-2">始めたときの知らせ</h3>
+            <ul className="mt-1 list-disc pl-5 text-xs text-ink-2">
+              {notes.map((text) => (
+                <li key={text}>{text}</li>
+              ))}
+            </ul>
+          </section>
+        )}
+        <p>
+          <Link to="?tab=groups" replace className="text-accent-text underline">
+            群分けのタブへ移る
+          </Link>
+          <span className="ml-1 text-xs text-ink-3">
+            (答えた列で群を見て, 表をそのままプロジェクトへ書き出します)
+          </span>
+        </p>
+        <p className="truncate font-mono text-xs text-ink-3" title={problem.path}>
+          {problem.path}
+        </p>
       </div>
     </Card>
   )
