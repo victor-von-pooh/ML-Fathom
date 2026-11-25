@@ -670,7 +670,7 @@ def test_export_project(client: TestClient, tmp_path: Path) -> None:
         "recipe": recipe, "overwrite": True
     }).status_code == 422
 
-    # プロジェクトが無いか, プロジェクトの外の親が無ければ書き出さない
+    # プロジェクトが無いか, 書き出し先がプロジェクトの外なら書き出さない
     with_project(path, tmp_path / "gone", tmp_path / "gone" / "data")
     assert client.post(f"{url}/export_project", json={
         "recipe": recipe
@@ -678,9 +678,105 @@ def test_export_project(client: TestClient, tmp_path: Path) -> None:
     with_project(path, project, tmp_path / "nowhere" / "dataset")
     assert client.post(f"{url}/export_project", json={
         "recipe": recipe
-    }).status_code == 404
+    }).status_code == 422
     assert not (tmp_path / "gone").exists()
     assert not (tmp_path / "nowhere").exists()
+
+
+def outside_place(kind: str, project: Path, outside: Path) -> Path:
+    """
+    プロジェクトの外 (かプロジェクトそのもの) を指す書き出し先を作る関数
+
+    Parameters
+    ----------
+    kind: str
+        absolute (外の絶対パス), parent (.. で外), link (外を指す途中の
+        リンクの下), target (外を指すリンクそのもの), root (プロジェクトの
+        ディレクトリそのもの)
+    project: Path
+        プロジェクトのディレクトリ
+    outside: Path
+        プロジェクトの外の, 置き換えられてはいけない書き出し先
+
+    Returns
+    ----------
+    place: Path
+        記録に書く書き出し先 (絶対パス)
+    """
+    # 途中のリンクと, 書き出し先そのもののリンクは, プロジェクトの中に置く
+    if kind == "absolute":
+        place = outside
+    elif kind == "parent":
+        place = project / ".." / outside.parent.name / outside.name
+    elif kind == "link":
+        (project / "shared").symlink_to(
+            outside.parent, target_is_directory=True
+        )
+        place = project / "shared" / outside.name
+    elif kind == "target":
+        (project / outside.name).symlink_to(
+            outside, target_is_directory=outside.is_dir()
+        )
+        place = project / outside.name
+    else:
+        place = project
+
+    return place
+
+
+# プロジェクトの外を指す書き出し先の種類
+OUTSIDE_KINDS = ["absolute", "parent", "link", "target", "root"]
+
+
+@pytest.mark.parametrize("kind", OUTSIDE_KINDS)
+def test_export_project_outside(
+    client: TestClient, tmp_path: Path, kind: str
+) -> None:
+    """
+    書き出し先がプロジェクトの外 (絶対パス, .., リンク) かプロジェクト
+    そのものなら, 置き換えの印を付けても理由付きの 422 で断り, 外の
+    データセットを置き換えないことを確かめる関数
+
+    Parameters
+    ----------
+    client: TestClient
+        クライアント
+    tmp_path: Path
+        一時ディレクトリ
+    kind: str
+        外を指す書き出し先の種類 (outside_place)
+
+    Returns
+    ----------
+    None
+    """
+    # 外に, 前に書き出したデータセットの形のディレクトリを置く
+    path = write_problem(tmp_path)
+    source = client.post(
+        "/api/problems/start", json={"path": str(path)}
+    ).json()["source"]
+    url = f"/api/sources/{source['id']}"
+    recipe = client.get(f"{url}/recipe").json()
+    project = tmp_path / "proj"
+    project.mkdir()
+    outside = tmp_path / "outside" / "dataset"
+    outside.mkdir(parents=True)
+    (outside / "dataset.yaml").write_text("keep\n", encoding="utf-8")
+    with_project(path, project, outside_place(kind, project, outside))
+
+    # 様子にも書き出しにも同じ理由を出し, 外のものは残す
+    shown = client.get(f"{url}/project").json()
+    assert shown["ready"] is False and shown["state"] is None
+    assert "の中にありません" in shown["reason"]
+    refused = client.post(f"{url}/export_project", json={
+        "recipe": recipe, "overwrite": True
+    })
+    assert refused.status_code == 422
+    assert refused.json()["detail"] == shown["reason"]
+    assert (outside / "dataset.yaml").read_text("utf-8") == "keep\n"
+    assert sorted(item.name for item in outside.iterdir()) == [
+        "dataset.yaml"
+    ]
 
 
 def test_write_keeps_project(client: TestClient, tmp_path: Path) -> None:
