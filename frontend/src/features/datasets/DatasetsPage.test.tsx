@@ -236,3 +236,47 @@ test('群分けの表は正解なしと列の項目を出し, 正解の出どこ
   expect(card.queryByText('正解の出どころ')).not.toBeInTheDocument()
   expect(card.getByText(/欠けた値のある行が 5 行/)).toBeInTheDocument()
 })
+
+test('異常の検知のデータセットは, 正解の数と異常の割合と分割ごとの行の数を出す', async () => {
+  vi.spyOn(api, 'datasets').mockResolvedValue([
+    {
+      form: 'table',
+      name: 'readings',
+      path: '/home/datasets/readings',
+      format_version: 1,
+      created_at: '2026-11-21T10:00:00+09:00',
+      kind: 'table',
+      task: 'anomaly',
+      target: 'is_anomaly',
+      splits: { train: 60, valid: 25, test: 15 },
+      features: 2,
+      model: {
+        inputs: [{ name: 'x', shape: [null, 2], dtype: 'float32' }],
+        task: 'anomaly',
+        target: 'is_anomaly',
+        classes: [],
+        outputs: 2,
+      },
+      anomaly: {
+        id: 'reading_id',
+        labeled: true,
+        unlabeled: 'normal',
+        rows: {
+          train: { normal: 20, presumed: 40, anomaly: 0, unlabeled: 0 },
+          valid: { normal: 5, presumed: 14, anomaly: 6, unlabeled: 0 },
+          test: { normal: 3, presumed: 8, anomaly: 4, unlabeled: 0 },
+        },
+      },
+    },
+  ])
+  renderPage()
+  const card = within((await screen.findByText('readings')).closest('section')!)
+  expect(card.getByText(/異常の検知/)).toBeInTheDocument()
+  // 正解の付いた行は正常と異常の正解の行, 割合は正常と見なした行も含めた 100 行に対して
+  expect(card.getByText('正解の付いた行 38')).toBeInTheDocument()
+  expect(card.getByText('異常の行 10')).toBeInTheDocument()
+  expect(card.getByText('異常の割合 10.0%')).toBeInTheDocument()
+  expect(card.getByText('正常と見なした行 62')).toBeInTheDocument()
+  expect(card.getByText(/2 \(作り直す, 学習に使う列の数\)/)).toBeInTheDocument()
+  expect(card.getByRole('table').textContent).toContain('14')
+})

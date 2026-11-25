@@ -239,8 +239,13 @@ export function findDecisions({
 
   // 分割の方法
   const split = (method: string): Recipe => ({ ...recipe, split: { ...recipe.split, method } })
-  // グループと時刻の組も時刻の順に分ける (後から現れた相手を検証用に) ので勧めない
-  if (kind === 'timeseries' && !['time', 'group_time'].includes(recipe.split.method)) {
+  // グループと時刻の組も時刻の順に分ける (後から現れた相手を検証用に) ので勧めない.
+  // 異常の検知は無作為だけ (ML-EDA の決まり) なので勧めない
+  if (
+    kind === 'timeseries' &&
+    recipe.task !== 'anomaly' &&
+    !['time', 'group_time'].includes(recipe.split.method)
+  ) {
     found.push({
       id: 'split:time',
       title: '時系列の分割が時刻の順ではありません',

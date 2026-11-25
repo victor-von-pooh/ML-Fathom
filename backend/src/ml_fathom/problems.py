@@ -80,6 +80,10 @@ KIND_NAMES = {"image": "画像", "table": "表"}
 # の列を見つけた表は timeseries になる)
 GROUP_KINDS = ("table", "timeseries")
 
+# 異常の検知の問題の設定から始められる表の種類 (ML-EDA の異常の検知が読む
+# もの. 日時の列を見つけた表は timeseries になる)
+ANOMALY_KINDS = ("table", "timeseries")
+
 # ML-Quest の書き出しの関数の名前から, ファイルの組の書き出しの画面の欄
 PAIR_FORMS = {
     "export_image_masks": "image_masks",
@@ -312,6 +316,36 @@ def is_generate(problem: dict[str, Any]) -> bool:
     return generate
 
 
+def is_anomaly(problem: dict[str, Any]) -> bool:
+    """
+    受け持ちが異常の検知 (予測するで, 正解の種類が異常. 作り方が既製の
+    モデルをそのままでない) かを返す関数
+
+    ML-Quest の is_anomaly_part と同じ決まり (公開の名前でないので, 公開の
+    active_value で見分ける)
+
+    Parameters
+    ----------
+    problem: dict[str, Any]
+        問題の設定 (版 2)
+
+    Returns
+    ----------
+    anomaly: bool
+        異常の検知の受け持ちか
+    """
+    # 受け持ち, 正解の種類と作り方の答え (要らない問いの古い答えは除外)
+    part = ml_quest.PART
+    role = ml_quest.active_value(problem, f"{part}.role")
+    kind = ml_quest.active_value(problem, f"{part}.target.kind")
+    method = ml_quest.active_value(problem, f"{part}.method")
+    anomaly = bool(
+        role == "predict" and kind == "anomaly" and method != "pretrained"
+    )
+
+    return anomaly
+
+
 def choice_text(choices: list[dict[str, Any]], value: Any) -> str:
     """
     ML-Quest の選択肢の値を, 画面の言葉と値の組の文にする関数
@@ -341,12 +375,13 @@ def choice_text(choices: list[dict[str, Any]], value: Any) -> str:
 
 def require_recipe(problem: dict[str, Any]) -> None:
     """
-    受け持ちが, 登録したデータとレシピで書き出すもの (列の予測と, 画像か
-    表の生成) でなければ止める関数
+    受け持ちが, 登録したデータとレシピで書き出すもの (列の予測, 画像か
+    表の生成と, 異常の検知) でなければ止める関数
 
     ML-Quest の版 2 の問題の設定は, 受け持ち (作る, 並べるなど) と正解の
     種類 (領域, 点群など) を持つ. 登録したデータのレシピの下書きと書き戻し
-    は列の予測と画像か表の生成だけ (ファイルの組の受け持ちは require_items)
+    は列の予測, 画像か表の生成と異常の検知だけ (ファイルの組の受け持ちは
+    require_items)
 
     Parameters
     ----------
@@ -364,7 +399,7 @@ def require_recipe(problem: dict[str, Any]) -> None:
         受け持ちの文)
     """
     # 使えない受け持ちと正解の種類を, 画面の選択肢と同じ言葉で
-    if is_column_part(problem) or is_generate(problem):
+    if is_column_part(problem) or is_generate(problem) or is_anomaly(problem):
         return
     part = ml_quest.PART
     role = ml_quest.active_value(problem, f"{part}.role")
@@ -399,7 +434,8 @@ def require_recipe(problem: dict[str, Any]) -> None:
         f"この問題の設定の受け持ち {choice_text(ml_quest.ROLES, role)} "
         f"(正解の種類 {choice_text(ml_quest.TARGET_KINDS, kind)}) は, "
         f"問題の設定から始めることと書き戻しに使えません ({why}). 使える"
-        "のは, 予測するで正解の種類が表の列, 画像の領域, 点群の場合と, "
+        "のは, 予測するで正解の種類が表の列, 画像の領域, 点群, 異常の場合"
+        "と, "
         "作るで正解の種類が画像か表の場合と, 並べるかまとめるで学習する"
         "場合です. "
         "データは「データを追加」から入れて分析できます"
@@ -430,11 +466,11 @@ def require_items(problem: dict[str, Any]) -> None:
     if is_items_part(problem):
         return
     if is_column_part(problem) or is_generate(problem) or is_rank(problem) or (
-        is_group(problem)
+        is_group(problem) or is_anomaly(problem)
     ):
         raise HTTPException(
-            422, "この問題の設定は列の予測か, 画像か表の生成か, 並べるか, "
-            "まとめるです. "
+            422, "この問題の設定は列の予測か, 画像か表の生成か, 異常の検知か, "
+            "並べるか, まとめるです. "
             "データの画面の「問題の設定から始める」で始めてください"
         )
     require_recipe(problem)
@@ -618,8 +654,8 @@ def start_from_problem(
     started: dict[str, Any]
         source (登録したデータ. ファイルの組の受け持ちでは None),
         problem (problem.yaml の場所), form (ファイルの組の書き出しの画面の
-        欄. 列の予測と画像か表の生成では None), notes (知らせの文の並び),
-        tab (開くタブ. まとめるでは groups, 他は None)
+        欄. 列の予測, 画像か表の生成と異常の検知では None), notes
+        (知らせの文の並び), tab (開くタブ. まとめるでは groups, 他は None)
 
     Raises
     ----------
@@ -660,7 +696,8 @@ def start_from_problem(
         )
 
     # 読めること, 目的の列があること (画像か表の生成は目的の列が無く,
-    # データの種類が正解の種類に合うこと) を確かめて登録し, レシピを保存
+    # データの種類が正解の種類に合うこと. 異常の検知は表であることと, 答えた
+    # 正解の列と行の id の列があること) を確かめて登録し, レシピを保存
     data_path = Path(load["path"])
     if not data_path.exists():
         raise HTTPException(404, f"{data_path} がありません")
@@ -686,6 +723,8 @@ def start_from_problem(
                 f"作るものが{name}の問題の設定には, ML-Pathfinder の「手元"
                 f"のデータは」で{name}のデータを入れてください"
             )
+    elif is_anomaly(problem):
+        check_anomaly_start(data, data_path, recipe)
     elif target not in [str(name) for name in data.frame.columns]:
         raise HTTPException(
             422, f"目的の列 {target} がデータにありません"
@@ -704,6 +743,47 @@ def start_from_problem(
                "form": None, "notes": start["notes"], "tab": None}
 
     return started
+
+
+def check_anomaly_start(
+    data: ml_eda.Data, data_path: Path, recipe: dict[str, Any]
+) -> None:
+    """
+    異常の検知の問題の設定から始める表を確かめる関数
+
+    Parameters
+    ----------
+    data: ml_eda.Data
+        読み込んだ入れたデータ
+    data_path: Path
+        入れたデータの場所
+    recipe: dict[str, Any]
+        ML-Quest の recipe_from のレシピ (task: anomaly)
+
+    Returns
+    ----------
+    None
+
+    Raises
+    ----------
+    HTTPException
+        表か時系列でない場合と, 正解の列か行の id の列が表に無い場合は 422
+    """
+    # ML-EDA の異常の検知は表と時系列だけ. 正解の列と行の id の列は答えた
+    # ときだけレシピにある
+    if data.kind not in ANOMALY_KINDS:
+        raise HTTPException(
+            422, f"{data_path.name} は表ではありません (種類 {data.kind}). "
+            "異常の検知の問題の設定には, ML-Pathfinder の「手元のデータは」"
+            "で度合いに使う列を持つ表を入れてください"
+        )
+    columns = [str(name) for name in data.frame.columns]
+    for key, title in (("target", "異常の正解の列"), ("id", "行の id の列")):
+        name = recipe.get(key)
+        if name is not None and name not in columns:
+            raise HTTPException(
+                422, f"{title} {name} がデータにありません"
+            )
 
 
 def project_reason(problem: dict[str, Any]) -> Optional[str]:
@@ -1345,8 +1425,9 @@ def problem_entry(path: Path) -> dict[str, Any]:
         project=project_record(problem)
     )
 
-    # 始めるときと同じ確かめ (列の予測と画像か表の生成はデータを入れて
-    # あること. ファイルの組の受け持ちはディレクトリを画面で選べる)
+    # 始めるときと同じ確かめ (列の予測, 画像か表の生成と異常の検知は
+    # データを入れてあること. ファイルの組の受け持ちはディレクトリを画面
+    # で選べる)
     if is_rank(problem) or is_group(problem):
         entry["reason"] = skeleton_reason(problem)
         entry["startable"] = entry["reason"] is None

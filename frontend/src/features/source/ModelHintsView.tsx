@@ -8,7 +8,14 @@ import type { ModelHints } from '../../api/types'
  * ML-CreateArchitecture でモデルを組むとき, 入力の形, 語彙の大きさ, 出力の
  * 幅をデータセットに合わせる必要がある (自動ではつながないので, 数を出す)
  */
-export function ModelHintsView({ hints }: { hints: ModelHints }) {
+export function ModelHintsView({
+  hints,
+  anomaly = false,
+}: {
+  hints: ModelHints
+  /** 異常の検知のデータセットか (出力の幅は入力を作り直す値の数) */
+  anomaly?: boolean
+}) {
   const id = useId()
   const rows: [string, string, string][] = [
     [
@@ -28,9 +35,11 @@ export function ModelHintsView({ hints }: { hints: ModelHints }) {
     rows.push([
       '出力の幅',
       String(hints.outputs),
-      hints.outputs === 1
-        ? '最後の nn.Linear の out_features (値を 1 つ)'
-        : '最後の nn.Linear の out_features (クラスの数)',
+      anomaly
+        ? '最後の nn.Linear の out_features (自己符号化器が作り直す, 学習に使う列の数)'
+        : hints.outputs === 1
+          ? '最後の nn.Linear の out_features (値を 1 つ)'
+          : '最後の nn.Linear の out_features (クラスの数)',
     ])
   }
   return (

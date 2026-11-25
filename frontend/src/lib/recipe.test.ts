@@ -1,7 +1,9 @@
 import { expect, test } from 'vitest'
 
-import type { ColumnInfo, ItemStepInfo, Recipe } from '../api/types'
+import type { AnomalySummary, ColumnInfo, ItemStepInfo, Recipe } from '../api/types'
 import {
+  anomalyOf,
+  anomalyTotals,
   canKeepUnlabeled,
   looksLikeDatetime,
   fitUnlabeled,
@@ -9,6 +11,8 @@ import {
   splitLabel,
   untargetedDraft,
   usageSnippet,
+  withRowId,
+  withTask,
   withUnlabeled,
 } from './recipe'
 
@@ -148,4 +152,64 @@ test('中身の手順の引数が上限を超えた値だけに, 手順の番号
     '中身の手順 2 (resample) の rate は 192000 以下にしてください',
     '中身の手順 3 (fix_length) の seconds は 600 以下にしてください',
   ])
+})
+
+test('異常の検知でなくなると, 行の id の列と正常と見なすを消す', () => {
+  const anomaly: Recipe = {
+    ...recipe,
+    task: 'anomaly',
+    id: 'reading_id',
+    split: { method: 'random', valid: 0.2, unlabeled: 'normal' },
+  }
+  expect(withTask(anomaly, 'anomaly')).toEqual(anomaly)
+  const changed = withTask(anomaly, 'classification')
+  expect(changed.id).toBeUndefined()
+  expect(changed.split).toEqual({ method: 'random', valid: 0.2 })
+  // 残すは他のタスクでも使えるので残す
+  const kept = withTask(withUnlabeled(anomaly, 'keep'), 'regression')
+  expect(kept.split.unlabeled).toBe('keep')
+  // 元のレシピは変えない
+  expect(anomaly.id).toBe('reading_id')
+})
+
+test('行の id の列は空なら項目を消し, 正常と見なすも選んだままにできる', () => {
+  const anomaly: Recipe = { ...recipe, task: 'anomaly' }
+  expect(withRowId(anomaly, 'reading_id').id).toBe('reading_id')
+  expect('id' in withRowId({ ...anomaly, id: 'reading_id' }, '')).toBe(false)
+  const normal = withUnlabeled(anomaly, 'normal')
+  expect(normal.split.unlabeled).toBe('normal')
+  expect(canKeepUnlabeled(normal, column(0), false)).toBe(true)
+  expect(withUnlabeled(normal, 'drop').split.unlabeled).toBeUndefined()
+})
+
+test('異常の検知の行の数を合わせ, 正解なしの行を除いて異常の割合を求める', () => {
+  const summary: AnomalySummary = {
+    id: 'row_id',
+    labeled: true,
+    unlabeled: 'keep',
+    rows: {
+      train: { normal: 50, presumed: 0, anomaly: 0, unlabeled: 0 },
+      valid: { normal: 10, presumed: 0, anomaly: 4, unlabeled: 0 },
+      unlabeled: { normal: 0, presumed: 0, anomaly: 0, unlabeled: 30 },
+    },
+  }
+  expect(anomalyTotals(summary)).toEqual({
+    labeled: 64,
+    normal: 60,
+    presumed: 0,
+    anomaly: 4,
+    unlabeled: 30,
+    ratio: 4 / 64,
+  })
+  expect(anomalyTotals({ ...summary, rows: {} }).ratio).toBeNull()
+  expect(anomalyOf({ anomaly: summary })).toBe(summary)
+  expect(anomalyOf({ anomaly: null })).toBeNull()
+  expect(anomalyOf({})).toBeNull()
+})
+
+test('異常の検知の使い方の例は, 学習用が正常の行だけであることを添える', () => {
+  const snippet = usageSnippet('/d', { train: {}, valid: {} }, false, true)
+  expect(snippet).toContain('train は正常の行だけ')
+  expect(snippet).toContain('dataset.info["anomaly"]["rows"]')
+  expect(snippet).not.toContain('クラスの数')
 })

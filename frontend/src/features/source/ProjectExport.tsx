@@ -4,6 +4,8 @@ import { FolderOutput } from 'lucide-react'
 import { api, ApiError } from '../../api/client'
 import type { Recipe } from '../../api/types'
 import { Button, ErrorBox, Spinner } from '../../components/ui'
+import { anomalyOf } from '../../lib/recipe'
+import { AnomalyRows } from './AnomalyRows'
 import { ModelHintsView } from './ModelHintsView'
 
 /**
@@ -52,6 +54,8 @@ export function ProjectExport({
   // 書き出した後にレシピを変えたら, 前の結果と誤りは出さない
   const same = JSON.stringify(exporter.variables?.recipe) === JSON.stringify(recipe)
   const done = exporter.data && same ? exporter.data : null
+  // 異常の検知のデータセットの説明の anomaly (他のタスクは null)
+  const doneAnomaly = done ? anomalyOf(done.info) : null
   const failed = exporter.error && same ? exporter.error : null
   if (place.isPending) return <Spinner label="プロジェクトの書き出し先を調べています" />
   // 問題の設定を読めない理由は問題の設定のカードに出るので, ここは短く
@@ -112,7 +116,8 @@ export function ProjectExport({
           <p role="status" className="text-good-text">
             プロジェクトへ書き出しました: {done.path}
           </p>
-          {done.hints && <ModelHintsView hints={done.hints} />}
+          {doneAnomaly && <AnomalyRows summary={doneAnomaly} />}
+          {done.hints && <ModelHintsView hints={done.hints} anomaly={doneAnomaly !== null} />}
         </div>
       )}
     </section>
