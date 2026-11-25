@@ -9,7 +9,7 @@ import pytest
 import yaml
 from fastapi.testclient import TestClient
 from ml_eda.synthetic import write_image_masks, write_shape_captures
-from ml_quest.examples import example_problem
+from ml_quest import example_problem
 
 from ml_fathom.app import create_app
 

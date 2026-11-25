@@ -4,6 +4,8 @@ import type {
   DatasetSummary,
   ExportResult,
   GroupExport,
+  GroupProblem,
+  GroupProjectResult,
   GroupRequest,
   GroupSummary,
   ImageMaskExport,
@@ -99,6 +101,12 @@ export const api = {
     request<GroupSummary>(`/api/sources/${id}/groups`, json('POST', body)),
   exportGroups: (id: string, body: GroupExport) =>
     request<PairExportResult>(`/api/sources/${id}/export_groups`, json('POST', body)),
+  groupProblem: (id: string) => request<GroupProblem>(`/api/sources/${id}/group_problem`),
+  exportGroupProject: (id: string, overwrite: boolean) =>
+    request<GroupProjectResult>(
+      `/api/sources/${id}/export_group_project`,
+      json('POST', { overwrite }),
+    ),
   rows: (
     id: string,
     params: { offset: number; limit: number; sort?: string; descending?: boolean; query?: string },

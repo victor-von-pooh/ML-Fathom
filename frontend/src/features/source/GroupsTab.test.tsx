@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { afterEach, expect, test, vi } from 'vitest'
 
 import { api, ApiError } from '../../api/client'
-import type { GroupSummary, Profile, Source } from '../../api/types'
+import type { GroupProblem, GroupSummary, Profile, Source } from '../../api/types'
 import { GroupsTab } from './GroupsTab'
 
 afterEach(() => {
@@ -151,8 +151,10 @@ test('群を作る列と行を見分ける列で, 群分けの表を書き出す
       overwrite: false,
     }),
   )
-  expect(await screen.findByRole('status')).toHaveTextContent(
-    '書き出しました: /home/datasets/customers_groups',
+  await waitFor(() =>
+    expect(screen.getByRole('status')).toHaveTextContent(
+      '書き出しました: /home/datasets/customers_groups',
+    ),
   )
   expect(screen.getByText(/半分より多い種類の値/)).toBeInTheDocument()
   expect(
@@ -162,7 +164,7 @@ test('群を作る列と行を見分ける列で, 群分けの表を書き出す
   // 分けない場合は検証用の割合を出さない
   fireEvent.change(screen.getByLabelText('分割'), { target: { value: 'none' } })
   expect(screen.queryByLabelText('検証用の割合')).not.toBeInTheDocument()
-  expect(screen.queryByRole('status')).not.toBeInTheDocument()
+  expect(screen.getByRole('status')).toBeEmptyDOMElement()
 })
 
 test('同じ名前があれば置き換えの案内を添える', async () => {
@@ -221,4 +223,135 @@ test('書き出した後に群を作る列か群の数を変えると結果を�
   const fields = within(screen.getByRole('group', { name: '群を作る列' }))
   fireEvent.click(fields.getByRole('checkbox', { name: /region/ }))
   expect(screen.queryByText(/書き出しました/)).not.toBeInTheDocument()
+})
+
+/** まとめるの問題の設定から始めたデータ */
+const LINKED = { ...SOURCE, problem: '/problems/group/problem.yaml' } as Source
+
+/** 群分けのタブが読む, 問題の設定の答えと書き出し先 */
+const GROUP_PROBLEM: GroupProblem = {
+  name: '顧客の群',
+  path: '/problems/group/problem.yaml',
+  group: {
+    columns: ['region', 'spend', 'income'],
+    id: 'member',
+    k: 4,
+    stability: 'sample',
+    stability_label: '標本を変えて作り直す',
+  },
+  project: {
+    project: '/projects/group',
+    dataset: '/projects/group/data/customers.csv',
+    state: 'file',
+    ready: true,
+    reason: null,
+  },
+}
+
+function renderLinked() {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  return render(
+    <QueryClientProvider client={client}>
+      <GroupsTab source={LINKED} profile={PROFILE} />
+    </QueryClientProvider>,
+  )
+}
+
+test('問題の設定から始めたデータは, 答えで欄を埋め, 違う選び方にすると知らせる', async () => {
+  vi.spyOn(api, 'groupProblem').mockResolvedValue(GROUP_PROBLEM)
+  const groups = vi.spyOn(api, 'groups').mockResolvedValue(SUMMARY)
+  renderLinked()
+
+  // 表に無い列 (income) は外し, 表の順で埋める. 群の数も答えのまま
+  const fields = within(await screen.findByRole('group', { name: '群を作る列' }))
+  expect(fields.getByRole('checkbox', { name: /spend/ })).toBeChecked()
+  expect(fields.getByRole('checkbox', { name: /region/ })).toBeChecked()
+  expect(screen.getByLabelText('群の数')).toHaveValue(4)
+  expect(screen.getByText('標本を変えて作り直す')).toBeInTheDocument()
+  expect(screen.getByText(/ここの調整ランド指数は乱数の種を変えて/)).toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: '群を作る' }))
+  await waitFor(() =>
+    expect(groups).toHaveBeenCalledWith('s1', { columns: ['spend', 'region'], k: 4, seed: 0 }),
+  )
+
+  // 答えの列が表に無い (income) ので, 答えと違う選び方として知らせる.
+  // 群の数を変えても知らせる
+  expect(screen.getByText(/問題の設定の答えと違います/)).toBeInTheDocument()
+  fireEvent.change(screen.getByLabelText('群の数'), { target: { value: '3' } })
+  expect(screen.getByText(/ML-Pathfinder で答え直してください/)).toBeInTheDocument()
+})
+
+test('答えと同じ選び方なら知らせず, 受け持ちが変わったら答えで埋めず書き出さない', async () => {
+  vi.spyOn(api, 'groupProblem').mockResolvedValueOnce({
+    ...GROUP_PROBLEM,
+    group: { ...GROUP_PROBLEM.group!, columns: ['spend', 'region'], stability: 'seed' },
+  })
+  const view = renderLinked()
+  expect(await screen.findByRole('button', { name: 'プロジェクトへ書き出す' })).toBeEnabled()
+  expect(screen.queryByText(/問題の設定の答えと違います/)).not.toBeInTheDocument()
+  expect(screen.queryByText(/ここの調整ランド指数は乱数の種を変えて/)).not.toBeInTheDocument()
+  view.unmount()
+
+  vi.spyOn(api, 'groupProblem').mockResolvedValue({ ...GROUP_PROBLEM, group: null, project: null })
+  renderLinked()
+  expect(
+    await screen.findByText(/まとめるで学習する受け持ちではなくなりました/),
+  ).toBeInTheDocument()
+  expect(screen.getByLabelText('群の数')).toHaveValue(3)
+  expect(screen.queryByRole('button', { name: 'プロジェクトへ書き出す' })).not.toBeInTheDocument()
+})
+
+test('前に置いた表は確かめてから置き換え, 写した場所と骨組みが読む列を出す', async () => {
+  vi.spyOn(api, 'groupProblem').mockResolvedValue(GROUP_PROBLEM)
+  const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValue(true)
+  const exporter = vi.spyOn(api, 'exportGroupProject').mockResolvedValue({
+    path: '/projects/group/data/customers.csv',
+    copied: true,
+    rows: 120,
+    columns: ['region', 'spend'],
+    id: 'member',
+  })
+  renderLinked()
+  const button = await screen.findByRole('button', { name: 'プロジェクトへ書き出す' })
+
+  // 置き換えを断れば送らない
+  fireEvent.click(button)
+  expect(confirm).toHaveBeenCalledTimes(1)
+  expect(exporter).not.toHaveBeenCalled()
+  fireEvent.click(button)
+  await waitFor(() => expect(exporter).toHaveBeenCalledWith('s1', true))
+  expect(
+    await screen.findByText(/プロジェクトへ書き出しました: \/projects\/group\/data\/customers.csv/),
+  ).toHaveTextContent('120 行. 骨組みが群を作る列 region, spend, 行を見分ける列 member')
+})
+
+test('問題の設定を読めなくても群分けを続けられる', async () => {
+  vi.spyOn(api, 'groupProblem').mockRejectedValue(
+    new ApiError(
+      422,
+      '/problems/group/problem.yaml が始めたときと別の問題の設定に置き換わっています',
+    ),
+  )
+  renderLinked()
+  expect(await screen.findByRole('alert')).toHaveTextContent('別の問題の設定に置き換わっています')
+  expect(screen.getByRole('button', { name: '群を作る' })).toBeEnabled()
+  expect(screen.queryByText('プロジェクトへ書き出す')).not.toBeInTheDocument()
+})
+
+test('群の数を答えていない問題の設定は, 開いただけでは答えと違うと知らせない', async () => {
+  vi.spyOn(api, 'groupProblem').mockResolvedValue({
+    ...GROUP_PROBLEM,
+    group: { ...GROUP_PROBLEM.group!, columns: ['spend', 'region'], k: null },
+  })
+  renderLinked()
+  expect(await screen.findByLabelText('群の数')).toHaveValue(3)
+  expect(screen.getByText('答えていません')).toBeInTheDocument()
+  expect(screen.queryByText(/問題の設定の答えと違います/)).not.toBeInTheDocument()
+
+  // 群の数は答えていないので変えても知らせず, 列を変えると知らせる
+  fireEvent.change(screen.getByLabelText('群の数'), { target: { value: '5' } })
+  expect(screen.queryByText(/問題の設定の答えと違います/)).not.toBeInTheDocument()
+  const fields = within(screen.getByRole('group', { name: '群を作る列' }))
+  fireEvent.click(fields.getByRole('checkbox', { name: /region/ }))
+  expect(screen.getByText(/問題の設定の答えと違います/)).toBeInTheDocument()
 })

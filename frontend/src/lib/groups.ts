@@ -1,5 +1,5 @@
 // 群分け (まとめる) の群の要約 (ML-EDA の describe_groups) の表示
-import type { ColumnInfo, GroupRow } from '../api/types'
+import type { ColumnInfo, GroupAnswers, GroupRow } from '../api/types'
 import { formatNumber } from './format'
 
 /** 群の要約の行の, 列の要約でない鍵 */
@@ -26,6 +26,31 @@ export function defaultGroupColumns(
   return Object.entries(columns)
     .filter(([name, info]) => name !== target && !SKIPPED_TYPES.has(info.type))
     .map(([name]) => name)
+}
+
+/** 問題の設定の答えの群を作る列のうち, 表にある列を表の順に返す */
+export function answerColumns(answers: GroupAnswers, columns: string[]): string[] {
+  return columns.filter((name) => answers.columns.includes(name))
+}
+
+/**
+ * 問題の設定の答えの群の数. 答えていなければ 3. 範囲の外の数はそのまま返す
+ * (欄に理由を出し, 黙って変えないため)
+ */
+export function answerK(answers: GroupAnswers): number {
+  return answers.k ?? 3
+}
+
+/**
+ * 欄の群を作る列か群の数が, 問題の設定の答えと違うか (列の順は問わない). 答えていない
+ * 項目 (列が空, 群の数が null) は比べない (未答の問題の設定を開いただけで知らせないため)
+ */
+export function differsFromAnswers(answers: GroupAnswers, columns: string[], k: number): boolean {
+  const wanted = new Set(answers.columns)
+  const kDiffers = answers.k !== null && answers.k !== k
+  const columnsDiffer =
+    wanted.size > 0 && (columns.length !== wanted.size || columns.some((name) => !wanted.has(name)))
+  return kDiffers || columnsDiffer
 }
 
 /** 群の要約の行から, 群を作った列の名前を表の順に返す */

@@ -1,6 +1,7 @@
 from typing import Annotated, Any, Literal, Optional
 
 import ml_eda
+import ml_quest
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -22,6 +23,10 @@ MAX_GROUPS = 50
 # 群を作る列の数の上限 (画面で選べる数. 符号化した行の幅の上限は ML-EDA
 # が持つ)
 MAX_COLUMNS = 200
+
+# 群の要約の表の列 (群を作る列と同じ名前にはできない. ML-EDA の群の要約と
+# ML-Quest のまとめるの骨組みと同じ組)
+SUMMARY_KEYS = ("group", "rows", "share", "stability")
 
 # 誤りとして理由を返す ML-EDA の例外 (列の誤り, 群の数の誤りなど)
 INPUT_ERRORS = (ValueError, TypeError, KeyError)
@@ -56,6 +61,118 @@ class GroupExport(BaseModel):
     split: GroupSplit = GroupSplit()
     name: str
     overwrite: bool = False
+
+
+def is_group(problem: dict[str, Any]) -> bool:
+    """
+    受け持ちがまとめるで学習する (作り方が既製のモデルをそのままでない) か
+    を返す関数
+
+    Parameters
+    ----------
+    problem: dict[str, Any]
+        問題の設定 (版 2)
+
+    Returns
+    ----------
+    group: bool
+        まとめるの骨組みを書き出す受け持ちか (ML-Quest の骨組みと同じ決まり)
+    """
+    # 受け持ちと作り方の答え (要らない問いの古い答えは除外)
+    part = ml_quest.PART
+    group = bool(
+        ml_quest.active_value(problem, f"{part}.role") == "group"
+        and ml_quest.active_value(problem, f"{part}.method") != "pretrained"
+    )
+
+    return group
+
+
+def group_answers(problem: dict[str, Any]) -> dict[str, Any]:
+    """
+    問題の設定から, 群を作る列, 行を見分ける列, 群の数, 安定性の数え方の
+    答えを返す関数
+
+    Parameters
+    ----------
+    problem: dict[str, Any]
+        問題の設定 (まとめるで学習する受け持ち)
+
+    Returns
+    ----------
+    answers: dict[str, Any]
+        columns (列の名前の並び. 答えていなければ空), id (列の名前か
+        None), k (群の数の整数か None), stability (seed か sample か
+        None)
+    """
+    # ml.parts.<n>.group の答え (文字でない列の名前は答えていないもの)
+    base = f"{ml_quest.PART}.group"
+    columns = ml_quest.active_value(problem, f"{base}.columns")
+    key = ml_quest.active_value(problem, f"{base}.id")
+    stability = ml_quest.active_value(problem, f"{base}.stability")
+    # 群の数は整数の値だけ (真偽値, 端数のある数, 文字は答えていないもの)
+    k = ml_quest.active_value(problem, f"{base}.k")
+    if isinstance(k, bool) or not isinstance(k, (int, float)) or not (
+        float(k).is_integer()
+    ):
+        k = None
+    answers: dict[str, Any] = {
+        "columns": [str(name) for name in columns]
+        if isinstance(columns, list) else [],
+        "id": key if isinstance(key, str) and key else None,
+        "k": None if k is None else int(k),
+        "stability": stability if stability in ("seed", "sample") else None,
+    }
+
+    return answers
+
+
+def check_group_columns(
+    data: ml_eda.Data, answers: dict[str, Any]
+) -> None:
+    """
+    問題の設定の答えの列を, 骨組みが読めるかを確かめる関数
+
+    骨組みの学習のスクリプトが止める誤り (答えの無い群を作る列, 表に無い
+    列, 群の要約の列と同じ名前) を先に出す
+
+    Parameters
+    ----------
+    data: ml_eda.Data
+        読み込んだ表
+    answers: dict[str, Any]
+        group_answers の結果
+
+    Returns
+    ----------
+    None
+
+    Raises
+    ----------
+    HTTPException
+        誤りは 422
+    """
+    # 群を作る列と行を見分ける列
+    names = list(answers["columns"])
+    if not names:
+        raise HTTPException(
+            422, "問題の設定に群を作る列の答えがありません (ML-Pathfinder の"
+            "「群を作るのに使う列は」で答えてください)"
+        )
+    wanted = names + ([answers["id"]] if answers["id"] else [])
+    present = {str(name) for name in data.frame.columns}
+    missing = [name for name in wanted if name not in present]
+    if missing:
+        raise HTTPException(
+            422, f"表に {', '.join(missing)} の列がありません. ML-Pathfinder "
+            "で群を作る列か行を見分ける列を答え直してください"
+        )
+    taken = [name for name in names if name in SUMMARY_KEYS]
+    if taken:
+        raise HTTPException(
+            422, f"群を作る列 {', '.join(taken)} は群の要約の列と同じ名前です. "
+            "名前を変えた列を持つ表を入れ直してください"
+        )
 
 
 @router.post("/sources/{source_id}/groups")

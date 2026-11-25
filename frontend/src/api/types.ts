@@ -53,7 +53,7 @@ export interface ProjectPlace {
   dataset: string | null
   /**
    * missing は無い, dataset は前に書き出したもの, occupied はデータセットでないもの.
-   * 並べるの反応の表 (ファイル 1 つ) では dataset の代わりに file (前に置いたファイル) で,
+   * 並べるの反応の表とまとめるの表 (ファイル 1 つ) では dataset の代わりに file (前に置いたファイル) で,
    * occupied はファイルでないもの
    */
   state: 'missing' | 'dataset' | 'file' | 'occupied' | null
@@ -522,6 +522,8 @@ export interface ProblemStarted {
   problem: string
   form: 'image_masks' | 'capture_clouds' | null
   notes: string[]
+  /** 開くタブ (まとめるは群分けのタブ. 他は null) */
+  tab: 'groups' | null
 }
 
 /** 多視点の撮影の 1 件 (各枚と上から見たカメラの配置) */
@@ -784,4 +786,38 @@ export interface GroupExport {
   split: { method: 'random' | 'none'; valid: number; test: number; seed: number }
   name: string
   overwrite: boolean
+}
+
+/** まとめるの問題の設定の答え (ML-Quest の ml.parts.<n>.group) */
+export interface GroupAnswers {
+  /** 群を作る列 (答えていなければ空) */
+  columns: string[]
+  /** 行を見分ける列 */
+  id: string | null
+  /** 群の数の答え (答えていなければ null) */
+  k: number | null
+  /** 安定性の数え方 (種を変えるか標本を変えるか) と, その言葉 */
+  stability: 'seed' | 'sample' | null
+  stability_label: string | null
+}
+
+/** 群分けのタブが読む, 始めた問題の設定の答えとプロジェクトの書き出し先 */
+export interface GroupProblem {
+  name: string | null
+  /** problem.yaml の場所 */
+  path: string
+  /** まとめるで学習する受け持ちでなければ null */
+  group: GroupAnswers | null
+  project: ProjectPlace | null
+}
+
+/** まとめるの表をプロジェクトへ写した結果 */
+export interface GroupProjectResult {
+  path: string
+  /** 写したか (書き出し先が登録した表そのものなら false) */
+  copied: boolean
+  rows: number
+  /** 骨組みが群を作る列と, 行を見分ける列 */
+  columns: string[]
+  id: string | null
 }
