@@ -372,6 +372,73 @@ test('問題の設定を読めなくても群分けを続けられる', async ()
   expect(await screen.findByRole('alert')).toHaveTextContent('別の問題の設定に置き換わっています')
   expect(screen.getByRole('button', { name: '群を作る' })).toBeEnabled()
   expect(screen.queryByText('プロジェクトへ書き出す')).not.toBeInTheDocument()
+
+  // 読めない答えの数え方は使わず, 種を変えて数える
+  const groups = vi.spyOn(api, 'groups').mockResolvedValue(SUMMARY)
+  fireEvent.click(screen.getByRole('button', { name: '群を作る' }))
+  await waitFor(() =>
+    expect(groups).toHaveBeenCalledWith('s1', expect.objectContaining({ stability: 'seed' })),
+  )
+})
+
+test('読み直しが失敗したら前の答えの数え方を使わず, 読み直し中は群を作れない', async () => {
+  let fail: (error: Error) => void = () => {}
+  vi.spyOn(api, 'groupProblem')
+    .mockResolvedValueOnce(GROUP_PROBLEM)
+    .mockImplementationOnce(
+      () =>
+        new Promise((_, reject) => {
+          fail = reject
+        }),
+    )
+  const groups = vi.spyOn(api, 'groups').mockResolvedValue(SUMMARY)
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  render(
+    <QueryClientProvider client={client}>
+      <GroupsTab source={LINKED} profile={PROFILE} />
+    </QueryClientProvider>,
+  )
+  expect(await screen.findByText('標本を変えて作り直す')).toBeInTheDocument()
+
+  // 読み直している間は押せず, 理由を出す
+  void client.invalidateQueries({ queryKey: ['group_problem', 's1'] })
+  expect(await screen.findByText('問題の設定を読み直しています')).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: '群を作る' })).toBeDisabled()
+
+  // 失敗すると前の答え (標本を変える) を使わず, 種を変えて数える
+  fail(new ApiError(422, '問題の設定を読めません'))
+  expect(await screen.findByText(/問題の設定を読めません/)).toBeInTheDocument()
+  expect(screen.queryByText('標本を変えて作り直す')).not.toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: '群を作る' }))
+  await waitFor(() =>
+    expect(groups).toHaveBeenCalledWith('s1', expect.objectContaining({ stability: 'seed' })),
+  )
+})
+
+test('まとめるでなくなった問題の設定と, 数え方を答えていない問題の設定は種を変えて数える', async () => {
+  const groups = vi.spyOn(api, 'groups').mockResolvedValue(SUMMARY)
+  vi.spyOn(api, 'groupProblem').mockResolvedValueOnce({
+    ...GROUP_PROBLEM,
+    group: null,
+    project: null,
+  })
+  const view = renderLinked()
+  await screen.findByText(/まとめるで学習する受け持ちではなくなりました/)
+  fireEvent.click(screen.getByRole('button', { name: '群を作る' }))
+  await waitFor(() =>
+    expect(groups).toHaveBeenLastCalledWith('s1', expect.objectContaining({ stability: 'seed' })),
+  )
+  view.unmount()
+
+  vi.spyOn(api, 'groupProblem').mockResolvedValueOnce({
+    ...GROUP_PROBLEM,
+    group: { ...GROUP_PROBLEM.group!, stability: null, stability_label: null },
+  })
+  renderLinked()
+  expect(await screen.findByText('答えていません')).toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: '群を作る' }))
+  await waitFor(() => expect(groups).toHaveBeenCalledTimes(2))
+  expect(groups).toHaveBeenLastCalledWith('s1', expect.objectContaining({ stability: 'seed' }))
 })
 
 test('群の数を答えていない問題の設定は, 開いただけでは答えと違うと知らせない', async () => {

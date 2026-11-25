@@ -582,7 +582,10 @@ export function GroupsTab({ source, profile }: { source: Source; profile: Profil
   // ときの欄の鍵, to は書き戻した後の答えの鍵
   const [own, setOwn] = useState<{ from: string; to: string } | null>(null)
   if (linked && problem.isPending) return <Spinner label="問題の設定を読んでいます" />
-  const answers = problem.data?.group ?? null
+  // 読み直しが失敗したら前の答えを使わない (react-query は前の data を残すので,
+  // 読めない答えの数え方で群を作らないように. 答えが無いのと同じく種を変えて数える)
+  const read = problem.error ? null : (problem.data ?? null)
+  const answers = read?.group ?? null
   const current = answersKey(answers)
   const key = own && own.to === current ? own.from : current
   return (
@@ -598,7 +601,7 @@ export function GroupsTab({ source, profile }: { source: Source; profile: Profil
         key={key}
         source={source}
         profile={profile}
-        problem={problem.data ?? null}
+        problem={read}
         fetching={problem.isFetching}
         onWritten={(result) => setOwn({ from: key, to: answersKey(result.group) })}
       />
@@ -660,6 +663,8 @@ function GroupsBody({
         : !Number.isInteger(seed) || seed < 0
           ? '乱数の種は 0 以上の整数にしてください'
           : null
+  // 問題の設定を読み直している間は, 古い答えの数え方で群を作らない
+  const waiting = fetching ? '問題の設定を読み直しています' : null
   const summary = grouping.data
   const differs = answers !== null && differsFromAnswers(answers, columns, k, chosenId)
   return (
@@ -726,16 +731,16 @@ function GroupsBody({
           <Button
             variant="primary"
             icon={Shapes}
-            disabled={grouping.isPending || reason !== null}
-            aria-describedby={reason ? reasonId : undefined}
+            disabled={grouping.isPending || reason !== null || waiting !== null}
+            aria-describedby={reason || waiting ? reasonId : undefined}
             onClick={() => grouping.mutate()}
           >
             {grouping.isPending ? '群を作っています…' : '群を作る'}
           </Button>
         </div>
-        {reason && (
+        {(reason || waiting) && (
           <p id={reasonId} className="mt-2 text-xs text-warning-text">
-            {reason}
+            {reason ?? waiting}
           </p>
         )}
       </Card>

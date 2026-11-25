@@ -1019,7 +1019,8 @@ test('まとめるの問題の設定から始め, 答えの列で群を作って
   const table = page.getByRole('table', { name: '群ごとの行の数, 割合, 安定性と列の特徴' })
   await expect(table.getByText('40', { exact: true })).toHaveCount(3, { timeout: 20_000 })
   await expect(page.getByText(/全ての行から 80% の行を引き直し/)).toBeVisible()
-  await expect(page.getByText('調整ランド指数 (安定性)').locator('..')).toContainText('1')
+  const ari = page.getByText('調整ランド指数 (安定性)').locator('..').locator('div').nth(1)
+  await expect(ari).toHaveText('1')
 
   // 答えと違う列を選ぶと知らせ, 戻すと消える
   await fields.getByRole('checkbox', { name: /region/ }).check()
