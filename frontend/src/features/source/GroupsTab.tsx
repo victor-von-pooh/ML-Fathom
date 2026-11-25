@@ -344,6 +344,8 @@ function ProjectExportCard({
         問題の設定に記録した学習のプロジェクトの骨組みが読む場所 (config の data.dataset)
         に写します. 骨組みは問題の設定の読み方で表を読み,
         答えた群を作る列と行を見分ける列だけを使い, 学習用と検証用に分けます.
+        学習のプロジェクトへ渡すのはこの書き出しです (下の「群分けの表を分析用に書き出す」は
+        分析の保存で, 骨組みは読みません).
       </p>
       {place.dataset && (
         <p className="mt-2 truncate font-mono text-xs" title={place.dataset}>
@@ -384,7 +386,10 @@ function ProjectExportCard({
   )
 }
 
-/** 群を作る列で, 群分けの表をデータセット (版 2) に書き出す */
+/**
+ * 群を作る列で, 群分けの表を分析の保存としてデータセット (版 2) に書き出す (学習には使わず,
+ * 学習のプロジェクトへは「プロジェクトへ書き出す」で表のファイルを写す)
+ */
 function ExportCard({
   source,
   columns,
@@ -430,10 +435,12 @@ function ExportCard({
   // かを取り違えないように)
   const done = exporter.variables?.selection === selection ? exporter.data : undefined
   return (
-    <Card title="群分けの表を書き出す">
+    <Card title="群分けの表を分析用に書き出す">
       <p className="text-sm text-ink-2">
-        群を作る列 (上で選んだ列) と行を見分ける列だけを, 正解の無い群分けの表として
-        学習用のデータセットに書き出します. 群の数は学習のプロジェクトで決めます.
+        選んだ列を, 後で群の要約を見直すための分析の保存として書き出します. 学習には使えません.
+        学習のプロジェクトへ表を渡すには, まとめるの問題の設定から始めて
+        「プロジェクトへ書き出す」を使います. 書き出すのは群を作る列 (上で選んだ列) と
+        行を見分ける列だけで, データセットの一覧に群分けの表として並びます.
       </p>
       <div className="mt-3 grid grid-cols-[9rem_1fr] items-center gap-2 text-sm">
         <label htmlFor="group-id" className="text-ink-3">
@@ -513,11 +520,6 @@ function ExportCard({
           同じ名前があれば置き換える
         </label>
       </div>
-      {method === 'random' && (
-        <p className="mt-2 text-xs text-ink-3">
-          学習のプロジェクトは, 検証用の行で群のまとまりを測ります.
-        </p>
-      )}
       {reason && (
         <p id={reasonId} className="mt-2 text-xs text-warning-text">
           {reason}
@@ -531,7 +533,7 @@ function ExportCard({
         aria-describedby={reason ? reasonId : undefined}
         onClick={() => exporter.mutate({ k, selection })}
       >
-        {exporter.isPending ? '書き出し中…' : '群分けの表を書き出す'}
+        {exporter.isPending ? '書き出し中…' : '群分けの表を分析用に書き出す'}
       </Button>
       {exporter.error && (
         <ErrorBox error={exporter.error}>
@@ -555,7 +557,7 @@ function ExportCard({
               ))}
             </ul>
           )}
-          <p className="text-xs text-ink-3">学習のスクリプトでの読み方:</p>
+          <p className="text-xs text-ink-3">読み直して群の要約を求める例:</p>
           <pre className="overflow-auto rounded bg-surface-2 p-2 text-xs">
             {groupUsage(done.path, exporter.variables?.k ?? k)}
           </pre>
@@ -567,7 +569,7 @@ function ExportCard({
 
 /**
  * 群分け (まとめる): 群を作る列と群の数を選び, 学習に通さずに作った群の要約
- * (ML-EDA の describe_groups) を見て, 群分けの表を書き出す. 問題の設定から始めたデータは,
+ * (ML-EDA の describe_groups) を見て, 群分けの表を分析用に書き出す. 問題の設定から始めたデータは,
  * 開くたびに問題の設定を読み直し, まとめるの答えで欄を埋める
  */
 export function GroupsTab({ source, profile }: { source: Source; profile: Profile }) {
