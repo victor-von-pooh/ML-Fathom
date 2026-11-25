@@ -10,6 +10,7 @@ import yaml
 from fastapi.testclient import TestClient
 from ml_quest import example_problem
 
+from ml_fathom import problems
 from ml_fathom.app import create_app
 
 # テストで使うトークン
@@ -842,14 +843,16 @@ def test_export_project_swapped(
         assert moved.is_dir() and list(moved.iterdir()) == []
 
 
+@pytest.mark.parametrize("when", ["frame", "finish", "read"])
 def test_export_project_while_writing(
     client: TestClient, tmp_path: Path,
-    swap_while_writing: Callable[[Path, Path], None]
+    swap_while_writing: Callable[[Path, Path, str], None],
+    monkeypatch: pytest.MonkeyPatch, when: str
 ) -> None:
     """
-    ML-EDA が書き出している最中に書き出し先の途中が外を指すリンクに
-    替わっても, プロジェクトの外に書かず, 開いた親に書き, 替わった先を
-    読まずに断ることを確かめる関数
+    ML-EDA が書き出している最中か書いた直後に書き出し先の途中が外を指す
+    リンクに替わっても, プロジェクトの外に書かず, 外を読まず, 開いた親に
+    書いて, 書けた場所を添えて断ることを確かめる関数
 
     Parameters
     ----------
@@ -857,14 +860,18 @@ def test_export_project_while_writing(
         クライアント
     tmp_path: Path
         一時ディレクトリ
-    swap_while_writing: Callable[[Path, Path], None]
-        書いている最中に途中の場所をリンクに替える差し替え
+    swap_while_writing: Callable[[Path, Path, str], None]
+        途中の場所をリンクに替える差し替え
+    monkeypatch: pytest.MonkeyPatch
+        モデルの入力の数の読み込みの記録
+    when: str
+        替える時 (表を書く時, 入れ替えの直前, 書いた後の読み込みの直前)
 
     Returns
     ----------
     None
     """
-    # プロジェクトの中の data/dataset に向け, 書いている最中に data を替える
+    # 書き出し先 data/dataset の data の差し替え (外には分類の偽物)
     path = write_problem(tmp_path)
     source = client.post(
         "/api/problems/start", json={"path": str(path)}
@@ -875,17 +882,37 @@ def test_export_project_while_writing(
     (project / "data").mkdir(parents=True)
     with_project(path, project, project / "data" / "dataset")
     outside = tmp_path / "outside"
-    outside.mkdir()
-    swap_while_writing(project / "data", outside)
+    (outside / "dataset").mkdir(parents=True)
+    fake = {"format_version": 1, "task": "classification",
+            "classes": ["a", "b", "c"], "features": [], "splits": {}}
+    (outside / "dataset" / "dataset.yaml").write_text(
+        yaml.safe_dump(fake), encoding="utf-8"
+    )
+    swap_while_writing(project / "data", outside, when)
+    seen: list[dict[str, Any]] = []
+    reading = problems.model_hints
 
-    # 外には何も書かず, 開いた親 (退けた元の data) に書き, 替わった先を
-    # 読まずに理由付きの 422
+    def record(*args: Any) -> dict[str, Any]:
+        found: dict[str, Any] = reading(*args)
+        seen.append(found)
+        return found
+
+    monkeypatch.setattr(problems, "model_hints", record)
+
+    # 書けた場所 (退けた元の data) を添えた 422 と, 外の書き換えと偽物の
+    # 読み込みの無さ (モデルの入力の数は書いたデータセットのもの)
     exported = client.post(f"{url}/export_project", json={"recipe": recipe})
     assert exported.status_code == 422, exported.text
-    assert "替わりました" in exported.json()["detail"]
-    assert (project / "data").is_symlink()
-    assert list(outside.iterdir()) == []
     moved = project / "data.moved"
+    detail = exported.json()["detail"]
+    assert "替わりました" in detail
+    assert str((moved / "dataset").resolve()) in detail
+    assert seen and seen[0]["outputs"] == 1
+    assert (project / "data").is_symlink()
+    assert sorted(item.name for item in outside.iterdir()) == ["dataset"]
+    assert [item.name for item in (outside / "dataset").iterdir()] == [
+        "dataset.yaml"
+    ]
     assert sorted(item.name for item in moved.iterdir()) == ["dataset"]
     assert (moved / "dataset" / "dataset.yaml").is_file()
 

@@ -84,44 +84,61 @@ def swap_after_check(
 @pytest.fixture
 def swap_while_writing(
     monkeypatch: pytest.MonkeyPatch
-) -> Callable[[Path, Path], None]:
+) -> Callable[[Path, Path, str], None]:
     """
-    ML-EDA が書き出している最中に, 途中の場所を外を指すシンボリック
-    リンクに替える差し替えを返す関数
-
-    ML-EDA の版 1 とファイルの組の書き出しが表を書く時 (中身を書いた後,
-    入れ替えの前) に 1 度だけ替える
+    ML-EDA が書き出している最中か, 書いた直後に, 途中の場所を外を指す
+    シンボリックリンクに替える差し替えを返す関数
 
     Parameters
     ----------
     monkeypatch: pytest.MonkeyPatch
-        ML-EDA の表の書き込みの差し替え
+        ML-EDA の書き込みか, このアプリの確かめの差し替え
 
     Returns
     ----------
-    swap: Callable[[Path, Path], None]
-        途中の場所と, リンクの指す外のディレクトリを受け取り, 差し替えを
-        仕掛ける関数
+    swap: Callable[[Path, Path, str], None]
+        途中の場所と, リンクの指す外のディレクトリと, 替える時 (frame は
+        表を書く時, finish は親の中に入れ替える直前, read は書いた後に
+        モデルの入力の数を読む直前) を受け取り, 差し替えを仕掛ける関数
     """
-    # 版 1 (pipeline) とファイルの組 (items) の表の書き込み
+    # 版 1 (pipeline) とファイルの組 (items) の表の書き込みと, 入れ替え
     modules = (ml_eda.pipeline, ml_eda.items)
-    originals = {module: module.write_frame for module in modules}
+    frames = {module: module.write_frame for module in modules}
+    move = ml_eda.pipeline.move_into
+    hints = problems.model_hints
 
-    def swap(part: Path, outside: Path) -> None:
-        # 最初の表の書き込みの直前だけの差し替え
+    def swap(part: Path, outside: Path, when: str) -> None:
+        # 1 度だけの差し替え
         done: list[bool] = []
+
+        def once() -> None:
+            if not done:
+                done.append(True)
+                move_and_link(part, outside)
 
         def writing(module: Any) -> Callable[[pd.DataFrame, Path], str]:
             def write(frame: pd.DataFrame, path: Path) -> str:
-                if not done:
-                    done.append(True)
-                    move_and_link(part, outside)
-                name: str = originals[module](frame, path)
+                once()
+                name: str = frames[module](frame, path)
                 return name
 
             return write
 
-        for module in modules:
-            monkeypatch.setattr(module, "write_frame", writing(module))
+        def moving(*args: Any) -> None:
+            once()
+            move(*args)
+
+        def reading(*args: Any) -> dict[str, Any]:
+            once()
+            found: dict[str, Any] = hints(*args)
+            return found
+
+        if when == "frame":
+            for module in modules:
+                monkeypatch.setattr(module, "write_frame", writing(module))
+        elif when == "finish":
+            monkeypatch.setattr(ml_eda.pipeline, "move_into", moving)
+        else:
+            monkeypatch.setattr(problems, "model_hints", reading)
 
     return swap

@@ -1,9 +1,12 @@
+import fcntl
 import os
 import stat
+import sys
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Optional
 
 from fastapi import HTTPException
 
@@ -59,6 +62,85 @@ def same_parent(parent: Parent) -> bool:
     same = (now.st_dev, now.st_ino) == (opened.st_dev, opened.st_ino)
 
     return same
+
+
+def opened_state(parent: Parent, single: bool = False) -> str:
+    """
+    開いた親の中の書き出し先の今の様子を, リンクをたどらずに返す関数
+
+    Parameters
+    ----------
+    parent: Parent
+        開いた書き出し先の親
+    single: bool = False
+        書き出し先がファイル 1 つ (反応の表と群分けの表の写し) か
+
+    Returns
+    ----------
+    state: str
+        missing (無い), dataset (前に書き出したデータセット. single では
+        file (普通のファイル)), occupied (他のもの, シンボリックリンク)
+    """
+    # 親の中の名前の, リンクをたどらない様子
+    name = parent.place.name
+    try:
+        mode = os.stat(name, dir_fd=parent.fd, follow_symlinks=False).st_mode
+    except FileNotFoundError:
+        state = "missing"
+        return state
+    if single:
+        state = "file" if stat.S_ISREG(mode) else "occupied"
+        return state
+    if not stat.S_ISDIR(mode):
+        state = "occupied"
+        return state
+
+    # 中の説明も, 開いたディレクトリに対してリンクをたどらない確かめ
+    try:
+        fd = os.open(name, DIRECTORY_FLAGS, dir_fd=parent.fd)
+    except OSError:
+        state = "occupied"
+        return state
+    try:
+        mode = os.stat(
+            "dataset.yaml", dir_fd=fd, follow_symlinks=False
+        ).st_mode
+        state = "dataset" if stat.S_ISREG(mode) else "occupied"
+    except FileNotFoundError:
+        state = "occupied"
+    finally:
+        os.close(fd)
+
+    return state
+
+
+def opened_path(fd: int) -> Optional[Path]:
+    """
+    開いたディレクトリの今の場所を返す関数
+
+    Parameters
+    ----------
+    fd: int
+        ディレクトリの記述子
+
+    Returns
+    ----------
+    path: Optional[Path]
+        今の場所 (macOS は F_GETPATH, Linux は /proc の記述子のリンク.
+        求められなければ None)
+    """
+    # 記述子からの今の場所 (名前を変えた後も)
+    path: Optional[Path] = None
+    try:
+        if sys.platform == "darwin":
+            raw = fcntl.fcntl(fd, fcntl.F_GETPATH, bytes(1024))
+            path = Path(os.fsdecode(raw.split(b"\0", 1)[0]))
+        elif os.path.isdir("/proc/self/fd"):
+            path = Path(os.readlink(f"/proc/self/fd/{fd}"))
+    except OSError:
+        path = None
+
+    return path
 
 
 def changed_reason(part: Path, fd: int, name: str) -> str:

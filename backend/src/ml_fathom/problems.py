@@ -32,7 +32,13 @@ from ml_fathom.groups import (
     is_group,
 )
 from ml_fathom.jsonable import to_json
-from ml_fathom.places import Parent, pinned_parent, same_parent
+from ml_fathom.places import (
+    Parent,
+    opened_path,
+    opened_state,
+    pinned_parent,
+    same_parent,
+)
 from ml_fathom.reactions import (
     REACTIONS_KIND,
     copy_file,
@@ -1093,7 +1099,7 @@ def export_problem_pairs(body: PairsExport) -> dict[str, Any]:
         with EXPORT_LOCK, pinned_export(project_record(problem)) as (
             target, parent
         ):
-            state = place_state(parent.place)
+            state = opened_state(parent)
             if state == "occupied":
                 raise HTTPException(
                     409, f"{target} はデータセットではないので置き換えません"
@@ -1508,6 +1514,34 @@ def export_place(record: Optional[dict[str, str]]) -> Path:
     return target
 
 
+def changed_message(target: Path, parent: Parent) -> str:
+    """
+    書いている最中に書き出し先の途中が替わった場合の理由の文を返す関数
+
+    Parameters
+    ----------
+    target: Path
+        書き出し先 (記録のまま)
+    parent: Parent
+        書き出しに使った, 開いた親
+
+    Returns
+    ----------
+    message: str
+        データセットを書けた場所と, 替わった先に書いていないことの文
+    """
+    # 書けた場所は開いた親の今の場所 (求められなければ開いた時の場所)
+    place = opened_path(parent.fd) or parent.place.parent
+    message = (
+        f"書いている最中に {target} の途中のディレクトリが別の場所に"
+        f"替わりました. データセットは {place / target.name} に書き, "
+        f"今の {target} の先には書いていません. 確かめてからもう一度"
+        "書き出してください"
+    )
+
+    return message
+
+
 @contextmanager
 def pinned_export(
     record: Optional[dict[str, str]]
@@ -1653,7 +1687,7 @@ def export_project(
     data = load_source(source)
     try:
         with EXPORT_LOCK, pinned_export(record) as (target, parent):
-            state = place_state(parent.place)
+            state = opened_state(parent)
             if state == "occupied":
                 raise HTTPException(
                     409, f"{target} はデータセットではないので置き換えません"
@@ -1668,16 +1702,11 @@ def export_project(
                 overwrite=body.overwrite, parent=parent.fd
             )
 
-            # 書いた後に読むパスも, 開いた親を通ること (替わった先を
-            # 読まない)
+            # モデルの入力の数も開いた親を通した読み込み (パスは読まない)
+            # と, 書き出し先のパスが今も開いた親を通るかの確かめ
+            hints = model_hints(parent.place, info, parent.fd)
             if not same_parent(parent):
-                raise HTTPException(
-                    422, f"書いている最中に {target} の途中の場所が替わり"
-                    "ました. データセットは替わる前の場所に書き, 替わった"
-                    "先には書いていません. 確かめてからもう一度書き出して"
-                    "ください"
-                )
-            hints = model_hints(parent.place, info)
+                raise HTTPException(422, changed_message(target, parent))
     except FileExistsError as error:
         raise HTTPException(409, str(error)) from error
     except (ValueError, KeyError, TypeError, AttributeError) as error:
@@ -1735,7 +1764,7 @@ def copy_to_project(
     # 書き出し先の様子と拡張子を確かめてから写す
     try:
         with EXPORT_LOCK, pinned_export(record) as (target, parent):
-            state = file_state(parent.place)
+            state = opened_state(parent, single=True)
             if state == "occupied":
                 raise HTTPException(
                     409, f"{target} はファイルではないので置き換えません"

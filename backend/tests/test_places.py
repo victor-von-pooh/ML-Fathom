@@ -126,7 +126,7 @@ def test_same_parent(tmp_path: Path) -> None:
     ----------
     None
     """
-    # 開いたままなら同じ, 途中を外を指すリンクに替えると違う
+    # 開いたままの比べ (途中を外を指すリンクに替えた後と, 消した後の違い)
     project = tmp_path / "proj"
     project.mkdir()
     outside = tmp_path / "outside"
@@ -138,3 +138,46 @@ def test_same_parent(tmp_path: Path) -> None:
         assert not places.same_parent(parent)
         (project / "a").unlink()
         assert not places.same_parent(parent)
+
+
+def test_opened_state(tmp_path: Path) -> None:
+    """
+    開いた親の中の書き出し先の様子を, リンクをたどらずに見分け, 開いた
+    親の今の場所を求めることを確かめる関数
+
+    Parameters
+    ----------
+    tmp_path: Path
+        一時ディレクトリ
+
+    Returns
+    ----------
+    None
+    """
+    # 無い, データセット, 説明の無いディレクトリ, リンク, ファイル
+    project = tmp_path / "proj"
+    project.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "dataset.yaml").write_text("{}", encoding="utf-8")
+    target = project / "a" / "dataset"
+    with pinned_parent(project, target) as parent:
+        assert places.opened_state(parent) == "missing"
+        assert places.opened_state(parent, single=True) == "missing"
+        target.mkdir()
+        assert places.opened_state(parent) == "occupied"
+        (target / "dataset.yaml").write_text("{}", encoding="utf-8")
+        assert places.opened_state(parent) == "dataset"
+        assert places.opened_state(parent, single=True) == "occupied"
+        (target / "dataset.yaml").unlink()
+        target.rmdir()
+        target.symlink_to(outside, target_is_directory=True)
+        assert places.opened_state(parent) == "occupied"
+        assert places.opened_state(parent, single=True) == "occupied"
+        target.unlink()
+        target.write_text("x", encoding="utf-8")
+        assert places.opened_state(parent, single=True) == "file"
+
+        # 名前を変えた後の今の場所
+        (project / "a").rename(project / "b")
+        assert places.opened_path(parent.fd) == (project / "b").resolve()
