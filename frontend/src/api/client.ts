@@ -30,6 +30,8 @@ import type {
   ProblemWritten,
   PairSettings,
   ProjectPlace,
+  PriceRequest,
+  PriceSummary,
   ReactionsExportResult,
   ReactionsResult,
   TrajectorySummary,
@@ -104,6 +106,8 @@ export const api = {
     ),
   uplift: (id: string, body: UpliftRequest) =>
     request<UpliftSummary>(`/api/sources/${id}/uplift`, json('POST', body)),
+  price: (id: string, body: PriceRequest) =>
+    request<PriceSummary>(`/api/sources/${id}/price`, json('POST', body)),
   groups: (id: string, body: GroupRequest) =>
     request<GroupSummary>(`/api/sources/${id}/groups`, json('POST', body)),
   exportGroups: (id: string, body: GroupExport) =>

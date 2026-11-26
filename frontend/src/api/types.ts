@@ -304,14 +304,20 @@ export interface Recipe {
   target: string | null
   task: string
   /**
-   * 異常の検知 (task: anomaly) と効果を見積もる (task: uplift) の行の id の列 (無ければ ML-EDA が
-   * 行の位置の row_id を置く)
+   * 異常の検知 (task: anomaly), 効果を見積もる (task: uplift) と値段を変える判断 (task: price) の
+   * 行の id の列 (無ければ ML-EDA が行の位置の row_id を置く)
    */
   id?: string
   /** 効果を見積もる (task: uplift) の処置の列 (処置の群は 1 か真, 対照の群は 0 か偽) */
   treatment?: string
   /** 効果を見積もるの結果の種類 (無ければ ML-EDA が値から決める) */
   outcome?: UpliftOutcome
+  /** 値段を変える判断 (task: price) の値段の列 (0 より大きい数. 学習に使う列の最後に残る) */
+  price?: string
+  /** 値段を変える判断の原価の列 (任意. 学習に使う列から除き, 元の値で残る) */
+  cost?: string
+  /** 値段を変える判断の商品の id の列 (任意. 学習に使う列から除き, そのまま残る) */
+  product?: string
   steps: RecipeStep[]
   item_steps?: RecipeStep[]
   split: {
@@ -397,6 +403,120 @@ export interface UpliftRequest {
   id?: string
 }
 
+/** 値段を変える判断の分割 1 つの数 (ML-EDA の説明の price.splits の 1 つ) */
+export interface PriceSplit {
+  rows: number
+  /** 商品の数 (商品の id の列が無ければ null) */
+  products: number | null
+  /** 元の値段の範囲 */
+  price_min: number | null
+  price_max: number | null
+  /** 元の値段の種類の数 */
+  prices: number
+  /** 売れた数の平均 (unlabeled は null) */
+  units_mean: number | null
+  /** 原価の平均 (原価の列が無ければ null) */
+  cost_mean: number | null
+}
+
+/** 値段を変える判断の列と分割ごとの値段の範囲 (ML-EDA の説明の price) */
+export interface PriceSplits {
+  /** 行の id の列の名前 */
+  id: string
+  /** 値段の列 */
+  price: string
+  /** 元の値段の列 (price_raw) */
+  raw: string
+  cost: string | null
+  product: string | null
+  /** 売れた数の欠けた行の扱い */
+  unlabeled: 'drop' | 'keep'
+  /** 値段の列にかけた値段の手順の名前 (順のとおり) */
+  steps: string[]
+  splits: Record<string, PriceSplit>
+}
+
+/** 値段を変えた記録の要約の値段の段 1 つ (ML-EDA の describe_price の relation.bins の 1 つ) */
+export interface PriceBin {
+  bin: number
+  rows: number
+  price_min: number | null
+  price_max: number | null
+  price_mean: number | null
+  units_mean: number | null
+}
+
+/** 値段を変えた記録の要約の商品 1 つ (ML-EDA の describe_price の products.rows の 1 つ) */
+export interface PriceProduct {
+  product: string
+  rows: number
+  /** 試した値段の数 */
+  prices: number
+  price_min: number | null
+  price_max: number | null
+  units_mean: number | null
+}
+
+/** 値段を変えた記録の要約 (ML-EDA の describe_price の結果) */
+export interface PriceSummary {
+  price: string
+  units: string
+  cost: string | null
+  product: string | null
+  /** 使う行の数 */
+  rows: number
+  missing: {
+    price: number
+    units: number
+    cost: number | null
+    product: number | null
+  }
+  invalid: { price: number; units: number; cost: number | null }
+  price_stats: {
+    min: number | null
+    max: number | null
+    median: number | null
+    mean: number | null
+    distinct: number
+    width: number | null
+  }
+  unit_stats: {
+    min: number | null
+    max: number | null
+    mean: number | null
+    zero_rate: number | null
+  }
+  relation: {
+    correlation: number | null
+    elasticity: number | null
+    bins: PriceBin[]
+  }
+  products: {
+    count: number
+    single_price: number
+    width: number | null
+    rows: PriceProduct[]
+  } | null
+  cost_stats: {
+    rows: number
+    mean: number | null
+    margin: number | null
+    below: number
+  } | null
+  /** 値段と他の列の関わり (強さの大きい順) */
+  confounding: { column: string; type: string; strength: number | null }[]
+  findings: Finding[]
+}
+
+/** 値段を変えた記録の要約を求める欄 */
+export interface PriceRequest {
+  price: string
+  units: string
+  cost?: string
+  product?: string
+  id?: string
+}
+
 /** 異常の検知の分割 1 つの行の数 (ML-EDA の説明の anomaly.rows の 1 つ) */
 export interface AnomalySplitRows {
   /** 正解が正常 */
@@ -441,6 +561,8 @@ export interface PreviewResult {
   anomaly?: AnomalySummary | null
   /** 効果を見積もるの分割ごとの群の数 (他のタスクは null) */
   uplift?: UpliftSplits | null
+  /** 値段を変える判断の分割ごとの値段の範囲 (他のタスクは null) */
+  price?: PriceSplits | null
 }
 
 /** 書き出したデータセットに合わせてモデルを組むときの数 */
@@ -504,6 +626,8 @@ export interface TableDataset extends DatasetBase {
   anomaly?: AnomalySummary | null
   /** 効果を見積もるの説明 (他のタスクは null) */
   uplift?: UpliftSplits | null
+  /** 値段を変える判断の説明 (他のタスクは null) */
+  price?: PriceSplits | null
 }
 
 /** 正解の出どころ (ML-EDA の target.origin) */

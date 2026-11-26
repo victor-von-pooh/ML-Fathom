@@ -12,12 +12,15 @@ export function ModelHintsView({
   hints,
   anomaly = false,
   uplift = false,
+  price = false,
 }: {
   hints: ModelHints
   /** 異常の検知のデータセットか (出力の幅は入力を作り直す値の数) */
   anomaly?: boolean
   /** 効果を見積もるのデータセットか (出力の幅は, 処置したときとしないときの予測のそれぞれが出す値の数) */
   uplift?: boolean
+  /** 値段を変える判断のデータセットか (出力の幅は売れた数の予測の値の数) */
+  price?: boolean
 }) {
   const id = useId()
   const rows: [string, string, string][] = [
@@ -42,9 +45,11 @@ export function ModelHintsView({
         ? '最後の nn.Linear の out_features (自己符号化器のモデルが入力を作り直す値の数. 学習に使う列の数と同じ)'
         : uplift
           ? '最後の nn.Linear の out_features (処置したときの予測と, しないときの予測で, それぞれ 1 つの値を出す)'
-          : hints.outputs === 1
-            ? '最後の nn.Linear の out_features (値を 1 つ)'
-            : '最後の nn.Linear の out_features (クラスの数)',
+          : price
+            ? '最後の nn.Linear の out_features (売れた数の予測を 1 つ. 値段の列は入力の最後)'
+            : hints.outputs === 1
+              ? '最後の nn.Linear の out_features (値を 1 つ)'
+              : '最後の nn.Linear の out_features (クラスの数)',
     ])
   }
   return (
