@@ -1329,7 +1329,8 @@ def preview(
     result: dict[str, Any]
         前と後の行数, 列, 先頭の行, 足した列と消えた列,
         upto が全ての手順なら学習に使う列, 注意, 分割の後の気付き,
-        異常の検知の行の数 (anomaly), 効果を見積もるの群の数 (uplift)
+        異常の検知の行の数 (anomaly), 効果を見積もるの群の数 (uplift),
+        値段を変える判断の値段の範囲 (price)
     """
     data = load_source(find_source(request, source_id))
     try:
@@ -1352,6 +1353,9 @@ def preview(
             # 効果を見積もるの分割ごとの群の行の数と結果の平均 (書き出しの
             # 説明の uplift と同じ形. 他のタスクでは None)
             result["uplift"] = prepared.uplift
+            # 値段を変える判断の分割ごとの値段の範囲と売れた数の平均 (書き
+            # 出しの説明の price と同じ形. 他のタスクでは None)
+            result["price"] = prepared.price
     except (ValueError, KeyError, TypeError, AttributeError) as error:
         raise HTTPException(422, str(error)) from error
 

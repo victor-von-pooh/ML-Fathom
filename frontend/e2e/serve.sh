@@ -404,6 +404,31 @@ problem = ml_quest.record_project(problem, project)
 ml_quest.save_problem(problem, work / "pathfinder" / "problems" / "group")
 PY
 
+# 値段を変えた売れ行きの記録 (商品ごとの元の値段を無作為に 0.8 から 1.2 倍に
+# 変え, 値段を上げると売れた数が減る. 商品 p9 は試した値段が 1 つ)
+uv run python - "$WORK/sales.csv" <<'PY'
+import sys
+
+import numpy as np
+import pandas as pd
+
+rng = np.random.default_rng(7)
+rows = 240
+product = rng.integers(0, 10, rows)
+base = 100 + 20 * product
+scale = np.where(product == 9, 1.0,
+                 rng.choice([0.8, 0.9, 1.0, 1.1, 1.2], rows))
+pd.DataFrame({
+    "record_id": [f"r{index:03d}" for index in range(rows)],
+    "product_id": [f"p{index}" for index in product],
+    "category": np.where(product < 5, "food", "tool"),
+    "weekday": rng.integers(0, 7, rows),
+    "price": (base * scale).round(0),
+    "units": rng.poisson(20 * scale ** -1.5),
+    "unit_cost": (base * 0.6).round(0),
+}).to_csv(sys.argv[1], index=False)
+PY
+
 # 記録した軌跡の見本 (ML-EDA のテストの見本を写す. 守りの付いた Discrete の
 # 行動の軌跡, Box の行動の軌跡と, 行動を選んだ確率の列を持つ軌跡. どれも表と
 # 説明の JSON)

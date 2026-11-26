@@ -5,6 +5,7 @@ import {
   anomalyOf,
   anomalyTotals,
   canKeepUnlabeled,
+  fitPrice,
   fitTreatment,
   looksLikeDatetime,
   fitUnlabeled,
@@ -12,10 +13,14 @@ import {
   splitLabel,
   untargetedDraft,
   postTreatmentColumns,
+  priceBlockedColumns,
+  priceOf,
+  priceStepErrors,
   rowIdColumns,
   upliftOf,
   usageSnippet,
   withOutcome,
+  withPriceRole,
   withRowId,
   withTask,
   withTreatment,
@@ -295,5 +300,85 @@ test('効果を見積もるの説明と使い方の例', () => {
   const snippet = usageSnippet('/d', { train: {}, valid: {} }, false, false, true)
   expect(snippet).toContain('dataset.treatment("train")')
   expect(snippet).toContain('dataset.info["uplift"]["splits"]')
+  expect(snippet).not.toContain('クラスの数')
+})
+
+test('値段を変える判断でなくなると, 値段, 原価, 商品の id の列を消し, 効果を見積もるなら行の id を残す', () => {
+  const price: Recipe = {
+    ...recipe,
+    task: 'price',
+    price: 'price',
+    cost: 'unit_cost',
+    product: 'product_id',
+    id: 'record_id',
+  }
+  expect(withTask(price, 'price')).toEqual(price)
+  const plain = withTask(price, 'regression')
+  expect(plain.price).toBeUndefined()
+  expect(plain.cost).toBeUndefined()
+  expect(plain.product).toBeUndefined()
+  expect(plain.id).toBeUndefined()
+  const uplift = withTask(price, 'uplift')
+  expect(uplift.price).toBeUndefined()
+  expect(uplift.id).toBe('record_id')
+})
+
+test('値段を変える判断の列は互いに違う列にし, 目的の列と同じなら消す', () => {
+  const price: Recipe = { ...recipe, task: 'price', price: 'price', id: 'record_id' }
+  // 原価の列を値段の列と同じにすると値段の列を消す
+  const cost = withPriceRole(price, 'cost', 'price')
+  expect(cost.cost).toBe('price')
+  expect(cost.price).toBeUndefined()
+  // 行の id の列と同じにすると行の id の列を消す
+  expect(withPriceRole(price, 'product', 'record_id').id).toBeUndefined()
+  expect(withRowId({ ...price, product: 'p' }, 'p').product).toBeUndefined()
+  expect('price' in withPriceRole(price, 'price', '')).toBe(false)
+  expect(fitPrice(price, 'price').price).toBeUndefined()
+  expect(fitPrice(price, 'units')).toBe(price)
+})
+
+test('値段の列は値段の手順だけ, 原価と商品の id の列は落とす手順だけで書ける', () => {
+  const price: Recipe = {
+    ...recipe,
+    task: 'price',
+    price: 'price',
+    cost: 'unit_cost',
+    product: 'product_id',
+    steps: [
+      { op: 'impute', columns: ['price', 'age'] },
+      { op: 'log', columns: ['price'] },
+      { op: 'drop_columns', columns: ['unit_cost'] },
+      { op: 'one_hot', columns: ['product_id'] },
+      { op: 'drop_missing', columns: ['price'] },
+    ],
+  }
+  expect(priceBlockedColumns(price, 'log')).toEqual(['unit_cost', 'product_id'])
+  expect(priceBlockedColumns(price, 'drop_columns')).toEqual(['price'])
+  expect(priceBlockedColumns(price, 'drop_missing')).toEqual([])
+  expect(priceBlockedColumns({ ...price, task: 'regression' }, 'impute')).toEqual([])
+  const errors = priceStepErrors(price)
+  expect(errors).toHaveLength(2)
+  expect(errors[0]).toContain('手順 1 (impute) は値段の列 price を変えられません')
+  expect(errors[1]).toContain('手順 4 (one_hot) には product_id を書けません')
+})
+
+test('値段を変える判断の説明と使い方の例', () => {
+  const summary = {
+    id: 'row_id',
+    price: 'price',
+    raw: 'price_raw',
+    cost: null,
+    product: null,
+    unlabeled: 'drop' as const,
+    steps: [],
+    splits: {},
+  }
+  expect(priceOf({ price: summary })).toBe(summary)
+  expect(priceOf({ price: null })).toBeNull()
+  expect(priceOf({})).toBeNull()
+  const snippet = usageSnippet('/d', { train: {}, valid: {} }, false, false, false, true)
+  expect(snippet).toContain('dataset.price_inputs("valid"')
+  expect(snippet).toContain('dataset.cost("train")')
+  expect(snippet).toContain('dataset.info["price"]["splits"]')
   expect(snippet).not.toContain('クラスの数')
 })

@@ -86,6 +86,7 @@ export const TASK_LABELS: Record<string, string> = {
   forecasting: '予測 (時系列)',
   anomaly: '異常の検知',
   uplift: '効果を見積もる',
+  price: '値段を変える判断',
   none: '決めない',
 }
 

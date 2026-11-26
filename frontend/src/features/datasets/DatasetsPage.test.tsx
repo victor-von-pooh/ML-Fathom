@@ -325,3 +325,58 @@ test('効果を見積もるのデータセットは, 分割ごとの群の数と
   expect(table.textContent).toContain('0.17')
   expect(card.getByText(/処置の列:/).textContent).toContain('coupon')
 })
+
+test('値段を変える判断のデータセットは, 分割ごとの値段の範囲と売れた数を出す', async () => {
+  vi.spyOn(api, 'datasets').mockResolvedValue([
+    {
+      form: 'table',
+      name: 'sales',
+      path: '/home/datasets/sales',
+      format_version: 1,
+      created_at: '2026-11-21T10:00:00+09:00',
+      kind: 'table',
+      task: 'price',
+      target: 'units',
+      splits: { train: 144, valid: 48, test: 48 },
+      features: 2,
+      model: {
+        inputs: [{ name: 'x', shape: [null, 2], dtype: 'float32' }],
+        task: 'price',
+        target: 'units',
+        classes: [],
+        outputs: 1,
+      },
+      anomaly: null,
+      uplift: null,
+      price: {
+        id: 'record_id',
+        price: 'price',
+        raw: 'price_raw',
+        cost: 'unit_cost',
+        product: 'product_id',
+        unlabeled: 'drop',
+        steps: ['standardize'],
+        splits: {
+          train: {
+            rows: 144,
+            products: 10,
+            price_min: 80,
+            price_max: 324,
+            prices: 38,
+            units_mean: 21.5,
+            cost_mean: 132,
+          },
+        },
+      },
+    },
+  ])
+  renderPage()
+  const card = within((await screen.findByText('sales')).closest('section')!)
+  expect(card.getByText(/値段を変える判断/)).toBeInTheDocument()
+  expect(card.getByText(/1 \(売れた数の予測/)).toBeInTheDocument()
+  const table = card.getByRole('table', {
+    name: '分割ごとの行と商品の数, 元の値段の範囲と種類の数, 売れた数と原価の平均',
+  })
+  expect(table.textContent).toContain('324')
+  expect(card.getByText(/値段の列:/).textContent).toContain('standardize')
+})

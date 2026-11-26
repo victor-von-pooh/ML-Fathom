@@ -39,6 +39,7 @@ from ml_fathom.places import (
     pinned_parent,
     same_parent,
 )
+from ml_fathom.price import PRICE_KINDS
 from ml_fathom.reactions import (
     REACTIONS_KIND,
     copy_file,
@@ -347,10 +348,41 @@ def is_anomaly(problem: dict[str, Any]) -> bool:
     return anomaly
 
 
+def is_logged(problem: dict[str, Any]) -> bool:
+    """
+    受け持ちが, 効果を見積もるで方策でなく, 今ある記録から学ぶ (作り方が
+    既製のモデルをそのままでない) かを返す関数
+
+    ML-Quest の is_logged_part と同じ決まり (公開の名前でないので, 公開の
+    active_value で見分ける)
+
+    Parameters
+    ----------
+    problem: dict[str, Any]
+        問題の設定 (版 2)
+
+    Returns
+    ----------
+    logged: bool
+        効果の見積もりか値段を変える判断の受け持ちか
+    """
+    # 受け持ち, 方策か, 集め方と作り方の答え (要らない問いの古い答えは除外)
+    part = ml_quest.PART
+    logged = bool(
+        ml_quest.active_value(problem, f"{part}.role") == "effect"
+        and ml_quest.active_value(problem, f"{part}.autonomous") is not True
+        and ml_quest.active_value(problem, f"{part}.collect") == "log"
+        and ml_quest.active_value(problem, f"{part}.method") != "pretrained"
+    )
+
+    return logged
+
+
 def is_uplift(problem: dict[str, Any]) -> bool:
     """
     受け持ちが効果の見積もり (効果を見積もるで, 方策でなく, 今ある記録から
-    効果を見積もる. 作り方が既製のモデルをそのままでない) かを返す関数
+    配ったかの効果を見積もる. 作り方が既製のモデルをそのままでない) かを
+    返す関数
 
     ML-Quest の is_uplift_part と同じ決まり (公開の名前でないので, 公開の
     active_value で見分ける)
@@ -365,16 +397,59 @@ def is_uplift(problem: dict[str, Any]) -> bool:
     uplift: bool
         効果の見積もりの受け持ちか
     """
-    # 受け持ち, 方策か, 集め方と作り方の答え (要らない問いの古い答えは除外)
-    part = ml_quest.PART
-    uplift = bool(
-        ml_quest.active_value(problem, f"{part}.role") == "effect"
-        and ml_quest.active_value(problem, f"{part}.autonomous") is not True
-        and ml_quest.active_value(problem, f"{part}.collect") == "log"
-        and ml_quest.active_value(problem, f"{part}.method") != "pretrained"
-    )
+    # 今ある記録から学び, 記録で変えたものが値段でない
+    uplift = is_logged(problem) and ml_quest.active_value(
+        problem, f"{ml_quest.PART}.varied"
+    ) != "price"
 
     return uplift
+
+
+def is_price(problem: dict[str, Any]) -> bool:
+    """
+    受け持ちが値段を変える判断 (今ある記録から学び, 記録で変えたものが
+    値段) かを返す関数
+
+    ML-Quest の is_price_part と同じ決まり (公開の名前でないので, 公開の
+    active_value で見分ける. 記録で変えたものの問いを知らない版の ML-Quest
+    でも, 答えのまま見分ける)
+
+    Parameters
+    ----------
+    problem: dict[str, Any]
+        問題の設定 (版 2)
+
+    Returns
+    ----------
+    price: bool
+        値段を変える判断の受け持ちか
+    """
+    # 今ある記録から学び, 記録で変えたものが値段
+    price = is_logged(problem) and ml_quest.active_value(
+        problem, f"{ml_quest.PART}.varied"
+    ) == "price"
+
+    return price
+
+
+def price_supported() -> bool:
+    """
+    組の ML-Quest が値段を変える判断の問題の設定を受けるかを返す関数
+
+    Parameters
+    ----------
+    None
+
+    Returns
+    ----------
+    supported: bool
+        値段の列の問い (ml.parts.0.price.price) を持つ版か
+    """
+    # 公開の問いの並びで見分ける (受けない版は効果の見積もりと取り違える)
+    key = f"{ml_quest.PART}.price.price"
+    supported = any(item.get("id") == key for item in ml_quest.QUESTIONS)
+
+    return supported
 
 
 def choice_text(choices: list[dict[str, Any]], value: Any) -> str:
@@ -407,12 +482,13 @@ def choice_text(choices: list[dict[str, Any]], value: Any) -> str:
 def require_recipe(problem: dict[str, Any]) -> None:
     """
     受け持ちが, 登録したデータとレシピで書き出すもの (列の予測, 画像か
-    表の生成, 異常の検知と効果の見積もり) でなければ止める関数
+    表の生成, 異常の検知, 効果の見積もりと値段を変える判断) でなければ止める
+    関数
 
     ML-Quest の版 2 の問題の設定は, 受け持ち (作る, 並べるなど) と正解の
     種類 (領域, 点群など) を持つ. 登録したデータのレシピの下書きと書き戻し
-    は列の予測, 画像か表の生成, 異常の検知と効果の見積もりだけ (ファイル
-    の組の受け持ちは require_items)
+    は列の予測, 画像か表の生成, 異常の検知, 効果の見積もりと値段を変える
+    判断だけ (ファイルの組の受け持ちは require_items)
 
     Parameters
     ----------
@@ -427,8 +503,19 @@ def require_recipe(problem: dict[str, Any]) -> None:
     ----------
     HTTPException
         他の受け持ちは 422 (使えない受け持ちと正解の種類, 理由, 使える
-        受け持ちの文)
+        受け持ちの文). 値段を変える判断を受けない版の ML-Quest での値段を
+        変える判断も 422
     """
+    # 値段を変える判断は, 受ける版の ML-Quest でだけ (受けない版は効果の
+    # 見積もりとしてレシピを作るため)
+    if is_price(problem):
+        if price_supported():
+            return
+        raise HTTPException(
+            422, "問題の設定を渡せません: 値段を変える判断の問題の設定です"
+            "が, 組の ML-Quest は値段を変える判断を受けない版です. ML-Quest "
+            "を値段を変える判断を受ける版に上げてください"
+        )
     # 使えない受け持ちと正解の種類を, 画面の選択肢と同じ言葉で
     if is_column_part(problem) or is_generate(problem) or (
         is_anomaly(problem) or is_uplift(problem)
@@ -470,7 +557,8 @@ def require_recipe(problem: dict[str, Any]) -> None:
         "のは, 予測するで正解の種類が表の列, 画像の領域, 点群, 異常の場合"
         "と, "
         "作るで正解の種類が画像か表の場合と, 並べるかまとめるで学習する"
-        "場合と, 効果を見積もる (今ある記録から) 場合です. "
+        "場合と, 効果を見積もる (今ある記録から. 値段を変える判断も) "
+        "場合です. "
         "データは「データを追加」から入れて分析できます"
     )
 
@@ -500,10 +588,11 @@ def require_items(problem: dict[str, Any]) -> None:
         return
     if is_column_part(problem) or is_generate(problem) or is_rank(problem) or (
         is_group(problem) or is_anomaly(problem) or is_uplift(problem)
+        or is_price(problem)
     ):
         raise HTTPException(
             422, "この問題の設定は列の予測か, 画像か表の生成か, 異常の検知か, "
-            "効果の見積もりか, 並べるか, まとめるです. "
+            "効果の見積もりか, 値段を変える判断か, 並べるか, まとめるです. "
             "データの画面の「問題の設定から始める」で始めてください"
         )
     require_recipe(problem)
@@ -687,8 +776,8 @@ def start_from_problem(
     started: dict[str, Any]
         source (登録したデータ. ファイルの組の受け持ちでは None),
         problem (problem.yaml の場所), form (ファイルの組の書き出しの画面の
-        欄. 列の予測, 画像か表の生成, 異常の検知と効果の見積もりでは
-        None), notes
+        欄. 列の予測, 画像か表の生成, 異常の検知, 効果の見積もりと値段を
+        変える判断では None), notes
         (知らせの文の並び), tab (開くタブ. まとめるでは groups, 他は None)
 
     Raises
@@ -732,8 +821,9 @@ def start_from_problem(
     # 読めること, 目的の列があること (画像か表の生成は目的の列が無く,
     # データの種類が正解の種類に合うこと. 異常の検知は表であることと, 答えた
     # 正解の列と行の id の列があること. 効果の見積もりは表であることと,
-    # 結果の列, 処置の列と行の id の列があること) を確かめて登録し, レシピ
-    # を保存
+    # 結果の列, 処置の列と行の id の列があること. 値段を変える判断は表で
+    # あることと, 答えた売れた数, 値段, 原価, 商品の id, 行の id の列がある
+    # こと) を確かめて登録し, レシピを保存
     data_path = Path(load["path"])
     if not data_path.exists():
         raise HTTPException(404, f"{data_path} がありません")
@@ -763,6 +853,8 @@ def start_from_problem(
         check_anomaly_start(data, data_path, recipe)
     elif is_uplift(problem):
         check_uplift_start(data, data_path, recipe)
+    elif is_price(problem):
+        check_price_start(data, data_path, recipe)
     elif target not in [str(name) for name in data.frame.columns]:
         raise HTTPException(
             422, f"目的の列 {target} がデータにありません"
@@ -859,6 +951,51 @@ def check_uplift_start(
         )
     columns = [str(name) for name in data.frame.columns]
     for key, title in (("target", "結果の列"), ("treatment", "処置の列"),
+                       ("id", "行の id の列")):
+        name = recipe.get(key)
+        if name is not None and name not in columns:
+            raise HTTPException(
+                422, f"{title} {name} がデータにありません"
+            )
+
+
+def check_price_start(
+    data: ml_eda.Data, data_path: Path, recipe: dict[str, Any]
+) -> None:
+    """
+    値段を変える判断の問題の設定から始める表を確かめる関数
+
+    Parameters
+    ----------
+    data: ml_eda.Data
+        読み込んだ入れたデータ
+    data_path: Path
+        入れたデータの場所
+    recipe: dict[str, Any]
+        ML-Quest の recipe_from のレシピ (task: price)
+
+    Returns
+    ----------
+    None
+
+    Raises
+    ----------
+    HTTPException
+        表か時系列でない場合と, 売れた数, 値段, 原価, 商品の id か行の id
+        の列が表に無い場合は 422
+    """
+    # ML-EDA の値段を変える判断が読む種類 (表と時系列). 売れた数の列と値段
+    # の列 (必ずある) と, 原価, 商品の id, 行の id の列 (答えたときだけ
+    # レシピにある)
+    if data.kind not in PRICE_KINDS:
+        raise HTTPException(
+            422, f"{data_path.name} は表ではありません (種類 {data.kind}). "
+            "値段を変える判断の問題の設定には, ML-Pathfinder の「手元のデータ"
+            "は」で値段の列と売れた数の列を持つ表を入れてください"
+        )
+    columns = [str(name) for name in data.frame.columns]
+    for key, title in (("target", "売れた数の列"), ("price", "値段の列"),
+                       ("cost", "原価の列"), ("product", "商品の id の列"),
                        ("id", "行の id の列")):
         name = recipe.get(key)
         if name is not None and name not in columns:

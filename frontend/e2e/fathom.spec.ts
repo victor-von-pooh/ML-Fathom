@@ -1059,3 +1059,55 @@ test('まとめるの問題の設定から始め, 答えの列で群を作って
   await expect(page.getByRole('button', { name: '問題の設定に書き戻す' })).toHaveCount(0)
   await expect(page.getByLabel('群の数')).toHaveValue('4')
 })
+
+test('値段を変えた売れ行きの記録で値段と原価と商品を選び, 要約を見て値段を変える判断を書き出す', async ({
+  page,
+}) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'データを追加' }).first().click()
+  await page.getByLabel('ディレクトリのパス').fill(path.dirname(TABLE))
+  await page.getByRole('button', { name: '移動' }).click()
+  await page.getByRole('button', { name: /sales\.csv/ }).click()
+  await page.getByRole('button', { name: '追加', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'sales.csv' })).toBeVisible()
+  await page.getByRole('combobox', { name: '目的の列' }).selectOption('units')
+
+  // タスクを値段を変える判断にし, 値段, 原価, 商品の id, 行の id の列を選ぶ
+  await page.getByRole('tab', { name: '前処理と書き出し' }).click()
+  await page.getByLabel('タスク').selectOption('price', { timeout: 20_000 })
+  await page.getByLabel('分割', { exact: true }).selectOption('stratified')
+  await page.getByLabel('値段の列').selectOption('price')
+  await page.getByLabel('原価の列').selectOption('unit_cost')
+  await page.getByLabel('商品の id の列').selectOption('product_id')
+  await page.getByLabel('行の id の列').selectOption('record_id')
+
+  // 要約に弾力性の目安と, 試した値段が 1 つの商品が出る
+  await expect(page.getByText(/弾力性の目安 -/)).toBeVisible({ timeout: 20_000 })
+  await expect(page.getByText('試した値段が 1 つの商品 1')).toBeVisible()
+  await expect(page.getByRole('table', { name: /商品ごとの試した値段/ })).toContainText('p9')
+
+  // 種類の列を数にし, 値段の列も標準化する. 値段の列は他の手順の候補に出ない
+  await page.getByLabel('足す手順').selectOption('one_hot')
+  await page.getByRole('button', { name: '足す', exact: true }).click()
+  await page.getByRole('checkbox', { name: 'auto (型から選ぶ)' }).uncheck()
+  const candidates = page.locator('#step-0-columns option')
+  await expect(candidates.filter({ hasText: /^category$/ })).toHaveCount(1)
+  await expect(candidates.filter({ hasText: /^price$/ })).toHaveCount(0)
+  await page.locator('#step-0-columns').selectOption('category')
+  await page.getByLabel('足す手順').selectOption('standardize')
+  await page.getByRole('button', { name: '足す', exact: true }).click()
+
+  // 学習用のデータに分割ごとの値段の範囲が出て, 書き出すと一覧に並ぶ
+  const splits = page.getByRole('table', {
+    name: '分割ごとの行と商品の数, 元の値段の範囲と種類の数, 売れた数と原価の平均',
+  })
+  await expect(splits).toContainText('valid', { timeout: 20_000 })
+  await page.getByLabel('データセットの名前').fill('sales_price')
+  await page.getByRole('button', { name: '学習用に書き出す' }).click()
+  await expect(page.getByText(/書き出しました/)).toBeVisible({ timeout: 20_000 })
+  await expect(page.getByText(/dataset\.price_inputs/)).toBeVisible()
+  await page.getByRole('link', { name: 'データセット' }).click()
+  const card = page.locator('section', { has: page.getByText('sales_price', { exact: true }) })
+  await expect(card.getByText(/1 \(売れた数の予測/)).toBeVisible()
+  await expect(card.getByText(/値段の列:/)).toContainText('standardize')
+})

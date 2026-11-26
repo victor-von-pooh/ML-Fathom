@@ -14,6 +14,7 @@ import { Card, EmptyState, ErrorBox, PageHeader, Spinner } from '../../component
 import { stepText } from '../../lib/entrySteps'
 import { formatNumber, KIND_LABELS, TASK_LABELS } from '../../lib/format'
 import { AnomalyRows } from '../source/AnomalyRows'
+import { PriceRows } from '../source/PriceRows'
 import { UpliftRows } from '../source/UpliftRows'
 import {
   conventionText,
@@ -54,6 +55,7 @@ function outputsText(model: ModelInputs): string {
     return `${model.outputs} (モデルが入力を作り直す値の数. 学習に使う列の数と同じ)`
   if (model.task === 'uplift')
     return `${model.outputs} (処置したときの予測と, しないときの予測で, それぞれ 1 つの値)`
+  if (model.task === 'price') return `${model.outputs} (売れた数の予測. 値段の列は入力の最後)`
   return `${model.outputs} (値)`
 }
 
@@ -128,6 +130,14 @@ function TableCard({ item }: { item: TableDataset }) {
             <dt className="text-ink-3">群と結果の差</dt>
             <dd>
               <UpliftRows summary={item.uplift} />
+            </dd>
+          </>
+        )}
+        {item.price && (
+          <>
+            <dt className="text-ink-3">値段の範囲と売れた数</dt>
+            <dd>
+              <PriceRows summary={item.price} />
             </dd>
           </>
         )}

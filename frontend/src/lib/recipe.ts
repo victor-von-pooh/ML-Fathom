@@ -2,6 +2,7 @@ import type {
   AnomalySummary,
   ColumnInfo,
   ItemStepInfo,
+  PriceSplits,
   Recipe,
   RecipeStep,
   UpliftOutcome,
@@ -24,28 +25,38 @@ export function withUnlabeled(recipe: Recipe, mode: UnlabeledMode): Recipe {
 
 /**
  * 行の id の列の候補. 分析で欠けも同じ値も無い列だけ (ML-EDA が他の列を誤りにする).
- * 目的の列と処置の列は除く
+ * 目的の列と, 他の役割の列 (処置の列, 値段の列, 原価の列, 商品の id の列) は除く
  */
 export function rowIdColumns(
   columns: Record<string, ColumnInfo>,
   target: string | null,
-  treatment?: string,
+  ...others: (string | undefined)[]
 ): string[] {
   return Object.entries(columns)
     .filter(
       ([name, info]) =>
-        name !== target && name !== treatment && info.missing === 0 && info.unique === info.count,
+        name !== target &&
+        !others.includes(name) &&
+        info.missing === 0 &&
+        info.unique === info.count,
     )
     .map(([name]) => name)
 }
 
 /** 行の id の列を使うタスク (ML-EDA のレシピの id. 他のタスクでは誤り) */
-const ID_TASKS = ['anomaly', 'uplift']
+const ID_TASKS = ['anomaly', 'uplift', 'price']
+
+/** 値段を変える判断の列の役割 (レシピの鍵. 互いに違う列にする) */
+export type PriceRole = 'price' | 'cost' | 'product'
+
+/** 値段を変える判断の列の役割の鍵 */
+const PRICE_ROLES: PriceRole[] = ['price', 'cost', 'product']
 
 /**
- * タスクを変えたレシピ. 異常の検知 (anomaly) と効果を見積もる (uplift) の書き方のうち,
- * 新しいタスクで使えないもの (行の id の列 id, split.unlabeled: normal, 処置の列 treatment と
- * 結果の種類 outcome) を消す (ML-EDA が他のタスクで誤りにし, 欄も出さないので隠れたまま
+ * タスクを変えたレシピ. 異常の検知 (anomaly), 効果を見積もる (uplift) と値段を変える判断
+ * (price) の書き方のうち, 新しいタスクで使えないもの (行の id の列 id, split.unlabeled: normal,
+ * 処置の列 treatment と結果の種類 outcome, 値段の列 price, 原価の列 cost と商品の id の列
+ * product) を消す (ML-EDA が他のタスクで誤りにし, 欄も出さないので隠れたまま
  * 残さない). 分割は変えない (欄の下の誤りで知らせる)
  */
 export function withTask(recipe: Recipe, task: string): Recipe {
@@ -55,20 +66,96 @@ export function withTask(recipe: Recipe, task: string): Recipe {
     delete next.treatment
     delete next.outcome
   }
+  if (task !== 'price') for (const key of PRICE_ROLES) delete next[key]
   if (task !== 'anomaly' && next.split.unlabeled === 'normal') next = withUnlabeled(next, 'drop')
   return next
 }
 
 /**
  * 行の id の列を変えたレシピ (空なら項目を消し, ML-EDA が行の位置の row_id を置く).
- * 処置の列と同じ列にすると処置の列の指定を消す (ML-EDA が誤りにする)
+ * 処置の列か値段を変える判断の列と同じ列にすると, その指定を消す (ML-EDA が誤りにする)
  */
 export function withRowId(recipe: Recipe, column: string): Recipe {
   const next: Recipe = { ...recipe }
   if (column) next.id = column
   else delete next.id
   if (column && next.treatment === column) delete next.treatment
+  if (column) for (const key of PRICE_ROLES) if (next[key] === column) delete next[key]
   return next
+}
+
+/**
+ * 値段を変える判断の列 (値段, 原価, 商品の id) を変えたレシピ (空なら項目を消す).
+ * 他の役割 (値段, 原価, 商品の id, 行の id の列) と同じ列にすると, 他の役割の指定を消す
+ * (ML-EDA が誤りにする)
+ */
+export function withPriceRole(recipe: Recipe, role: PriceRole, column: string): Recipe {
+  const next: Recipe = { ...recipe }
+  if (!column) {
+    delete next[role]
+    return next
+  }
+  for (const key of PRICE_ROLES) if (key !== role && next[key] === column) delete next[key]
+  if (next.id === column) delete next.id
+  next[role] = column
+  return next
+}
+
+/**
+ * 目的の列 (売れた数の列) に合わせた値段を変える判断のレシピ. 値段, 原価, 商品の id の列が
+ * 目的の列と同じなら, その指定を消す (ML-EDA が誤りにする. 目的の列は上の欄で変わるため)
+ */
+export function fitPrice(recipe: Recipe, target: string | null): Recipe {
+  if (!target || !PRICE_ROLES.some((key) => recipe[key] === target)) return recipe
+  const next: Recipe = { ...recipe }
+  for (const key of PRICE_ROLES) if (next[key] === target) delete next[key]
+  return next
+}
+
+/** 値段を変える判断 (task: price) を選べるデータの種類 (ML-EDA が他の種類を誤りにする) */
+export const PRICE_KINDS = ['table', 'timeseries']
+
+/** 値段の列を変えられる値段の手順 (ML-EDA の PRICE_STEPS と同じ) */
+export const PRICE_STEPS = ['clip', 'log', 'standardize', 'minmax']
+
+/** 行を絞る手順のうち, 役割の列を見てよいもの (ML-EDA が列の役割を確かめない手順) */
+const ROW_STEPS = ['drop_missing', 'drop_duplicates']
+
+/**
+ * 値段を変える判断の手順で名前を書けない列. 値段の列は値段の手順と行を絞る手順だけで, 原価と
+ * 商品の id の列は列を落とす手順と行を絞る手順だけで書ける (ML-EDA の決まり)
+ */
+export function priceBlockedColumns(recipe: Recipe, op: string): string[] {
+  if (recipe.task !== 'price' || ROW_STEPS.includes(op)) return []
+  const blocked: string[] = []
+  if (recipe.price && !PRICE_STEPS.includes(op)) blocked.push(recipe.price)
+  for (const name of [recipe.cost, recipe.product])
+    if (name && op !== 'drop_columns') blocked.push(name)
+  return blocked
+}
+
+/** 値段を変える判断で, 書けない列を名前で書いた手順の誤りの文の並び (手順の番号は 1 から) */
+export function priceStepErrors(recipe: Recipe): string[] {
+  const errors: string[] = []
+  recipe.steps.forEach((step, index) => {
+    const named = Array.isArray(step.columns) ? (step.columns as string[]) : []
+    const blocked = priceBlockedColumns(recipe, step.op).filter((name) => named.includes(name))
+    for (const name of blocked) {
+      errors.push(
+        name === recipe.price
+          ? `手順 ${index + 1} (${step.op}) は値段の列 ${name} を変えられません. 値段の列を変えられるのは ${PRICE_STEPS.join(', ')} だけです (候補の値段にも同じ手順をかけ直すため)`
+          : `手順 ${index + 1} (${step.op}) には ${name} を書けません (原価と商品の id の列は学習に使わず, 元の値のまま残すため. 落とす drop_columns だけは書けます)`,
+      )
+    }
+  })
+  return errors
+}
+
+/** 書き出しの説明 (dataset.yaml の中身) の値段を変える判断の price (他のタスクは null) */
+export function priceOf(info: Record<string, unknown>): PriceSplits | null {
+  const value = info.price
+  if (typeof value !== 'object' || value === null || !('splits' in value)) return null
+  return value as PriceSplits
 }
 
 /** 処置の列を変えたレシピ (空なら項目を消す) */
@@ -210,7 +297,8 @@ export function untargetedDraft(draft: Recipe | null, saved: Recipe | null): Rec
  * 書き出したデータセットを ML-Found の学習スクリプトで読む例.
  * 検証用と unlabeled の行は, その分割がある場合だけ. 異常の検知は, 学習用が
  * 正常の行だけで, 検証用とテスト用の正解で度合いを確かめることを添える. 効果を見積もるは,
- * 処置を入力と別に読むことと, 分割ごとの群の数と結果の差の場所を添える
+ * 処置を入力と別に読むことと, 分割ごとの群の数と結果の差の場所を添える. 値段を変える判断は,
+ * 値段の列が入力の最後にあることと, 候補の値段での入力, 元の値段, 原価の読み方を添える
  */
 export function usageSnippet(
   path: string,
@@ -218,6 +306,7 @@ export function usageSnippet(
   media: boolean,
   anomaly = false,
   uplift = false,
+  price = false,
 ): string {
   const valid =
     'valid' in splits
@@ -225,13 +314,15 @@ export function usageSnippet(
       : null
   const unlabeled =
     'unlabeled' in splits ? '# 正解の無い行: dataset.tensors("unlabeled") (入力だけ)' : null
-  const sizes = uplift
-    ? '# 入力の次元: len(dataset.features). 処置の列は入力に入らず, 処置 (1 か 0) は dataset.treatment("train") で読む\n# 分割ごとの群の数と結果の差: dataset.info["uplift"]["splits"]'
-    : anomaly
-      ? '# 入力の次元: len(dataset.features). train は正常の行だけ. valid と test の正解 (異常は 1) で度合いを確かめる\n# 分割ごとの行の数: dataset.info["anomaly"]["rows"]'
-      : media
-        ? '# 入力の形: dataset.info["splits"]["train"]["shape"][1:], クラスの数: len(dataset.info["classes"])'
-        : '# 入力の次元: len(dataset.features), クラスの数: len(dataset.info["classes"])'
+  const sizes = price
+    ? '# 入力の次元: len(dataset.features). 値段の列は入力の最後. 候補の値段での入力: dataset.price_inputs("valid", 候補の値段)\n# 元の値段: dataset.price("train"), 原価: dataset.cost("train"), 分割ごとの値段の範囲: dataset.info["price"]["splits"]'
+    : uplift
+      ? '# 入力の次元: len(dataset.features). 処置の列は入力に入らず, 処置 (1 か 0) は dataset.treatment("train") で読む\n# 分割ごとの群の数と結果の差: dataset.info["uplift"]["splits"]'
+      : anomaly
+        ? '# 入力の次元: len(dataset.features). train は正常の行だけ. valid と test の正解 (異常は 1) で度合いを確かめる\n# 分割ごとの行の数: dataset.info["anomaly"]["rows"]'
+        : media
+          ? '# 入力の形: dataset.info["splits"]["train"]["shape"][1:], クラスの数: len(dataset.info["classes"])'
+          : '# 入力の次元: len(dataset.features), クラスの数: len(dataset.info["classes"])'
   const lines = [
     'from ml_eda import load_dataset',
     'from torch.utils.data import DataLoader, TensorDataset',
