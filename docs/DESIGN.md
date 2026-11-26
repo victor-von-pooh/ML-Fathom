@@ -92,7 +92,7 @@ ML-Fathom の今の設計と決まりをまとめる. まだやっていない�
 | `POST /api/sources/{id}/export_project` | 問題の設定のプロジェクトの書き出し先 (`project.dataset`) に書き出す (既にあるデータセットは `overwrite` を付けた場合だけ置き換える) |
 | `GET /api/datasets` | 書き出したデータセットの一覧 (版 1, 版 2 と版 3, 読めないものを `form` で分ける. 版 1 はモデルに要るもの `model` を持ち, 異常の検知は説明の `anomaly` も, 効果を見積もるは説明の `uplift` も, 値段を変える判断は説明の `price` も, 時間をまたぐ量の判断は説明の `demand` も持つ. プロジェクトへ書き出したものも並べる) |
 | `POST /api/datasets/image_masks` | 画像と領域の対を版 2 (中身の手順を渡せば版 3) で書き出す (場所, dataset.yaml の中身, 注意の文 `notes` と注意の印 `notices` (ML-EDA の `code`, `count`, `message` と添え. 撮影と点群も同じ). `follow_links` が true なら外を指すリンクの先も写す. 既定 false) |
-| `POST /api/datasets/capture_clouds` | 多視点の撮影と点群の対を版 2 (中身の手順を渡せば版 3) で書き出す (場所, dataset.yaml の中身, 注意. `follow_links` は上と同じ) |
+| `POST /api/datasets/capture_clouds` | 多視点の撮影と点群の対を版 2 (中身の手順を渡せば版 3) で書き出す (場所, dataset.yaml の中身, 注意の文と注意の印. `follow_links` は上と同じ) |
 | `GET /api/problems` | ML-Pathfinder の置き場の問題の設定の一覧 (名前, 場所, 更新時刻, 始められるか, プロジェクトの記録) |
 | `POST /api/problems/start` | 問題の設定から, データを登録してレシピと始めたときの知らせを保存する (ファイルの組の受け持ちは登録せず, ファイルの組の書き出しの画面へ移る値を返す. 並べるは反応の表を登録し, まとめるは表を登録して開くタブ (`tab: groups`) を返し, どちらもレシピを保存しない) |
 | `GET /api/problems/pairs?path=` | ファイルの組の受け持ちの問題の設定の, 書き出しの設定の下書き, 知らせ, 中身の印, プロジェクトの書き出し先とその様子 |
