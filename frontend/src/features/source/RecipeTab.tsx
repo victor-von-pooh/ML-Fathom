@@ -652,16 +652,18 @@ export function RecipeTab({
                 他の分け方を load_recipe で止める) */}
             {uplift && recipe.split.method !== 'stratified' && (
               <p role="alert" className="col-start-2 text-xs text-critical-text">
-                効果を見積もるの分割は層化だけです (処置で層を作り, 全ての分割に処置の群と
-                対照の群を置くため). 分割を層化にしてください
+                {
+                  '効果を見積もるの分割は層化だけです (処置で層を作り, 全ての分割に処置の群と対照の群を置くため). 分割を層化にしてください'
+                }
               </p>
             )}
             {/* 値段を変える判断は値段の段で層を作り, 値段の高い行と低い行を全ての分割に置く (ML-EDA
                 は他の分け方を load_recipe で止める) */}
             {priced && recipe.split.method !== 'stratified' && (
               <p role="alert" className="col-start-2 text-xs text-critical-text">
-                値段を変える判断の分割は層化だけです (値段の段で層を作り,
-                値段の高い行と低い行を全ての 分割に置くため). 分割を層化にしてください
+                {
+                  '値段を変える判断の分割は層化だけです (値段の段で層を作り, 値段の高い行と低い行を全ての分割に置くため). 分割を層化にしてください'
+                }
               </p>
             )}
             {/* タスクを変えてグループの層化が残った場合 (ML-EDA は load_recipe で止める) */}
@@ -844,9 +846,9 @@ export function RecipeTab({
                   )}
                 </select>
                 <p id="price-help" className="col-span-2 text-xs text-ink-3">
-                  値段の列は, 売ったときの値段 (0 より大きい数) の列です. 学習に使う列の最後に残し,
-                  候補の値段に変えて売れた数を予測します. 値段は試しに変えた記録 (無作為に近い)
-                  を前提に します.{' '}
+                  {
+                    '値段の列は, 売ったときの値段 (0 より大きい数) の列です. 学習に使う列の最後に残し, 候補の値段に変えて売れた数を予測します. 値段は試しに変えた記録 (無作為に近い) を前提にします. '
+                  }
                   {target
                     ? '目的の列は売れた数の列 (その値段で売れた数. 0 以上の数) です.'
                     : '上で売れた数の列 (その値段で売れた数. 0 以上の数) を目的の列に選んでください.'}
@@ -871,9 +873,9 @@ export function RecipeTab({
                   )}
                 </select>
                 <p id="cost-help" className="col-span-2 text-xs text-ink-3">
-                  原価は, 商品 1 つを仕入れるか作るのにかかる値段 (0 以上の数) です. 利益は (値段 −
-                  原価) × 売れた数で, 原価の列が無ければ売上で数えます. 学習に使う列から除き,
-                  全ての分割に元の値で 残します.
+                  {
+                    '原価は, 商品 1 つを仕入れるか作るのにかかる値段 (0 以上の数) です. 利益は (値段 − 原価) × 売れた数で, 原価の列が無ければ売上で数えます. 学習に使う列から除き, 全ての分割に元の値で残します.'
+                  }
                 </p>
                 <label htmlFor="price-product" className="text-ink-3">
                   商品の id の列
@@ -1029,9 +1031,7 @@ export function RecipeTab({
           )}
           {priced && (
             <p className="mt-2 text-xs text-ink-3">
-              値段の列 ({recipe.price ?? '未選択'}) を変えられる手順は clip, log, standardize,
-              minmax と, 行を絞る drop_missing, drop_duplicates だけです
-              (候補の値段にも同じ手順をかけ直すため). 他の手順の列の候補には値段の列を出しません.
+              {`値段の列 (${recipe.price ?? '未選択'}) の値を変えられる手順は clip, log, standardize, minmax だけです (候補の値段にも同じ手順をかけ直すため). 行を絞る filter_rows, drop_missing, drop_duplicates は値段の列を見てかまいません. 他の手順の列の候補には値段の列を出しません.`}
             </p>
           )}
           {recipe.steps.length === 0 && (

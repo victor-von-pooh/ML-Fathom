@@ -132,9 +132,9 @@ export function PriceSummaryCard({ sourceId, recipe }: { sourceId: string; recip
             <div className="overflow-x-auto">
               <table className="text-xs">
                 <caption className="mb-1 text-left text-ink-3">
-                  値段の段ごとの売れた数. 行を値段の順に 5 つに等しく分けたもの
-                  (書き出しの分割の層と同じ). 値段の高い段ほど売れた数の平均が下がれば,
-                  値段を変えたときの売れ行きを学べます
+                  {
+                    '値段の段ごとの売れた数. 段は, 行を値段の安い順に 5 つに等しく分けたもの (書き出しの分割の層と同じ) です. 段ごとに売れた数の平均が違えば, 値段で売れ行きが変わることが見えます. 値段の高い段ほど平均が下がるのが, 値段を上げると売れにくくなる記録です'
+                  }
                 </caption>
                 <Head
                   names={['段', '行', '値段の範囲', '値段の平均', '売れた数の平均']}
@@ -203,17 +203,16 @@ export function PriceSummaryCard({ sourceId, recipe }: { sourceId: string; recip
           )}
           {!recipe.product && (
             <p className="text-xs text-ink-3">
-              商品の id の列を選ぶと, 商品ごとの試した値段を出し,
-              値段の幅と他の列の関わりを商品ごとの値段の 高さの違いを除いて数えます.
+              {
+                '商品の id の列を選ぶと, 商品ごとの試した値段を出し, 値段の幅と他の列の関わりを, 商品ごとの値段の高さの違いを除いて数えます.'
+              }
             </p>
           )}
           {confounding.length > 0 && (
             <div className="overflow-x-auto">
               <table className="text-xs">
                 <caption className="mb-1 text-left text-ink-3">
-                  値段と他の列の関わり. 強さは 0 から 1 で, 0
-                  に近いほど値段を無作為に近く変えた記録に見えます (目安: {CONFOUNDED} 以上なら,
-                  その列に合わせて値段を決めた記録かもしれません). 強い順に {TABLE_ROWS} 列まで
+                  {`値段と他の列の関わり. 強さは, 値段とその列の関わりの強さ (0 から 1) です. 0 に近いほど, 値段を無作為に近く変えた記録に見えます (目安: ${CONFOUNDED} 以上なら, その列に合わせて値段を決めた記録かもしれません). 強い順に ${TABLE_ROWS} 列まで`}
                 </caption>
                 <Head names={['列', '型', '強さ']} right={['強さ']} />
                 <tbody>
