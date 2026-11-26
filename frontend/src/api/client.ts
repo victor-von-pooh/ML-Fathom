@@ -98,7 +98,8 @@ export const api = {
     body: Partial<Pick<Source, 'name' | 'target' | 'loader' | 'options'>>,
   ) => request<Source>(`/api/sources/${id}`, json('PATCH', body)),
   deleteSource: (id: string) => request<void>(`/api/sources/${id}`, { method: 'DELETE' }),
-  profile: (id: string) => request<Profile>(`/api/sources/${id}/profile`),
+  profile: (id: string, task?: 'anomaly') =>
+    request<Profile>(`/api/sources/${id}/profile${task ? `?task=${task}` : ''}`),
   trajectory: (id: string) => request<TrajectorySummary>(`/api/sources/${id}/trajectory`),
   reactions: (id: string) => request<ReactionsResult>(`/api/sources/${id}/reactions`),
   exportReactions: (id: string, overwrite: boolean) =>
