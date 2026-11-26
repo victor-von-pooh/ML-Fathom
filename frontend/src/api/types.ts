@@ -703,7 +703,9 @@ export interface ModelInputs {
   task: string | null
   target: string | null
   classes: unknown[] | null
-  /** 1 件に出す値の数 (分類はクラスの数, 回帰と時系列の予測は 1) */
+  /** 正解の種類 (版 2 と版 3 の mask, point_cloud. 版 1 は null) */
+  target_kind?: string | null
+  /** 1 件に出す値の数 (分類はクラスの数, 回帰と時系列の予測は 1, 領域は背景を含むクラスの数, 点群は出す点の数) */
   outputs: number | null
 }
 
@@ -776,6 +778,10 @@ export interface ItemsDataset extends DatasetBase {
   /** 座標の正規化の方法 (かけた場合だけ) */
   normalization: string | null
   notes: string[]
+  /** モデルに要るもの (求められないもの (群分けの表など) は null) */
+  model: ModelInputs | null
+  /** モデルに要るものを求められない理由 */
+  model_error: string | null
 }
 
 /** 読めないデータセット (知らない版, 壊れたもの) */
@@ -838,6 +844,10 @@ export interface PairExportResult {
   notes: string[]
   /** 注意の印 (notes と同じ順. 種類で案内を出し分ける. ファイルの組の書き出しだけ) */
   notices?: ExportNotice[]
+  /** モデルに要るもの (一覧と同じ. 求められなければ null) */
+  model?: ModelInputs | null
+  /** モデルに要るものを求められない理由 */
+  model_error?: string | null
 }
 
 /** ML-Quest のファイルの組の書き出しの設定 (問題の設定の data.export) */

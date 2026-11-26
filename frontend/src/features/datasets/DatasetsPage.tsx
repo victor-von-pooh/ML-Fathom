@@ -3,13 +3,7 @@ import { AlertTriangle, Database, Upload } from 'lucide-react'
 import { Link } from 'react-router'
 
 import { api } from '../../api/client'
-import type {
-  ItemsDataset,
-  ModelInputs,
-  TableDataset,
-  UnreadableDataset,
-  DatasetSummary,
-} from '../../api/types'
+import type { ItemsDataset, TableDataset, UnreadableDataset, DatasetSummary } from '../../api/types'
 import { Card, EmptyState, ErrorBox, PageHeader, Spinner } from '../../components/ui'
 import { stepText } from '../../lib/entrySteps'
 import { formatNumber, KIND_LABELS, TASK_LABELS } from '../../lib/format'
@@ -26,6 +20,7 @@ import {
   ROLE_LABELS,
 } from '../../lib/pairs'
 import { splitLabel } from '../../lib/recipe'
+import { ModelNeeds } from './ModelNeeds'
 
 /** 分割ごとの数を 1 行にする */
 function splitText(splits: Record<string, number>, unit: string): string {
@@ -48,40 +43,6 @@ function Footer({ item }: { item: DatasetSummary }) {
   )
 }
 
-/** 出す値の数の説明 (分類はクラスの数, 他は値の数) */
-function outputsText(model: ModelInputs): string {
-  if (model.outputs === null) return 'なし (タスクを決めていません)'
-  if (model.task === 'classification') return `${model.outputs} (クラスの数)`
-  if (model.task === 'anomaly')
-    return `${model.outputs} (モデルが入力を作り直す値の数. 学習に使う列の数と同じ)`
-  if (model.task === 'uplift')
-    return `${model.outputs} (処置したときの予測と, しないときの予測で, それぞれ 1 つの値)`
-  if (model.task === 'price') return `${model.outputs} (売れた数の予測. 値段の列は入力の最後)`
-  if (model.task === 'demand')
-    return `${model.outputs} (先の期間の需要の, 分位点の水準 1 つあたりの値. 学ぶ水準の数をかける)`
-  return `${model.outputs} (値)`
-}
-
-/** モデルに要るもの (ML-EDA の model_inputs). モデルの入力と最後の層の出す数に合わせる */
-function ModelNeeds({ model }: { model: ModelInputs }) {
-  return (
-    <ul className="space-y-0.5 text-xs">
-      {model.inputs.map((input) => (
-        <li key={input.name}>
-          入力 <span className="font-mono">{input.name}</span>:{' '}
-          <span className="font-mono">
-            [{input.shape.map((size) => (size === null ? 'バッチ' : String(size))).join(', ')}]{' '}
-            {input.dtype}
-          </span>
-          {input.vocabulary !== undefined && <>, 語彙の大きさ {input.vocabulary}</>}
-        </li>
-      ))}
-      <li>出す値: {outputsText(model)}</li>
-    </ul>
-  )
-}
-
-/** 版 1 (1 件 = 1 行の表) */
 /** プロジェクトへ書き出したものの元 (登録したデータか問題の設定) */
 function ProjectRow({ item }: { item: DatasetSummary }) {
   if (item.project === undefined) return null
@@ -98,6 +59,7 @@ function ProjectRow({ item }: { item: DatasetSummary }) {
   )
 }
 
+/** 版 1 (1 件 = 1 行の表) */
 function TableCard({ item }: { item: TableDataset }) {
   return (
     <Card
@@ -271,6 +233,10 @@ function ItemsCard({ item }: { item: ItemsDataset }) {
             </dd>
           </>
         )}
+        <dt className="text-ink-3">モデルに要るもの</dt>
+        <dd>
+          <ModelNeeds model={item.model} error={item.model_error} />
+        </dd>
         <ProjectRow item={item} />
         <Footer item={item} />
       </dl>

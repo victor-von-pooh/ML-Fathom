@@ -89,6 +89,55 @@ def table_summary(path: Path) -> dict[str, Any]:
     return summary
 
 
+def items_model(
+    path: Path, role: Any, parent: Optional[int] = None
+) -> dict[str, Any]:
+    """
+    版 2 と版 3 のデータセットのモデルに要るものを求める関数
+
+    群分けの表は学習に使わず ML-EDA が受け付けないので, 呼ばずに理由を
+    返す. ML-EDA が求められない組も, 誤りにせず理由を返す
+
+    Parameters
+    ----------
+    path: Path
+        データセットのディレクトリ
+    role: Any
+        説明の受け持ち (role)
+    parent: Optional[int] = None
+        開いた書き出し先の親の記述子 (渡すと ML-EDA が親に対してリンクを
+        たどらずに読み, path の途中は使わない)
+
+    Returns
+    ----------
+    model: dict[str, Any]
+        model (ML-EDA の model_inputs の結果. 求められなければ None) と
+        model_error (求められない理由. 求められれば None)
+    """
+    # 群分けの表は分析の保存で, モデルの入力を持たない
+    if role == "group":
+        model: dict[str, Any] = {
+            "model": None,
+            "model_error": (
+                "群分けの表は学習に使わないので, モデルの入力はありません"
+            ),
+        }
+        return model
+
+    # 知らない入力と正解の種類の組などは, 一覧を止めずに理由を返す
+    try:
+        model = {
+            "model": ml_eda.model_inputs(path, parent=parent),
+            "model_error": None,
+        }
+    except Exception as error:  # noqa: BLE001 (理由を出して続ける)
+        model = {
+            "model": None, "model_error": str(error) or type(error).__name__,
+        }
+
+    return model
+
+
 def items_summary(path: Path) -> dict[str, Any]:
     """
     版 2 と版 3 (入力と正解がファイルの組) のデータセットを一覧の 1 件に
@@ -103,7 +152,8 @@ def items_summary(path: Path) -> dict[str, Any]:
     ----------
     summary: dict[str, Any]
         受け持ち, 正解 (種類, 項目, 出どころ), 項目ごとの種類と単位と
-        座標の決まりと中身の手順, 分割ごとの件数, 全ての件数, 正規化, 注意
+        座標の決まりと中身の手順, 分割ごとの件数, 全ての件数, 正規化, 注意,
+        モデルに要るもの (model) と求められない理由 (model_error)
     """
     # load_items で読めることを確かめる (表と項目の列も)
     dataset = ml_eda.load_items(path)
@@ -134,6 +184,7 @@ def items_summary(path: Path) -> dict[str, Any]:
             if isinstance(normalization, dict) else None
         ),
         "notes": [str(note) for note in info.get("notes") or []],
+        **items_model(path, info.get("role")),
     }
 
     return summary

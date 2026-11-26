@@ -50,6 +50,59 @@ const DATASETS: DatasetSummary[] = [
     items: 4,
     normalization: 'view_center',
     notes: ['点群の無い撮影が 1 件あり, 除きました'],
+    model: {
+      inputs: [{ name: 'capture', shape: [null, 512, 3], dtype: 'float32' }],
+      task: null,
+      target: 'cloud',
+      classes: null,
+      target_kind: 'point_cloud',
+      outputs: 1024,
+    },
+    model_error: null,
+  },
+  {
+    form: 'items',
+    name: 'shapes',
+    path: '/home/datasets/shapes',
+    format_version: 2,
+    created_at: '2026-11-19T09:00:00+09:00',
+    role: 'predict',
+    target: { kind: 'mask', entries: ['mask'], origin: { type: 'human' } },
+    entries: [
+      {
+        name: 'image',
+        kind: 'image',
+        role: 'input',
+        units: null,
+        convention: null,
+        shape: [null, null, 3],
+        formats: ['png'],
+        steps: null,
+      },
+      {
+        name: 'mask',
+        kind: 'mask',
+        role: 'target',
+        units: 'pixel',
+        convention: { origin: 'top_left' },
+        shape: [null, null],
+        formats: ['png'],
+        steps: null,
+      },
+    ],
+    splits: { train: 8, valid: 2 },
+    items: 10,
+    normalization: null,
+    notes: [],
+    model: {
+      inputs: [{ name: 'image', shape: [null, 3, null, null], dtype: 'float32' }],
+      task: null,
+      target: 'mask',
+      classes: ['background', 'circle', 'square'],
+      target_kind: 'mask',
+      outputs: 3,
+    },
+    model_error: null,
   },
   {
     form: 'table',
@@ -150,6 +203,16 @@ test('版 3 は項目と中身の手順と出どころ, 版 1 は表, 知らな�
   expect(card.getByText('{"voxel":0.01}')).toBeInTheDocument()
   expect(card.getByText(/処理 fusion を超えられません/)).toBeInTheDocument()
   expect(card.getByText(/点群の無い撮影/)).toBeInTheDocument()
+  // ファイルの組のモデルに要るもの (入力の形と型, 出す点の数)
+  expect(card.getByText('[バッチ, 512, 3] float32')).toBeInTheDocument()
+  expect(card.getByText(/1024 \(出す点の数/)).toBeInTheDocument()
+
+  // 画像と領域は背景を含むクラスの数. 決まらない大きさは「不定」
+  const shapes = within(screen.getByText('shapes').closest('section')!)
+  expect(shapes.getByText('[バッチ, 3, 不定, 不定] float32')).toBeInTheDocument()
+  expect(
+    shapes.getByText(/3 \(背景を含む領域のクラスの数: background, circle, square\)/),
+  ).toBeInTheDocument()
 
   // 版 1 は表と, モデルに要るもの (入力の形と型, 出す値の数)
   const people = within(screen.getByText('people').closest('section')!)
@@ -223,6 +286,8 @@ test('群分けの表は正解なしと列の項目を出し, 正解の出どこ
       items: 90,
       normalization: null,
       notes: ['群を作る列に欠けた値のある行が 5 行あります'],
+      model: null,
+      model_error: '群分けの表は学習に使わないので, モデルの入力はありません',
     },
   ])
   renderPage()
@@ -235,6 +300,8 @@ test('群分けの表は正解なしと列の項目を出し, 正解の出どこ
   expect(card.queryByText('future_kind')).not.toBeInTheDocument()
   expect(card.queryByText('正解の出どころ')).not.toBeInTheDocument()
   expect(card.getByText(/欠けた値のある行が 5 行/)).toBeInTheDocument()
+  // モデルの入力は無く, 理由を出す
+  expect(card.getByText(/なし \(群分けの表は学習に使わないので/)).toBeInTheDocument()
 })
 
 test('異常の検知のデータセットは, 正解の数と異常の割合と分割ごとの行の数を出す', async () => {

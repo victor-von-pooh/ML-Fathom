@@ -24,6 +24,7 @@ from ml_fathom.api import (
     pair_result,
     source_view,
 )
+from ml_fathom.datasets import items_model
 from ml_fathom.demand import DEMAND_KINDS
 from ml_fathom.groups import (
     MAX_COLUMNS,
@@ -1538,6 +1539,8 @@ def export_problem_pairs(body: PairsExport) -> dict[str, Any]:
             info = pair_call(
                 settings, parent, body.overwrite, body.follow_links
             )
+            # モデルに要るものも開いた親を通した読み込み (パスは読まない)
+            model = items_model(parent.place, info.get("role"), parent.fd)
     except HTTPException:
         raise
     except FileExistsError as error:
@@ -1558,7 +1561,7 @@ def export_problem_pairs(body: PairsExport) -> dict[str, Any]:
             422, f"問題の設定を保存できません: {error}"
         ) from error
     result = {
-        **pair_result(target, info), "changes": trial["changes"],
+        **pair_result(target, info, model), "changes": trial["changes"],
         "conflicts": trial["conflicts"], "version": version_of(path),
     }
 

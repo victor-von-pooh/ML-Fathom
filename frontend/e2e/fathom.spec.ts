@@ -571,6 +571,12 @@ test('画像と領域の組を版 2 で書き出し, 注意と使い方を見て
   await expect(page.getByText(/書き出しました/)).toBeVisible({ timeout: 20_000 })
   await expect(page.getByText(/orphan/)).toBeVisible()
   await expect(page.getByText(/dataset = load_items\(/)).toBeVisible()
+  // モデルに要るもの (入力の形と型, 背景を含む領域のクラスの数)
+  const status = page.getByRole('status')
+  await expect(status.getByText(/^\[バッチ, 3, \d+, \d+\] float32$/)).toBeVisible()
+  await expect(
+    status.getByText('出す値: 3 (背景を含む領域のクラスの数: background, circle, square)'),
+  ).toBeVisible()
 
   // 一覧に版 2 として並ぶ
   await page.getByRole('link', { name: 'データセットの一覧へ' }).click()
@@ -579,6 +585,9 @@ test('画像と領域の組を版 2 で書き出し, 注意と使い方を見て
   await expect(card.getByText(/予測する · 領域 \(mask\)/)).toBeVisible()
   await expect(card.getByText(/今ある処理の出力 \(process\)/)).toBeVisible()
   await expect(card.getByText(/全て 8 件/)).toBeVisible()
+  await expect(
+    card.getByText('出す値: 3 (背景を含む領域のクラスの数: background, circle, square)'),
+  ).toBeVisible()
 })
 
 // e2e/serve.sh が大きさの混ざった画像と領域を作った場所
@@ -628,6 +637,8 @@ test('大きさの混ざった画像を中身の手順でそろえて版 3 で�
   await expect(card.getByText('resize (width 20, height 16)', { exact: true })).toBeVisible()
   await expect(card.getByText('resize_mask (width 20, height 16)', { exact: true })).toBeVisible()
   await expect(card.getByText(/全て 6 件/)).toBeVisible()
+  // モデルの入力は手順の後の大きさ (チャンネル, 高さ, 幅)
+  await expect(card.getByText('[バッチ, 3, 16, 20] float32')).toBeVisible()
 })
 
 test('撮影と点群の組を中身の手順でそろえ, グループで分けて書き出し, 一覧で確かめる', async ({
@@ -661,6 +672,9 @@ test('撮影と点群の組を中身の手順でそろえ, グループで分け
 
   await expect(page.getByText(/書き出しました/)).toBeVisible({ timeout: 30_000 })
   await expect(page.getByText(/train 2 件, valid 2 件/)).toBeVisible()
+  // モデルの入力は既定の 512 点, 出す点の数は sample_points の後の 50 点
+  await expect(page.getByRole('status').getByText('[バッチ, 512, 3] float32')).toBeVisible()
+  await expect(page.getByRole('status').getByText(/出す値: 50 \(出す点の数/)).toBeVisible()
   await expect(
     page.getByText(/normalize_capture で同じ正規化をかけて read_capture で読み/),
   ).toBeVisible()
@@ -682,6 +696,8 @@ test('撮影と点群の組を中身の手順でそろえ, グループで分け
   await expect(card.getByText('版 3 · ファイルの組')).toBeVisible()
   await expect(card.getByText('resize (width 32, height 24)', { exact: true })).toBeVisible()
   await expect(card.getByText('sample_points (points 50)', { exact: true })).toBeVisible()
+  await expect(card.getByText('[バッチ, 512, 3] float32')).toBeVisible()
+  await expect(card.getByText(/出す値: 50 \(出す点の数/)).toBeVisible()
   // 深度から点に戻す決まり (合成の見本は z と +0.5)
   await expect(
     card.getByText(/深度 z \(カメラの前の軸に沿った距離\) · 画素の中心 \+0\.5/),
@@ -987,6 +1003,8 @@ test('正解の無い表で群を作る列と群の数を選び, 群の要約を
   const card = page.locator('section', { has: page.getByText('segments_groups', { exact: true }) })
   await expect(card.getByText('版 2 · 群分けの表')).toBeVisible()
   await expect(card.getByText('まとめる · 正解なし')).toBeVisible()
+  // 学習に使わないので, モデルの入力は無く理由を出す
+  await expect(card.getByText(/なし \(群分けの表は学習に使わないので/)).toBeVisible()
 })
 
 test('まとめるの問題の設定から始め, 答えの列で群を作ってプロジェクトへ写す', async ({ page }) => {

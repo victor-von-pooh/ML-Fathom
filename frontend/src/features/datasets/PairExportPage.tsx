@@ -39,6 +39,7 @@ import {
 } from '../../lib/pairs'
 import { splitLabel } from '../../lib/recipe'
 import { EntryStepsField } from './EntryStepsField'
+import { ModelNeeds } from './ModelNeeds'
 
 type FormId = 'image_masks' | 'capture_clouds'
 
@@ -591,6 +592,12 @@ function ExportCard({
                 )
                 .join(', ')}
             </p>
+            {result.model !== undefined && (
+              <div>
+                <p className="text-xs text-ink-3">モデルに要るもの:</p>
+                <ModelNeeds model={result.model} error={result.model_error} />
+              </div>
+            )}
             {result.notes.length > 0 ? (
               <>
                 <p className="text-xs text-ink-3">書き出しの注意:</p>
