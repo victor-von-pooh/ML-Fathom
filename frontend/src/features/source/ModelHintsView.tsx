@@ -13,6 +13,7 @@ export function ModelHintsView({
   anomaly = false,
   uplift = false,
   price = false,
+  demand = false,
 }: {
   hints: ModelHints
   /** 異常の検知のデータセットか (出力の幅は入力を作り直す値の数) */
@@ -21,6 +22,8 @@ export function ModelHintsView({
   uplift?: boolean
   /** 値段を変える判断のデータセットか (出力の幅は売れた数の予測の値の数) */
   price?: boolean
+  /** 時間をまたぐ量の判断のデータセットか (出力の幅は分位点の水準 1 つあたりの値の数) */
+  demand?: boolean
 }) {
   const id = useId()
   const rows: [string, string, string][] = [
@@ -47,9 +50,11 @@ export function ModelHintsView({
           ? '最後の nn.Linear の out_features (処置したときの予測と, しないときの予測で, それぞれ 1 つの値を出す)'
           : price
             ? '最後の nn.Linear の out_features (売れた数の予測を 1 つ. 値段の列は入力の最後)'
-            : hints.outputs === 1
-              ? '最後の nn.Linear の out_features (値を 1 つ)'
-              : '最後の nn.Linear の out_features (クラスの数)',
+            : demand
+              ? '分位点の水準 1 つあたりの値の数. 最後の nn.Linear の out_features は, これに学ぶ水準の数 (問題の設定で決める) をかけた数'
+              : hints.outputs === 1
+                ? '最後の nn.Linear の out_features (値を 1 つ)'
+                : '最後の nn.Linear の out_features (クラスの数)',
     ])
   }
   return (

@@ -87,6 +87,7 @@ export const TASK_LABELS: Record<string, string> = {
   anomaly: '異常の検知',
   uplift: '効果を見積もる',
   price: '値段を変える判断',
+  demand: '時間をまたぐ量の判断',
   none: '決めない',
 }
 

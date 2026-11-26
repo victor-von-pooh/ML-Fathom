@@ -5,6 +5,11 @@ import {
   anomalyOf,
   anomalyTotals,
   canKeepUnlabeled,
+  demandBlockedColumns,
+  demandOf,
+  demandStepErrors,
+  demandSteps,
+  fitDemand,
   fitPrice,
   fitTreatment,
   looksLikeDatetime,
@@ -19,6 +24,8 @@ import {
   rowIdColumns,
   upliftOf,
   usageSnippet,
+  withDemandPeriod,
+  withDemandRole,
   withOutcome,
   withPriceRole,
   withRowId,
@@ -380,5 +387,93 @@ test('値段を変える判断の説明と使い方の例', () => {
   expect(snippet).toContain('dataset.price_inputs("valid"')
   expect(snippet).toContain('dataset.cost("train")')
   expect(snippet).toContain('dataset.info["price"]["splits"]')
+  expect(snippet).not.toContain('クラスの数')
+})
+
+test('時間をまたぐ量の判断でなくなると日付, 在庫の数, 期間を消し, 値段を変える判断なら商品の id を残す', () => {
+  const demand: Recipe = {
+    ...recipe,
+    task: 'demand',
+    product: 'product_id',
+    date: 'date',
+    stock: 'stock',
+    horizon: 14,
+    interval: 7,
+    id: 'record_id',
+  }
+  expect(withTask(demand, 'demand')).toEqual(demand)
+  const plain = withTask(demand, 'regression')
+  for (const key of ['product', 'date', 'stock', 'horizon', 'interval', 'id'] as const)
+    expect(plain[key]).toBeUndefined()
+  const price = withTask(demand, 'price')
+  expect(price.product).toBe('product_id')
+  expect(price.date).toBeUndefined()
+  expect(price.id).toBe('record_id')
+  // 値段を変える判断から変えると, 値段と原価の列を消して商品の id を残す
+  const back = withTask({ ...price, price: 'price', cost: 'cost' }, 'demand')
+  expect(back.price).toBeUndefined()
+  expect(back.cost).toBeUndefined()
+  expect(back.product).toBe('product_id')
+})
+
+test('時間をまたぐ量の判断の列は互いに違う列にし, 期間は 1 以上の整数だけ書く', () => {
+  const demand: Recipe = { ...recipe, task: 'demand', product: 'p', date: 'd', id: 'r' }
+  // 在庫の数の列を商品の id と同じにすると商品の id を消す
+  const stock = withDemandRole(demand, 'stock', 'p')
+  expect(stock.stock).toBe('p')
+  expect(stock.product).toBeUndefined()
+  expect(withDemandRole(demand, 'date', 'r').id).toBeUndefined()
+  expect(withRowId(demand, 'd').date).toBeUndefined()
+  expect('stock' in withDemandRole({ ...demand, stock: 's' }, 'stock', '')).toBe(false)
+  expect(fitDemand(demand, 'd').date).toBeUndefined()
+  expect(fitDemand(demand, 'units')).toBe(demand)
+  expect(fitDemand({ ...demand, task: 'price' }, 'd')).toEqual({ ...demand, task: 'price' })
+  expect(withDemandPeriod(demand, 'horizon', 14).horizon).toBe(14)
+  for (const value of [null, 0, 2.5]) {
+    expect('horizon' in withDemandPeriod({ ...demand, horizon: 7 }, 'horizon', value)).toBe(false)
+  }
+})
+
+test('時間をまたぐ量の判断の手順の決まりと, 過去の売れた数の手順', () => {
+  const demand: Recipe = {
+    ...recipe,
+    task: 'demand',
+    target: 'units',
+    product: 'product_id',
+    date: 'date',
+    stock: 'stock',
+    steps: [
+      { op: 'standardize', columns: 'auto' },
+      { op: 'lag', columns: ['units'], lags: [1, -1], by: 'product_id', time: 'day' },
+      { op: 'clip', columns: ['stock', 'units'] },
+      { op: 'drop_columns', columns: ['stock'] },
+    ],
+  }
+  expect(demandBlockedColumns(demand, 'clip')).toEqual(['product_id', 'stock'])
+  expect(demandBlockedColumns(demand, 'drop_columns')).toEqual([])
+  expect(demandBlockedColumns(demand, 'drop_missing')).toEqual([])
+  expect(demandBlockedColumns({ ...demand, task: 'regression' }, 'clip')).toEqual([])
+  const errors = demandStepErrors(demand, (op) => op === 'standardize')
+  expect(errors).toHaveLength(4)
+  expect(errors[0]).toContain('手順 2 (lag) は値を学ぶ最初の手順 (手順 1) より前')
+  expect(errors[1]).toContain('lags は 1 以上の整数')
+  expect(errors[2]).toContain('time に日付の列 date')
+  expect(errors[3]).toContain('手順 3 (clip) には stock を書けません')
+  expect(demandStepErrors({ ...demand, task: 'price' }, () => true)).toEqual([])
+  const made = demandSteps(demand)
+  expect(made[0]).toMatchObject({ op: 'lag', by: ['product_id'], time: 'date', freq: '1D' })
+  expect(demandStepErrors({ ...demand, steps: made }, () => false)).toEqual([])
+  expect(demandSteps({ ...demand, date: undefined })).toEqual([])
+})
+
+test('時間をまたぐ量の判断の説明と使い方の例', () => {
+  const summary = { splits: {}, horizon: 7 }
+  expect(demandOf({ demand: summary })).toBe(summary)
+  expect(demandOf({ demand: null })).toBeNull()
+  expect(demandOf({})).toBeNull()
+  const snippet = usageSnippet('/d', { train: {}, valid: {} }, false, false, false, false, true)
+  expect(snippet).toContain('dataset.previous("valid")')
+  expect(snippet).toContain('dataset.stock("valid")')
+  expect(snippet).toContain('dataset.info["demand"]["splits"]')
   expect(snippet).not.toContain('クラスの数')
 })

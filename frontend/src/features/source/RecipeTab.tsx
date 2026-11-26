@@ -25,6 +25,11 @@ import {
   rowIdColumns,
   anomalyOf,
   canKeepUnlabeled,
+  DEMAND_KINDS,
+  demandBlockedColumns,
+  demandOf,
+  demandStepErrors,
+  fitDemand,
   fitPrice,
   fitTreatment,
   fitUnlabeled,
@@ -52,6 +57,9 @@ import { useDecided } from '../../lib/useDecided'
 import { DecisionsCard } from './DecisionsCard'
 import { Findings } from './Findings'
 import { AnomalyRows } from './AnomalyRows'
+import { DemandFields } from './DemandFields'
+import { DemandRows } from './DemandRows'
+import { DemandSummaryCard } from './DemandSummaryCard'
 import { GroupProblemNote, ProblemCard } from './ProblemCard'
 import { ProjectExport } from './ProjectExport'
 import { ItemPreviewCard } from './ItemPreviewCard'
@@ -351,20 +359,23 @@ export function RecipeTab({
   }, [target, draft, saved.data, setDraft])
   // タスクを決めていない場合は, 分析で推定したタスク (分類か回帰) にする.
   // 目的の列が無ければ, 上で消すまでの間も正解の欠けた行を残す指定を外して試す.
-  // 処置の列か値段を変える判断の列が目的の列と同じになれば, その指定を外して試す (ML-EDA が
-  // 誤りにする)
+  // 処置の列か, 値段を変える判断か時間をまたぐ量の判断の列が目的の列と同じになれば, その指定を
+  // 外して試す (ML-EDA が誤りにする)
   const guessed = profile.target?.task ?? 'none'
   const recipe = useMemo(
     () =>
       base
-        ? fitPrice(
-            fitTreatment(
-              fitUnlabeled(
-                {
-                  ...base,
+        ? fitDemand(
+            fitPrice(
+              fitTreatment(
+                fitUnlabeled(
+                  {
+                    ...base,
+                    target,
+                    task: base.task === 'none' && target && !draft ? guessed : base.task,
+                  },
                   target,
-                  task: base.task === 'none' && target && !draft ? guessed : base.task,
-                },
+                ),
                 target,
               ),
               target,
@@ -468,8 +479,11 @@ export function RecipeTab({
   // 値段を変える判断は表と時系列だけで, 分割は層化だけ (ML-EDA の値段を変えた記録の表の決まり)
   const priced = recipe.task === 'price'
   const priceKind = PRICE_KINDS.includes(kind)
+  // 時間をまたぐ量の判断は表と時系列だけで, 分割は時刻の順だけ (ML-EDA の需要の記録の表の決まり)
+  const demanded = recipe.task === 'demand'
+  const demandKind = DEMAND_KINDS.includes(kind)
   // 行の id の列の候補. 分析で欠けも同じ値も無い列だけ (ML-EDA が他の列を誤りにする).
-  // 目的の列と, 処置の列と値段を変える判断の列は選べない
+  // 目的の列と, 処置の列, 値段を変える判断と時間をまたぐ量の判断の列は選べない
   const idColumns = rowIdColumns(
     profile.columns,
     target,
@@ -477,29 +491,46 @@ export function RecipeTab({
     recipe.price,
     recipe.cost,
     recipe.product,
+    recipe.date,
+    recipe.stock,
   )
-  // 値段と原価の列の候補. 数の型 (真偽値を除く. 分析の型は値の少ない整数をカテゴリにするので,
-  // 読み込んだ型で見る) の列から目的の列と行の id の列を除く (ML-EDA が誤りにする. 他の役割の列は
-  // 選ぶと他の欄の指定を消す)
+  // 値段, 原価と在庫の数の列の候補. 数の型 (真偽値を除く. 分析の型は値の少ない整数をカテゴリに
+  // するので, 読み込んだ型で見る) の列から目的の列と行の id の列を除く (ML-EDA が誤りにする. 他の
+  // 役割の列は選ぶと他の欄の指定を消す)
   const numberColumns = columns.filter(
     (name) =>
       /^(u?int|float)/i.test(profile.columns[name]?.dtype ?? '') &&
       name !== target &&
       name !== recipe.id,
   )
-  // 商品の id の列の候補. 目的の列と行の id の列を除く
+  // 商品の id の列の候補 (値段を変える判断と時間をまたぐ量の判断). 目的の列と行の id の列を除く
   const productColumns = columns.filter((name) => name !== target && name !== recipe.id)
   // 値段を変える判断で, 書けない列を名前で書いた手順の誤り
   const priceErrors = priceStepErrors(recipe)
   // 書き出した値段を変える判断のデータセットの説明の price (他のタスクは null)
   const exportedPrice = exporter.data ? priceOf(exporter.data.info) : null
+  // 日付の列の候補. 数と真偽値でない列から目的の列と行の id の列を除く (ML-EDA が数か真偽値の
+  // 日付の列を誤りにする)
+  const dateColumns = columns.filter(
+    (name) =>
+      !/^(u?int|float|bool)/i.test(profile.columns[name]?.dtype ?? '') &&
+      name !== target &&
+      name !== recipe.id,
+  )
+  // 時間をまたぐ量の判断で, ML-EDA が止める手順の誤り
+  const demandErrors = demandStepErrors(recipe, (op) => infoOf(op)?.fits ?? false)
+  // 書き出した時間をまたぐ量の判断のデータセットの説明の demand (他のタスクは null)
+  const exportedDemand = exporter.data ? demandOf(exporter.data.info) : null
   // 処置の列の候補. 目的の列と行の id の列は選べない (ML-EDA が誤りにする)
   const treatmentColumns = columns.filter((name) => name !== target && name !== recipe.id)
   // 書き出した効果を見積もるのデータセットの説明の uplift (他のタスクは null)
   const exportedUplift = exporter.data ? upliftOf(exporter.data.info) : null
-  // 時刻で分ける分割を, 時刻の列の無い読み方 (表) で選んだか. 日時の型の列があれば読み方を案内する
+  // 時刻で分ける分割を, 時刻の列の無い読み方 (表) で選んだか. 日時の型の列があれば読み方を案内する.
+  // 時間をまたぐ量の判断は日付の列の欄の列で分けるので案内しない
   const timeSplit =
-    ['time', 'group_time'].includes(recipe.split.method) && !profile.overview.roles?.time
+    !demanded &&
+    ['time', 'group_time'].includes(recipe.split.method) &&
+    !profile.overview.roles?.time
   const datetimes = Object.entries(profile.columns)
     .filter(([, info]) => looksLikeDatetime(info))
     .map(([name]) => name)
@@ -565,12 +596,14 @@ export function RecipeTab({
                   disabled={
                     (value === 'anomaly' && !anomalyKind && !anomaly) ||
                     (value === 'uplift' && !upliftKind && !uplift) ||
-                    (value === 'price' && !priceKind && !priced)
+                    (value === 'price' && !priceKind && !priced) ||
+                    (value === 'demand' && !demandKind && !demanded)
                   }
                 >
                   {(value === 'anomaly' && !anomalyKind) ||
                   (value === 'uplift' && !upliftKind) ||
-                  (value === 'price' && !priceKind)
+                  (value === 'price' && !priceKind) ||
+                  (value === 'demand' && !demandKind)
                     ? `${label} (表と時系列だけ)`
                     : label}
                 </option>
@@ -592,7 +625,7 @@ export function RecipeTab({
             >
               <option
                 value="random"
-                disabled={(uplift || priced) && recipe.split.method !== 'random'}
+                disabled={(uplift || priced || demanded) && recipe.split.method !== 'random'}
               >
                 無作為
               </option>
@@ -606,7 +639,10 @@ export function RecipeTab({
                         ? '層化 (値段の段で層を作る)'
                         : '層化 (クラスの割合を保つ)',
                   ],
-                  ['time', '時刻の順 (最後を検証用に)'],
+                  [
+                    'time',
+                    demanded ? '時刻の順 (発注を決める日の順)' : '時刻の順 (最後を検証用に)',
+                  ],
                   ['group', 'グループごと'],
                   ['group_time', 'グループと時刻の組 (新しい相手を検証用に)'],
                 ] as const
@@ -615,7 +651,9 @@ export function RecipeTab({
                   key={value}
                   value={value}
                   disabled={
-                    (anomaly || ((uplift || priced) && value !== 'stratified')) &&
+                    (anomaly ||
+                      ((uplift || priced) && value !== 'stratified') ||
+                      (demanded && value !== 'time')) &&
                     recipe.split.method !== value
                   }
                 >
@@ -625,7 +663,7 @@ export function RecipeTab({
               <option
                 value="stratified_group"
                 disabled={
-                  (!stratifiable || anomaly || uplift || priced) &&
+                  (!stratifiable || anomaly || uplift || priced || demanded) &&
                   recipe.split.method !== 'stratified_group'
                 }
               >
@@ -635,7 +673,9 @@ export function RecipeTab({
               </option>
               <option
                 value="none"
-                disabled={(anomaly || uplift || priced) && recipe.split.method !== 'none'}
+                disabled={
+                  (anomaly || uplift || priced || demanded) && recipe.split.method !== 'none'
+                }
               >
                 分けない
               </option>
@@ -663,6 +703,15 @@ export function RecipeTab({
               <p role="alert" className="col-start-2 text-xs text-critical-text">
                 {
                   '値段を変える判断の分割は層化だけです (値段の段で層を作り, 値段の高い行と低い行を全ての分割に置くため). 分割を層化にしてください'
+                }
+              </p>
+            )}
+            {/* 時間をまたぐ量の判断は発注を決める日の順に分け, 先の期間が後の分割に入らないようにする
+                (ML-EDA は他の分け方を load_recipe で止める) */}
+            {demanded && recipe.split.method !== 'time' && (
+              <p role="alert" className="col-start-2 text-xs text-critical-text">
+                {
+                  '時間をまたぐ量の判断の分割は時刻の順だけです (発注を決める日の順に分け, 学習用の正解に検証用の日の売れた数が入らないようにするため). 分割を時刻の順にしてください'
                 }
               </p>
             )}
@@ -768,11 +817,13 @@ export function RecipeTab({
                     `目的の列の欠けた行: ${formatNumber(profile.columns[target].missing)} 行${
                       profile.overview.sampled ? ' (間引いて分析した行で)' : ''
                     }. `}
-                  {uplift || priced
-                    ? `${uplift ? '結果' : '売れた数'}の欠けた行を, 落とすか unlabeled の分割に残すかを選びます. 残した行は学習と評価に使わず, 推論と同じ前処理をかけて取っておきます.`
-                    : anomaly
-                      ? '「正常と見なす」は, 正解の列が空の行を正常 (正解 0) として扱い, 正常の行と同じく学習用, 検証用, テスト用に分けます. 異常の行にだけ 1 を入れた表で選びます. 空の行を学習に使わずに別に取っておく場合は「unlabeled の分割に残す」を選びます.'
-                      : '半教師あり学習や異常の検知のように, 正解の無い行も学習に使う場合は残します. train, valid, test の中身は変わらず, 残した行には学習用で当てはめた前処理をかけます.'}
+                  {demanded
+                    ? '先の期間の合計の分からない発注を決める日の行 (記録の終わりの近くの日と, 先の期間に抜けの日のある日) を, 落とすか unlabeled の分割に残すかを選びます. 残した行は学習と評価に使わず, 推論と同じ前処理をかけて取っておきます (記録の最後の日の近くは, 推論の段階で発注の数を決める行と同じ形です).'
+                    : uplift || priced
+                      ? `${uplift ? '結果' : '売れた数'}の欠けた行を, 落とすか unlabeled の分割に残すかを選びます. 残した行は学習と評価に使わず, 推論と同じ前処理をかけて取っておきます.`
+                      : anomaly
+                        ? '「正常と見なす」は, 正解の列が空の行を正常 (正解 0) として扱い, 正常の行と同じく学習用, 検証用, テスト用に分けます. 異常の行にだけ 1 を入れた表で選びます. 空の行を学習に使わずに別に取っておく場合は「unlabeled の分割に残す」を選びます.'
+                        : '半教師あり学習や異常の検知のように, 正解の無い行も学習に使う場合は残します. train, valid, test の中身は変わらず, 残した行には学習用で当てはめた前処理をかけます.'}
                 </p>
               </>
             )}
@@ -902,9 +953,24 @@ export function RecipeTab({
                 </p>
               </>
             )}
-            {/* 行の id の列は異常の検知, 効果を見積もると値段を変える判断だけ (行を元の表と突き合わせる.
-                ML-EDA のレシピの id) */}
-            {(anomaly || uplift || priced) && (
+            {/* 商品の id, 日付, 在庫の数の列と期間は時間をまたぐ量の判断だけ (ML-EDA のレシピの product,
+                date, stock, horizon, interval) */}
+            {demanded && (
+              <DemandFields
+                recipe={recipe}
+                target={target}
+                productColumns={productColumns}
+                dateColumns={dateColumns}
+                stockColumns={numberColumns}
+                onChange={(next) => {
+                  setSelected(null)
+                  update(next)
+                }}
+              />
+            )}
+            {/* 行の id の列は異常の検知, 効果を見積もる, 値段を変える判断と時間をまたぐ量の判断だけ
+                (行を元の表と突き合わせる. ML-EDA のレシピの id) */}
+            {(anomaly || uplift || priced || demanded) && (
               <>
                 <label htmlFor="row-id" className="text-ink-3">
                   行の id の列
@@ -932,9 +998,11 @@ export function RecipeTab({
                     ? '行ごとの効果を元の表の行 (顧客) と突き合わせられます. '
                     : priced
                       ? '選んだ値段を元の表の行と突き合わせられます. '
-                      : '異常らしいと出た行を元の表の行と突き合わせられます. '}
+                      : demanded
+                        ? '発注の数を元の表の行 (商品と発注を決める日) と突き合わせられます. '
+                        : '異常らしいと出た行を元の表の行と突き合わせられます. '}
                   候補は欠けも同じ値も無い列だけです.{' '}
-                  {uplift || priced
+                  {uplift || priced || demanded
                     ? ''
                     : target
                       ? '目的の列は異常の正解の列 (異常は 1 か真, 正常は 0 か偽) です.'
@@ -955,6 +1023,7 @@ export function RecipeTab({
           />
         )}
         {priced && <PriceSummaryCard sourceId={sourceId} recipe={recipe} />}
+        {demanded && <DemandSummaryCard sourceId={sourceId} recipe={recipe} />}
         <Card
           title={`手順 (${recipe.steps.length})`}
           actions={
@@ -1005,7 +1074,9 @@ export function RecipeTab({
                 count={recipe.steps.length}
                 info={infoOf(step.op)}
                 columns={columns.filter(
-                  (name) => !priceBlockedColumns(recipe, step.op).includes(name),
+                  (name) =>
+                    !priceBlockedColumns(recipe, step.op).includes(name) &&
+                    !demandBlockedColumns(recipe, step.op).includes(name),
                 )}
                 active={selected === index}
                 onSelect={() => setSelected(selected === index ? null : index)}
@@ -1032,6 +1103,20 @@ export function RecipeTab({
           {priced && (
             <p className="mt-2 text-xs text-ink-3">
               {`値段の列 (${recipe.price ?? '未選択'}) の値を変えられる手順は clip, log, standardize, minmax だけです (候補の値段にも同じ手順をかけ直すため). 行を絞る filter_rows, drop_missing, drop_duplicates は値段の列を見てかまいません. 他の手順の列の候補には値段の列を出しません.`}
+            </p>
+          )}
+          {/* 時間をまたぐ量の判断の lag の書き方と位置, 商品の id と在庫の数の列 (ML-EDA は
+              他の書き方を誤りにする) */}
+          {demandErrors.length > 0 && (
+            <ul role="alert" className="mt-2 space-y-1 text-xs text-critical-text">
+              {demandErrors.map((message) => (
+                <li key={message}>{message}</li>
+              ))}
+            </ul>
+          )}
+          {demanded && (
+            <p className="mt-2 text-xs text-ink-3">
+              {`過去の売れた数は lag で列にします (by に商品の id の列 (${recipe.product ?? '未選択'}), time に日付の列 (${recipe.date ?? '未選択'}), freq に 1D を書き, 値を学ぶ手順より前に置く). 手順は日ごとの行にかけ, その後で発注を決める日の行に絞ります. 商品の id と在庫の数の列は, 落とす drop_columns と行を絞る手順の他の候補に出しません.`}
             </p>
           )}
           {recipe.steps.length === 0 && (
@@ -1238,12 +1323,14 @@ export function RecipeTab({
               {exportedAnomaly && <AnomalyRows summary={exportedAnomaly} />}
               {exportedUplift && <UpliftRows summary={exportedUplift} />}
               {exportedPrice && <PriceRows summary={exportedPrice} />}
+              {exportedDemand && <DemandRows summary={exportedDemand} />}
               {exporter.data.hints && (
                 <ModelHintsView
                   hints={exporter.data.hints}
                   anomaly={exportedAnomaly !== null}
                   uplift={exportedUplift !== null}
                   price={exportedPrice !== null}
+                  demand={exportedDemand !== null}
                 />
               )}
               <p className="text-xs text-ink-3">ML-Found の学習スクリプトでの使い方:</p>
@@ -1255,6 +1342,7 @@ export function RecipeTab({
                   exportedAnomaly !== null,
                   exportedUplift !== null,
                   exportedPrice !== null,
+                  exportedDemand !== null,
                 )}
               </pre>
             </div>
@@ -1346,6 +1434,11 @@ export function RecipeTab({
                   {result.price && (
                     <div className="mt-2">
                       <PriceRows summary={result.price} />
+                    </div>
+                  )}
+                  {result.demand && (
+                    <div className="mt-2">
+                      <DemandRows summary={result.demand} />
                     </div>
                   )}
                   {/* 選んだ列などで変わる注意と気付きを, 読み上げにも知らせる */}

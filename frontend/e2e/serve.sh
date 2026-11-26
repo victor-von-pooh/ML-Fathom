@@ -429,6 +429,35 @@ pd.DataFrame({
 }).to_csv(sys.argv[1], index=False)
 PY
 
+# 商品ごとの日ごとの売れた数の記録 (商品ごとに水準が違い, 土日に多く売れる.
+# 商品 p4 は最後の 20 日だけの短い記録, p1 は 15 日の抜けの日, p2 は 3 日と
+# 4 日の在庫が 0)
+uv run python - "$WORK/daily.csv" <<'PY'
+import sys
+
+import numpy as np
+import pandas as pd
+
+rng = np.random.default_rng(8)
+days = pd.date_range("2025-01-06", periods=84, freq="D")
+rows = []
+for product in range(5):
+    for day in days if product != 4 else days[-20:]:
+        if product == 1 and day.day == 15:
+            continue
+        scale = 1.5 if day.weekday() >= 5 else 1.0
+        rows.append({
+            "product_id": f"p{product}",
+            "date": day.strftime("%Y-%m-%d"),
+            "category": "food" if product < 3 else "tool",
+            "units": int(rng.poisson((5 + 3 * product) * scale)),
+            "stock": 0 if product == 2 and day.day in (3, 4) else int(
+                rng.integers(5, 40)
+            ),
+        })
+pd.DataFrame(rows).to_csv(sys.argv[1], index=False)
+PY
+
 # 記録した軌跡の見本 (ML-EDA のテストの見本を写す. 守りの付いた Discrete の
 # 行動の軌跡, Box の行動の軌跡と, 行動を選んだ確率の列を持つ軌跡. どれも表と
 # 説明の JSON)

@@ -1111,3 +1111,56 @@ test('値段を変えた売れ行きの記録で値段と原価と商品を選�
   await expect(card.getByText(/1 \(売れた数の予測/)).toBeVisible()
   await expect(card.getByText(/値段の列:/)).toContainText('standardize')
 })
+
+test('日ごとの売れた数の記録で商品と日付と在庫の数を選び, 要約を見て時間をまたぐ量の判断を書き出す', async ({
+  page,
+}) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'データを追加' }).first().click()
+  await page.getByLabel('ディレクトリのパス').fill(path.dirname(TABLE))
+  await page.getByRole('button', { name: '移動' }).click()
+  await page.getByRole('button', { name: /daily\.csv/ }).click()
+  await page.getByRole('button', { name: '追加', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'daily.csv' })).toBeVisible()
+  await page.getByRole('combobox', { name: '目的の列' }).selectOption('units')
+
+  // タスクを時間をまたぐ量の判断にし, 分割を時刻の順に, 商品の id, 日付, 在庫の数の列を選ぶ
+  await page.getByRole('tab', { name: '前処理と書き出し' }).click()
+  await page.getByLabel('タスク').selectOption('demand', { timeout: 20_000 })
+  await page.getByLabel('分割', { exact: true }).selectOption('time')
+  await page.getByLabel('商品の id の列').selectOption('product_id')
+  await page.getByLabel('日付の列').selectOption('date')
+  await page.getByLabel('在庫の数の列').selectOption('stock')
+
+  // 要約に記録の短い商品, 抜けの日, 在庫が 0 の日と曜日ごとの売れた数が出る
+  await expect(page.getByText('記録の短い商品 1')).toBeVisible({ timeout: 20_000 })
+  await expect(page.getByText(/抜けの日のある商品 1 \(抜けの日は計 3 日\)/)).toBeVisible()
+  await expect(page.getByRole('table', { name: /商品ごとの記録/ })).toContainText('p4')
+  await expect(page.getByRole('table', { name: /曜日ごとの売れた数/ })).toContainText('土')
+
+  // 過去の売れた数と曜日の手順を足し, 種類の列を数にして標準化する. 商品の id と在庫の数の列は
+  // 符号化の候補に出ない
+  await page.getByRole('button', { name: '過去の売れた数と曜日の手順を足す' }).click()
+  await page.getByLabel('足す手順').selectOption('one_hot')
+  await page.getByRole('button', { name: '足す', exact: true }).click()
+  await page.getByRole('checkbox', { name: 'auto (型から選ぶ)' }).last().uncheck()
+  const candidates = page.locator('#step-2-columns option')
+  await expect(candidates.filter({ hasText: /^category$/ })).toHaveCount(1)
+  await expect(candidates.filter({ hasText: /^product_id$/ })).toHaveCount(0)
+  await expect(candidates.filter({ hasText: /^stock$/ })).toHaveCount(0)
+  await page.locator('#step-2-columns').selectOption('category')
+  await page.getByLabel('足す手順').selectOption('standardize')
+  await page.getByRole('button', { name: '足す', exact: true }).click()
+
+  // 学習用のデータに分割ごとの発注を決める日の範囲が出て, 書き出すと一覧に並ぶ
+  const splits = page.getByRole('table', { name: /分割ごとの行と商品の数, 発注を決める日/ })
+  await expect(splits).toContainText('valid', { timeout: 20_000 })
+  await page.getByLabel('データセットの名前').fill('daily_demand')
+  await page.getByRole('button', { name: '学習用に書き出す' }).click()
+  await expect(page.getByText(/書き出しました/)).toBeVisible({ timeout: 20_000 })
+  await expect(page.getByText(/dataset\.previous/)).toBeVisible()
+  await page.getByRole('link', { name: 'データセット' }).click()
+  const card = page.locator('section', { has: page.getByText('daily_demand', { exact: true }) })
+  await expect(card.getByText(/1 \(先の期間の需要の/)).toBeVisible()
+  await expect(card.getByText(/在庫の数の列:/)).toContainText('stock')
+})

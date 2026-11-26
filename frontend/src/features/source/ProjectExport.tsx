@@ -4,8 +4,9 @@ import { FolderOutput } from 'lucide-react'
 import { api, ApiError } from '../../api/client'
 import type { Recipe } from '../../api/types'
 import { Button, ErrorBox, Spinner } from '../../components/ui'
-import { anomalyOf, priceOf, upliftOf } from '../../lib/recipe'
+import { anomalyOf, demandOf, priceOf, upliftOf } from '../../lib/recipe'
 import { AnomalyRows } from './AnomalyRows'
+import { DemandRows } from './DemandRows'
 import { ModelHintsView } from './ModelHintsView'
 import { PriceRows } from './PriceRows'
 import { UpliftRows } from './UpliftRows'
@@ -62,6 +63,8 @@ export function ProjectExport({
   const doneUplift = done ? upliftOf(done.info) : null
   // 値段を変える判断のデータセットの説明の price (他のタスクは null)
   const donePrice = done ? priceOf(done.info) : null
+  // 時間をまたぐ量の判断のデータセットの説明の demand (他のタスクは null)
+  const doneDemand = done ? demandOf(done.info) : null
   const failed = exporter.error && same ? exporter.error : null
   if (place.isPending) return <Spinner label="プロジェクトの書き出し先を調べています" />
   // 問題の設定を読めない理由は問題の設定のカードに出るので, ここは短く
@@ -125,12 +128,14 @@ export function ProjectExport({
           {doneAnomaly && <AnomalyRows summary={doneAnomaly} />}
           {doneUplift && <UpliftRows summary={doneUplift} />}
           {donePrice && <PriceRows summary={donePrice} />}
+          {doneDemand && <DemandRows summary={doneDemand} />}
           {done.hints && (
             <ModelHintsView
               hints={done.hints}
               anomaly={doneAnomaly !== null}
               uplift={doneUplift !== null}
               price={donePrice !== null}
+              demand={doneDemand !== null}
             />
           )}
         </div>
