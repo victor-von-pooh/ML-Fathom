@@ -117,7 +117,7 @@ test('保存したレシピのタスクが異常の検知なら, 概要に異常
   const labeled = within(card as HTMLElement).getByText('正解の付いた行')
   expect(labeled.parentElement).toHaveTextContent('10')
   expect(
-    within(card as HTMLElement).getByText('異常の割合 (正解の付いた行のうち)').parentElement,
+    within(card as HTMLElement).getByText('異常の割合 (0 か 1 の正解の行のうち)').parentElement,
   ).toHaveTextContent('100.0%')
   expect(within(card as HTMLElement).getByText('正解の欠けた行').parentElement).toHaveTextContent(
     '90',

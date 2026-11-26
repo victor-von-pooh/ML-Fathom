@@ -5,7 +5,7 @@ import { api } from '../../api/client'
 import { ErrorBox, PageHeader, Spinner, Tabs, type TabItem } from '../../components/ui'
 import { readDraft, useRecipeDraft, writeDraft } from '../../lib/drafts'
 import { KIND_LABELS } from '../../lib/format'
-import { untargetedDraft } from '../../lib/recipe'
+import { ANOMALY_KINDS, untargetedDraft } from '../../lib/recipe'
 import { ColumnsTab } from './ColumnsTab'
 import { DataTab } from './DataTab'
 import { GroupsTab } from './GroupsTab'
@@ -25,9 +25,6 @@ type TabId =
 // 群分け (正解の無い表) の群を作れる種類 (ML-EDA の describe_groups が読むもの)
 const GROUP_KINDS = new Set(['table', 'timeseries'])
 
-// 異常の正解の数を分析で数える種類 (ML-EDA の異常の検知が読むもの)
-const ANOMALY_KINDS = new Set(['table', 'timeseries'])
-
 /** 1 つのデータの分析と前処理 */
 export function SourcePage() {
   const { id = '' } = useParams()
@@ -39,7 +36,7 @@ export function SourcePage() {
   // 前処理のタスク (編集中のレシピ, 無ければ保存したレシピ) が異常の検知なら,
   // 分析で異常の正解の数も数える
   const [draft] = useRecipeDraft(id)
-  const anomalyKind = source !== undefined && ANOMALY_KINDS.has(source.kind)
+  const anomalyKind = source !== undefined && ANOMALY_KINDS.includes(source.kind)
   const saved = useQuery({
     queryKey: ['recipe', id],
     queryFn: () => api.recipe(id),

@@ -25,7 +25,10 @@ function AnomalyCounts({ anomaly }: { anomaly: AnomalyProfile }) {
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
         <StatTile label="正解の付いた行" value={formatNumber(anomaly.labeled_rows)} />
         <StatTile label="異常の行" value={formatNumber(anomaly.anomaly)} />
-        <StatTile label="異常の割合 (正解の付いた行のうち)" value={formatPercent(anomaly.ratio)} />
+        <StatTile
+          label="異常の割合 (0 か 1 の正解の行のうち)"
+          value={formatPercent(anomaly.ratio)}
+        />
         <StatTile label="正解の欠けた行" value={formatNumber(anomaly.missing)} />
         <StatTile
           label="欠けた行も正常と見なした異常の割合"
