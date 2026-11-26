@@ -245,7 +245,26 @@ export interface Profile {
   target: TargetInfo | null
   timeseries: TimeSeriesInfo | null
   items?: ItemsInfo | null
+  /** 異常の正解の数 (task に anomaly を渡した表と時系列だけ. 他は null) */
+  anomaly?: AnomalyProfile | null
   findings: Finding[]
+}
+
+/** 分析で全ての行から数えた異常の正解の数 (ML-EDA の profile の anomaly) */
+export interface AnomalyProfile {
+  column: string | null
+  labeled: boolean
+  rows: number
+  labeled_rows: number
+  missing: number
+  presumed: number
+  normal: number
+  anomaly: number
+  ratio: number | null
+  presumed_ratio: number | null
+  valid: boolean
+  invalid: number
+  invalid_examples: string[]
 }
 
 export interface ItemsInfo {

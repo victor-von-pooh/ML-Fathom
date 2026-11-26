@@ -3,9 +3,9 @@ import { Link, useParams, useSearchParams } from 'react-router'
 
 import { api } from '../../api/client'
 import { ErrorBox, PageHeader, Spinner, Tabs, type TabItem } from '../../components/ui'
-import { readDraft, writeDraft } from '../../lib/drafts'
+import { readDraft, useRecipeDraft, writeDraft } from '../../lib/drafts'
 import { KIND_LABELS } from '../../lib/format'
-import { untargetedDraft } from '../../lib/recipe'
+import { ANOMALY_KINDS, untargetedDraft } from '../../lib/recipe'
 import { ColumnsTab } from './ColumnsTab'
 import { DataTab } from './DataTab'
 import { GroupsTab } from './GroupsTab'
@@ -33,11 +33,26 @@ export function SourcePage() {
   const sources = useQuery({ queryKey: ['sources'], queryFn: api.listSources })
   const info = useQuery({ queryKey: ['info'], queryFn: api.info, staleTime: Infinity })
   const source = sources.data?.find((item) => item.id === id)
+  // 前処理のタスク (編集中のレシピ, 無ければ保存したレシピ) が異常の検知なら,
+  // 分析で異常の正解の数も数える
+  const [draft] = useRecipeDraft(id)
+  const anomalyKind = source !== undefined && ANOMALY_KINDS.includes(source.kind)
+  const saved = useQuery({
+    queryKey: ['recipe', id],
+    queryFn: () => api.recipe(id),
+    enabled: anomalyKind && !draft,
+  })
+  const task = anomalyKind && (draft ?? saved.data)?.task === 'anomaly' ? 'anomaly' : undefined
   const profile = useQuery({
-    queryKey: ['profile', id, source?.target ?? null],
-    queryFn: () => api.profile(id),
-    // 記録した軌跡と並べるの反応の表は表として分析せず, それぞれの要約を出す
-    enabled: source !== undefined && source.kind !== 'trajectory' && source.kind !== 'reactions',
+    queryKey: ['profile', id, source?.target ?? null, task ?? null],
+    queryFn: () => api.profile(id, task),
+    // 記録した軌跡と並べるの反応の表は表として分析せず, それぞれの要約を出す.
+    // 保存したレシピを読む間は待つ (タスクの違う分析を求め直さないように)
+    enabled:
+      source !== undefined &&
+      source.kind !== 'trajectory' &&
+      source.kind !== 'reactions' &&
+      !(anomalyKind && !draft && saved.isPending),
     // 目的の列を変えて分析し直す間も, 前の結果を出したままにする
     placeholderData: keepPreviousData,
   })

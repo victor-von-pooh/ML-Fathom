@@ -185,6 +185,66 @@ def test_preview_and_export(client: TestClient, tmp_path: Path) -> None:
     assert listed[0]["task"] == "anomaly"
 
 
+def test_profile_anomaly(client: TestClient, tmp_path: Path) -> None:
+    """
+    task に anomaly を渡した分析が, 異常の正解の付いた行, 異常の行の数と
+    割合を返すことを確かめる関数
+
+    Parameters
+    ----------
+    client: TestClient
+        クライアント
+    tmp_path: Path
+        一時ディレクトリ
+
+    Returns
+    ----------
+    None
+    """
+    # 目的の列の無い分析は全ての行を正常と見なす. task が無ければ数えない
+    file = write_readings(tmp_path / "raw")
+    sid = client.post("/api/sources", json={"path": str(file)}).json()["id"]
+    url = f"/api/sources/{sid}"
+    assert client.get(f"{url}/profile").json()["anomaly"] is None
+    anomaly = client.get(f"{url}/profile",
+                         params={"task": "anomaly"}).json()["anomaly"]
+    assert anomaly["labeled"] is False and anomaly["column"] is None
+    assert anomaly["presumed"] == NORMAL + ANOMALIES
+
+    # 異常の行にだけ印を付けた表 (正常の行は欠けた行に数える)
+    client.patch(url, json={"target": "is_anomaly"})
+    body = client.get(f"{url}/profile", params={"task": "anomaly"}).json()
+    anomaly = body["anomaly"]
+    assert anomaly["column"] == "is_anomaly" and anomaly["labeled"] is True
+    assert anomaly["rows"] == NORMAL + ANOMALIES
+    assert anomaly["labeled_rows"] == ANOMALIES
+    assert anomaly["anomaly"] == ANOMALIES and anomaly["normal"] == 0
+    assert anomaly["missing"] == NORMAL and anomaly["ratio"] == 1.0
+    assert anomaly["presumed_ratio"] == ANOMALIES / (NORMAL + ANOMALIES)
+    codes = {item["code"] for item in body["findings"]}
+    assert "class_imbalance" not in codes and "target_missing" not in codes
+
+    # task を渡さない分析は前のまま (覚えた分析をタスクで分ける)
+    assert client.get(f"{url}/profile").json()["anomaly"] is None
+
+    # 正常と異常の両方に正解の付いた表
+    path = tmp_path / "both.csv"
+    pd.DataFrame({"x": range(10), "label": [0] * 7 + [1] * 2 + [None]}
+                 ).to_csv(path, index=False)
+    sid = client.post("/api/sources", json={"path": str(path)}).json()["id"]
+    url = f"/api/sources/{sid}"
+    client.patch(url, json={"target": "label"})
+    anomaly = client.get(f"{url}/profile",
+                         params={"task": "anomaly"}).json()["anomaly"]
+    assert anomaly["labeled_rows"] == 9 and anomaly["missing"] == 1
+    assert anomaly["normal"] == 7 and anomaly["anomaly"] == 2
+    assert anomaly["ratio"] == 2 / 9 and anomaly["valid"] is True
+
+    # anomaly の他のタスクは断る
+    assert client.get(f"{url}/profile",
+                      params={"task": "classification"}).status_code == 422
+
+
 def test_preview_other_task(client: TestClient, tmp_path: Path) -> None:
     """
     異常の検知でないレシピと, 異常の検知の決まりに合わないレシピの前処理

@@ -183,6 +183,11 @@ def test_audio_items(client: TestClient, tmp_path: Path) -> None:
     assert profile["summary"]["has_items"]
     assert profile["items"]["count"] == 4
     assert profile["items"]["unreadable"] == 1
+
+    # 異常の検知を読まない種類では, task を渡しても数えない
+    assert client.get(f"/api/sources/{sid}/profile", params={
+        "task": "anomaly"
+    }).json()["anomaly"] is None
     found = positions(client, sid)
 
     # 短い件は全てを読み, 区間ごとの最小と最大の波形を返す

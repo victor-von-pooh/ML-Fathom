@@ -133,6 +133,10 @@ class Cache:
                 self.items.popitem(last=False)
 
 
+# 異常の検知を分析し, 問題の設定から始められる表の種類 (ML-EDA の異常の
+# 検知が読むもの. 日時の列を見つけた表も中身は表なので timeseries も)
+ANOMALY_KINDS = ("table", "timeseries")
+
 # 読み込んだデータと分析の結果
 DATA_CACHE = Cache(CACHE_SIZE)
 PROFILE_CACHE = Cache(CACHE_SIZE * 4)
@@ -892,7 +896,10 @@ def delete_source(request: Request, source_id: str) -> Response:
 
 
 @router.get("/sources/{source_id}/profile")
-def get_profile(request: Request, source_id: str) -> dict[str, Any]:
+def get_profile(
+    request: Request, source_id: str,
+    task: Optional[Literal["anomaly"]] = None
+) -> dict[str, Any]:
     """
     データの分析の結果を返す関数
 
@@ -902,6 +909,9 @@ def get_profile(request: Request, source_id: str) -> dict[str, Any]:
         リクエスト
     source_id: str
         データの ID
+    task: Optional[Literal["anomaly"]] = None
+        anomaly の場合は目的の列を異常の正解として数える (表と時系列だけ.
+        他の種類では数えない)
 
     Returns
     ----------
@@ -913,9 +923,12 @@ def get_profile(request: Request, source_id: str) -> dict[str, Any]:
     HTTPException
         無い場合は 404, 読めない場合は 422
     """
-    # 目的の列ごとに分析を覚える
+    # 目的の列とタスクごとに分析を覚える. 異常の検知を読まない種類では
+    # 数えない (概要と気付きを誤りにしないため)
     source = find_source(request, source_id)
-    key = json.dumps([source_key(source), source.get("target")])
+    if source["kind"] not in ANOMALY_KINDS:
+        task = None
+    key = json.dumps([source_key(source), source.get("target"), task])
     cached: Optional[dict[str, Any]] = PROFILE_CACHE.get(key)
     if cached is not None:
         return cached
@@ -924,7 +937,7 @@ def get_profile(request: Request, source_id: str) -> dict[str, Any]:
     if target and target not in data.frame.columns:
         target = None
     try:
-        analysis = ml_eda.profile(data, target=target)
+        analysis = ml_eda.profile(data, target=target, task=task)
     except (ValueError, TypeError) as error:
         raise HTTPException(422, f"分析できませんでした: {error}") from error
     result = {"summary": to_json(data.summary()), **analysis}

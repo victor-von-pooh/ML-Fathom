@@ -13,6 +13,7 @@ from ml_quest import is_column_part, is_items_part
 from pydantic import BaseModel, ConfigDict, Field
 
 from ml_fathom.api import (
+    ANOMALY_KINDS,
     EXPORT_LOCK,
     check_recipe_limits,
     check_step_limits,
@@ -83,10 +84,6 @@ KIND_NAMES = {"image": "画像", "table": "表"}
 # まとめるの問題の設定から始められる表の種類 (群分けのタブが読むもの. 日時
 # の列を見つけた表も中身は表なので timeseries も)
 GROUP_KINDS = ("table", "timeseries")
-
-# 異常の検知の問題の設定から始められる表の種類 (ML-EDA の異常の検知が読む
-# もの. 日時の列を見つけた表も中身は表なので timeseries も)
-ANOMALY_KINDS = ("table", "timeseries")
 
 # ML-Quest の書き出しの関数の名前から, ファイルの組の書き出しの画面の欄
 PAIR_FORMS = {
