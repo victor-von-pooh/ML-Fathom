@@ -6,6 +6,7 @@ import { Link, useSearchParams } from 'react-router'
 import { api, ApiError } from '../../api/client'
 import type {
   PairExportBase,
+  ExportNotice,
   PairExportResult,
   PairSettings,
   PairSteps,
@@ -239,9 +240,9 @@ function LinksField({
   )
 }
 
-/** 書き出しの注意に外を指すリンクで除いた件があるか (ML-EDA の notes の文で見分ける) */
-function skippedLinks(notes: string[]): boolean {
-  return notes.some((note) => note.includes('外を指すリンク'))
+/** 書き出しの注意に外を指すリンクで除いた件があるか (ML-EDA の注意の印の種類で見分ける) */
+function skippedLinks(notices: ExportNotice[]): boolean {
+  return notices.some((notice) => notice.code === 'outside_links' && notice.count > 0)
 }
 
 /** 分割, グループ, 正解の出どころの欄 */
@@ -598,7 +599,7 @@ function ExportCard({
                     <li key={note}>{note}</li>
                   ))}
                 </ul>
-                {!fields.followLinks && skippedLinks(result.notes) && (
+                {!fields.followLinks && skippedLinks(result.notices ?? []) && (
                   <p className="text-xs text-ink-3">
                     外を指すリンクの先も写すなら,
                     「外を指すリンクの先も写す」に印を付けて書き出し直してください.
