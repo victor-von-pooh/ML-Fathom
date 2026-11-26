@@ -229,6 +229,10 @@ def test_start_and_export(
     assert result["changes"] and result["conflicts"] == []
     assert result["version"] == current(path)
     assert ml_eda.load_items(target).info["target"]["kind"] == kind
+    # モデルに要るものも, 開いた親を通して読んだ ML-EDA の model_inputs
+    assert result["model"] == ml_eda.model_inputs(target)
+    assert result["model"]["target_kind"] == kind
+    assert result["model_error"] is None
     saved = ml_quest.load_problem(path)
     assert saved["data"]["export"]["split"]["valid"] == 0.25
     assert ml_quest.handoff(saved)["data"]["split"] == "random"
@@ -277,6 +281,12 @@ def test_start_and_export(
     assert info["format_version"] == 3
     for name, steps in KIND_STEPS[kind].items():
         assert info["entries"][name]["steps"] == steps
+    # 中身の手順の後の形 (画像は 8 × 8, 点群は 32 点)
+    model = response.json()["model"]
+    if kind == "mask":
+        assert model["inputs"][0]["shape"][-2:] == [8, 8]
+    else:
+        assert model["outputs"] == 32
     saved = ml_quest.load_problem(path)
     options = saved["data"]["export"]["options"]
     assert options["item_steps"] == KIND_STEPS[kind]

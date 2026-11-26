@@ -35,6 +35,15 @@ const SKIPPED: PairExportResult = {
         '画像のディレクトリの外を指すリンクが 1 件あり, 除きました (例: a.png. 読むには 引数 follow_links=True にしてください)',
     },
   ],
+  model: {
+    inputs: [{ name: 'image', shape: [null, 3, 64, 64], dtype: 'float32' }],
+    task: null,
+    target: 'mask',
+    classes: ['background', 'circle'],
+    target_kind: 'mask',
+    outputs: 2,
+  },
+  model_error: null,
 }
 
 function renderPage(path = '/datasets/pairs') {
@@ -69,6 +78,11 @@ test('外を指すリンクの先は既定で写さず, 印を付けた場合だ
   fireEvent.click(panel.getByRole('button', { name: 'ファイルの組を書き出す' }))
   expect(await panel.findByText(/外を指すリンクが 1 件あり/)).toBeInTheDocument()
   expect(exporter.mock.calls[0]![0]).not.toHaveProperty('follow_links')
+  // 結果にモデルに要るもの (入力の形と型, 背景を含むクラスの数)
+  expect(panel.getByText('[バッチ, 3, 64, 64] float32')).toBeInTheDocument()
+  expect(
+    panel.getByText(/2 \(背景を含む領域のクラスの数: background, circle\)/),
+  ).toBeInTheDocument()
   expect(panel.getByText(/に印を付けて書き出し直してください/)).toBeInTheDocument()
 
   // 印を付けると前の結果を消し, follow_links: true で書き出す

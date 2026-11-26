@@ -15,7 +15,7 @@ from fastapi.responses import Response
 from ml_eda import ITEM_STEPS, frame_view
 from pydantic import BaseModel, Field
 
-from ml_fathom.datasets import dataset_summary
+from ml_fathom.datasets import dataset_summary, items_model
 from ml_fathom.items import (
     audio_rate,
     audio_response,
@@ -1665,7 +1665,9 @@ def pair_options(body: PairExport) -> dict[str, Any]:
     return options
 
 
-def pair_result(target: Path, info: dict[str, Any]) -> dict[str, Any]:
+def pair_result(
+    target: Path, info: dict[str, Any], model: dict[str, Any]
+) -> dict[str, Any]:
     """
     ファイルの組の書き出しの結果を, 画面に返す形にする関数
 
@@ -1676,12 +1678,15 @@ def pair_result(target: Path, info: dict[str, Any]) -> dict[str, Any]:
     info: dict[str, Any]
         ML-EDA の書き出しの結果 (dataset.yaml の中身と, 注意の印
         notices)
+    model: dict[str, Any]
+        モデルに要るもの (items_model の結果)
 
     Returns
     ----------
     result: dict[str, Any]
         場所, dataset.yaml の中身 (notices を除く), 注意の文と, 注意の印
-        (code, count, message と添え)
+        (code, count, message と添え), モデルに要るもの (model) と求め
+        られない理由 (model_error)
     """
     # 注意の文は画面で並べ, 注意の印は種類で案内を出し分けるので取り出す
     written = {key: value for key, value in info.items()
@@ -1690,6 +1695,7 @@ def pair_result(target: Path, info: dict[str, Any]) -> dict[str, Any]:
         "path": str(target), "info": to_json(written),
         "notes": [str(note) for note in info.get("notes") or []],
         "notices": to_json(list(info.get("notices") or [])),
+        **to_json(model),
     }
 
     return result
@@ -1781,11 +1787,13 @@ def export_image_masks(
                 classes=body.classes or None,
                 mask_suffix=body.mask_suffix, **pair_options(body)
             )
+            # モデルに要るものも, 次の書き出しが入れ替える前に読む
+            model = items_model(target, info.get("role"))
     except FileExistsError as error:
         raise exists_error(body, error) from error
     except Exception as error:  # noqa: BLE001 (壊れたファイルも理由を返す)
         raise HTTPException(422, export_message(error)) from error
-    result = pair_result(target, info)
+    result = pair_result(target, info, model)
 
     return result
 
@@ -1826,10 +1834,12 @@ def export_capture_clouds(
                 Path(body.clouds).expanduser(), target,
                 cloud_units=body.cloud_units, **pair_options(body)
             )
+            # モデルに要るものも, 次の書き出しが入れ替える前に読む
+            model = items_model(target, info.get("role"))
     except FileExistsError as error:
         raise exists_error(body, error) from error
     except Exception as error:  # noqa: BLE001 (壊れたファイルも理由を返す)
         raise HTTPException(422, export_message(error)) from error
-    result = pair_result(target, info)
+    result = pair_result(target, info, model)
 
     return result

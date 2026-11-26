@@ -1,5 +1,6 @@
 from pathlib import Path
 
+import ml_eda
 import numpy as np
 import pandas as pd
 import pytest
@@ -13,7 +14,7 @@ from ml_eda.synthetic import write_image_masks, write_shape_captures
 
 from ml_fathom.api import PAIR_STEPS, STEP_LIMITS, check_step_limits
 from ml_fathom.app import create_app
-from ml_fathom.datasets import dataset_summary
+from ml_fathom.datasets import dataset_summary, items_model
 
 # テストで使うトークン
 TOKEN = "test-token"
@@ -88,6 +89,15 @@ def test_image_masks_export_and_list(
         ("領域", 1)
     ]
     assert "notices" not in result["info"]
+    # 書き出しの結果にモデルに要るもの (入力の形と型, 背景を含むクラス)
+    model = result["model"]
+    assert result["model_error"] is None
+    assert model["inputs"][0]["name"] == "image"
+    assert model["inputs"][0]["dtype"] == "float32"
+    assert model["inputs"][0]["shape"][:2] == [None, 3]
+    assert model["target_kind"] == "mask" and model["target"] == "mask"
+    assert model["classes"] == ["background", "circle", "square"]
+    assert model["outputs"] == 3
 
     # 同じ名前は置き換えの指定が無ければ 409, 名前の誤りは 422
     assert client.post(
@@ -118,6 +128,8 @@ def test_image_masks_export_and_list(
     assert item["items"] == 10
     assert sum(item["splits"].values()) == 10
     assert item["normalization"] is None
+    # 一覧にも書き出しの結果と同じモデルに要るもの
+    assert item["model"] == model and item["model_error"] is None
 
 
 def test_image_masks_unlabeled(client: TestClient, tmp_path: Path) -> None:
@@ -240,6 +252,8 @@ def test_image_masks_item_steps(
     assert entries["image"]["steps"] == steps
     assert entries["image"]["shape"][:2] == [16, 20]
     assert entries["mask"]["steps"][0]["op"] == "resize_mask"
+    # モデルの入力は手順の後の大きさ (チャンネル, 高さ, 幅)
+    assert item["model"]["inputs"][0]["shape"] == [None, 3, 16, 20]
 
 
 def test_image_masks_errors(client: TestClient, tmp_path: Path) -> None:
@@ -321,6 +335,13 @@ def test_capture_clouds_export(client: TestClient, tmp_path: Path) -> None:
     exported = client.post("/api/datasets/capture_clouds", json=body)
     assert exported.status_code == 200
     info = exported.json()["info"]
+    # モデルの入力は骨組みの既定の 512 点, 出す点は正解の点群の点の数
+    model = exported.json()["model"]
+    assert model["inputs"] == [
+        {"name": "capture", "shape": [None, 512, 3], "dtype": "float32"}
+    ]
+    assert model["target_kind"] == "point_cloud"
+    assert model["classes"] is None and model["outputs"] == 200
     assert info["split"]["method"] == "group"
     assert info["target"]["kind"] == "point_cloud"
     assert set(info["splits"]) == {"train", "valid"}
@@ -357,6 +378,7 @@ def test_capture_clouds_export(client: TestClient, tmp_path: Path) -> None:
     shown = {key: value for key, value in item.items() if key != "path"}
     assert str(sample["captures"]) not in str(shown)
     assert entries["cloud"]["steps"] is None
+    assert item["model"] == model and item["model_error"] is None
 
     # 点の数の上限を超えると, 読む前に 422
     response = client.post("/api/datasets/capture_clouds", json={
@@ -385,6 +407,9 @@ def test_capture_clouds_export(client: TestClient, tmp_path: Path) -> None:
     assert entries["capture"]["shape"][-2:] == [24, 32]
     assert entries["cloud"]["steps"] == steps["cloud"]
     assert entries["cloud"]["shape"] == [50, 3]
+    # 出す点の数は sample_points の後の 50 点 (結果と一覧で同じ)
+    assert response.json()["model"]["outputs"] == 50
+    assert sampled["model"] == response.json()["model"]
 
 
 def test_pairs_follow_links(client: TestClient, tmp_path: Path) -> None:
@@ -551,6 +576,49 @@ def test_list_unreadable(client: TestClient, tmp_path: Path) -> None:
     v1 = next(item for item in listed.json() if item["name"] == "v1")
     assert v1["form"] == "unreadable"
     assert v1["unknown_version"] is False
+
+
+def test_items_model(tmp_path: Path) -> None:
+    """
+    版 2 と版 3 のモデルに要るものの, 決まらない大きさと, 求められない
+    組と群分けの表の理由を確かめる関数
+
+    Parameters
+    ----------
+    tmp_path: Path
+        pytest が用意する一時ディレクトリ
+
+    Returns
+    ----------
+    None
+    """
+    # 大きさの混ざる画像を手順なしで書き出すと, 高さと幅は決まらない
+    sample = write_image_masks(
+        tmp_path / "mixed", count=6, sizes=[(24, 32), (30, 18)]
+    )
+    ml_eda.export_image_masks(
+        sample["images"], sample["masks"], tmp_path / "mixed_set"
+    )
+    model = items_model(tmp_path / "mixed_set", "predict")
+    assert model["model_error"] is None
+    assert model["model"]["inputs"][0]["shape"] == [None, 3, None, None]
+
+    # ML-EDA の知らない入力と正解の種類の組は, 誤りにせず理由を返す
+    boxes = tmp_path / "boxes"
+    boxes.mkdir()
+    (boxes / "dataset.yaml").write_text(yaml.safe_dump({
+        "format_version": 2, "role": "predict",
+        "entries": {"image": {"role": "input", "kind": "image"},
+                    "boxes": {"role": "target", "kind": "boxes"}},
+    }), encoding="utf-8")
+    model = items_model(boxes, "predict")
+    assert model["model"] is None
+    assert "boxes" in model["model_error"]
+
+    # 群分けの表は ML-EDA を呼ばずに理由を返す (dataset.yaml が無くても)
+    model = items_model(tmp_path / "none", "group")
+    assert model["model"] is None
+    assert "群分けの表" in model["model_error"]
 
 
 def test_pair_steps_in_entry_steps() -> None:

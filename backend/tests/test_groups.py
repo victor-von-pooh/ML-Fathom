@@ -257,6 +257,9 @@ def test_export_groups(client: TestClient, tmp_path: Path) -> None:
     item = listed["customers_groups"]
     assert item["form"] == "items" and item["role"] == "group"
     assert item["items"] == ROWS
+    # 群分けの表はモデルの入力を持たず, 理由を添える
+    assert item["model"] is None
+    assert "学習に使わない" in item["model_error"]
 
     # 同じ名前は置き換えを指定した場合だけ. 分けない場合は全て学習用
     assert client.post(url, json=body).status_code == 409
