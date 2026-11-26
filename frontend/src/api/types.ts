@@ -316,8 +316,19 @@ export interface Recipe {
   price?: string
   /** 値段を変える判断の原価の列 (任意. 学習に使う列から除き, 元の値で残る) */
   cost?: string
-  /** 値段を変える判断の商品の id の列 (任意. 学習に使う列から除き, そのまま残る) */
+  /**
+   * 値段を変える判断の商品の id の列 (任意) と, 時間をまたぐ量の判断 (task: demand) の商品の id の列
+   * (必ず. 学習に使う列から除き, そのまま残る)
+   */
   product?: string
+  /** 時間をまたぐ量の判断の日付の列 (日ごと. 学習に使う列から除き, 発注を決める日で残る) */
+  date?: string
+  /** 時間をまたぐ量の判断の在庫の数の列 (任意. 学習に使う列から除き, 元の値で残る) */
+  stock?: string
+  /** 時間をまたぐ量の判断の先の期間の日数 (無ければ ML-EDA の既定の 7) */
+  horizon?: number
+  /** 時間をまたぐ量の判断の発注を決める日の間隔の日数 (無ければ先の期間の日数) */
+  interval?: number
   steps: RecipeStep[]
   item_steps?: RecipeStep[]
   split: {
@@ -517,6 +528,106 @@ export interface PriceRequest {
   id?: string
 }
 
+/** 時間をまたぐ量の判断の分割 1 つの数 (ML-EDA の説明の demand.splits の 1 つ) */
+export interface DemandSplit {
+  rows: number
+  /** 商品の数 */
+  products: number
+  /** 発注を決める日の範囲 (YYYY-MM-DD) */
+  date_min: string | null
+  date_max: string | null
+  /** 先の期間の合計の平均 (unlabeled は null) */
+  demand_mean: number | null
+  /** 前の期間の合計の平均 */
+  previous_mean: number | null
+  /** 先の期間に在庫が 0 の日を含む行の数 (在庫の数の列が無ければ null) */
+  stockout: number | null
+}
+
+/** 時間をまたぐ量の判断の列と期間と分割ごとの日の範囲 (ML-EDA の説明の demand) */
+export interface DemandSplits {
+  /** 行の id の列の名前 */
+  id: string
+  product: string
+  date: string
+  /** 日ごとの売れた数の列 */
+  units: string
+  stock: string | null
+  /** 目的の値の列 (demand) */
+  target: string
+  /** 比べる相手の列 (demand_previous) */
+  previous: string
+  horizon: number
+  interval: number
+  /** 先の期間の合計の分からない行の扱い */
+  unlabeled: 'drop' | 'keep'
+  /** 落とした行の数 (前の期間が揃わない行と, 先の期間が分割の境目をまたぐ行) */
+  skipped: { previous: number; boundary: number }
+  splits: Record<string, DemandSplit>
+}
+
+/** 需要の記録の要約の曜日 1 つ (ML-EDA の describe_demand の weekdays の 1 つ. 0 が月曜) */
+export interface DemandWeekday {
+  weekday: number
+  rows: number
+  units_mean: number | null
+}
+
+/** 需要の記録の要約の商品 1 つ (ML-EDA の describe_demand の products.rows の 1 つ) */
+export interface DemandProduct {
+  product: string
+  /** 使う行のある日の数 */
+  days: number
+  first: string
+  last: string
+  /** 抜けの日の数 */
+  gaps: number
+  /** 在庫が 0 の日の数 (在庫の数の列が無ければ null) */
+  stockout: number | null
+  units_mean: number | null
+}
+
+/** 需要の記録の要約 (ML-EDA の describe_demand の結果) */
+export interface DemandSummary {
+  product: string
+  date: string
+  units: string
+  stock: string | null
+  horizon: number
+  /** 使う行の数 */
+  rows: number
+  missing: { product: number; date: number; units: number; stock: number | null }
+  invalid: { date: number; units: number; stock: number | null }
+  /** 同じ商品の同じ日の, 2 つ目より後の行の数 */
+  duplicates: number
+  dates: { min: string | null; max: string | null; days: number | null }
+  unit_stats: {
+    min: number | null
+    max: number | null
+    mean: number | null
+    zero_rate: number | null
+  }
+  weekdays: DemandWeekday[]
+  products: {
+    count: number
+    short: number
+    gaps: number
+    missing_days: number
+    rows: DemandProduct[]
+  }
+  stockout: { rows: number; products: number; rate: number | null } | null
+  findings: Finding[]
+}
+
+/** 需要の記録の要約を求める欄 */
+export interface DemandRequest {
+  product: string
+  date: string
+  units: string
+  stock?: string
+  horizon?: number
+}
+
 /** 異常の検知の分割 1 つの行の数 (ML-EDA の説明の anomaly.rows の 1 つ) */
 export interface AnomalySplitRows {
   /** 正解が正常 */
@@ -563,6 +674,8 @@ export interface PreviewResult {
   uplift?: UpliftSplits | null
   /** 値段を変える判断の分割ごとの値段の範囲 (他のタスクは null) */
   price?: PriceSplits | null
+  /** 時間をまたぐ量の判断の分割ごとの発注を決める日の範囲と期間の合計 (他のタスクは null) */
+  demand?: DemandSplits | null
 }
 
 /** 書き出したデータセットに合わせてモデルを組むときの数 */
@@ -628,6 +741,8 @@ export interface TableDataset extends DatasetBase {
   uplift?: UpliftSplits | null
   /** 値段を変える判断の説明 (他のタスクは null) */
   price?: PriceSplits | null
+  /** 時間をまたぐ量の判断の説明 (他のタスクは null) */
+  demand?: DemandSplits | null
 }
 
 /** 正解の出どころ (ML-EDA の target.origin) */

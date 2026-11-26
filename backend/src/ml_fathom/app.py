@@ -13,6 +13,7 @@ from fastapi.routing import APIRoute
 from fastapi.staticfiles import StaticFiles
 
 from ml_fathom.api import router
+from ml_fathom.demand import router as demand_router
 from ml_fathom.groups import router as group_router
 from ml_fathom.price import router as price_router
 from ml_fathom.problems import router as problem_router
@@ -345,6 +346,7 @@ def create_app(
     app.include_router(group_router)
     app.include_router(uplift_router)
     app.include_router(price_router)
+    app.include_router(demand_router)
     mount_frontend(app, STATIC_DIR)
 
     return app

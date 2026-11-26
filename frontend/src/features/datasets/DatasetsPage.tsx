@@ -14,6 +14,7 @@ import { Card, EmptyState, ErrorBox, PageHeader, Spinner } from '../../component
 import { stepText } from '../../lib/entrySteps'
 import { formatNumber, KIND_LABELS, TASK_LABELS } from '../../lib/format'
 import { AnomalyRows } from '../source/AnomalyRows'
+import { DemandRows } from '../source/DemandRows'
 import { PriceRows } from '../source/PriceRows'
 import { UpliftRows } from '../source/UpliftRows'
 import {
@@ -56,6 +57,8 @@ function outputsText(model: ModelInputs): string {
   if (model.task === 'uplift')
     return `${model.outputs} (処置したときの予測と, しないときの予測で, それぞれ 1 つの値)`
   if (model.task === 'price') return `${model.outputs} (売れた数の予測. 値段の列は入力の最後)`
+  if (model.task === 'demand')
+    return `${model.outputs} (先の期間の需要の, 分位点の水準 1 つあたりの値. 学ぶ水準の数をかける)`
   return `${model.outputs} (値)`
 }
 
@@ -138,6 +141,14 @@ function TableCard({ item }: { item: TableDataset }) {
             <dt className="text-ink-3">値段の範囲と売れた数</dt>
             <dd>
               <PriceRows summary={item.price} />
+            </dd>
+          </>
+        )}
+        {item.demand && (
+          <>
+            <dt className="text-ink-3">発注を決める日と期間の合計</dt>
+            <dd>
+              <DemandRows summary={item.demand} />
             </dd>
           </>
         )}

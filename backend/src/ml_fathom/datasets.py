@@ -57,7 +57,8 @@ def table_summary(path: Path) -> dict[str, Any]:
     summary: dict[str, Any]
         種類, タスク, 目的の列, 分割ごとの行数, 学習に使う列の数, モデルに
         要るもの (model_inputs の結果), 異常の検知の説明 (anomaly), 効果を
-        見積もるの説明 (uplift), 値段を変える判断の説明 (price)
+        見積もるの説明 (uplift), 値段を変える判断の説明 (price), 需要の
+        予測の説明 (demand)
     """
     # load_dataset で読めることを確かめる
     info = ml_eda.load_dataset(path).info
@@ -79,6 +80,10 @@ def table_summary(path: Path) -> dict[str, Any]:
         # 値段を変える判断 (task: price) の値段, 原価, 商品の id の列と分割
         # ごとの値段の範囲と売れた数の平均 (他のタスクは None)
         "price": info.get("price"),
+        # 需要の予測 (task: demand) の商品の id, 日付, 在庫の数の列, 期間と
+        # 分割ごとの発注を決める日の範囲と期間の合計の平均 (他のタスクは
+        # None)
+        "demand": info.get("demand"),
     }
 
     return summary

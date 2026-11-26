@@ -32,6 +32,8 @@ import type {
   ProjectPlace,
   PriceRequest,
   PriceSummary,
+  DemandRequest,
+  DemandSummary,
   ReactionsExportResult,
   ReactionsResult,
   TrajectorySummary,
@@ -108,6 +110,8 @@ export const api = {
     request<UpliftSummary>(`/api/sources/${id}/uplift`, json('POST', body)),
   price: (id: string, body: PriceRequest) =>
     request<PriceSummary>(`/api/sources/${id}/price`, json('POST', body)),
+  demand: (id: string, body: DemandRequest) =>
+    request<DemandSummary>(`/api/sources/${id}/demand`, json('POST', body)),
   groups: (id: string, body: GroupRequest) =>
     request<GroupSummary>(`/api/sources/${id}/groups`, json('POST', body)),
   exportGroups: (id: string, body: GroupExport) =>

@@ -380,3 +380,62 @@ test('値段を変える判断のデータセットは, 分割ごとの値段の
   expect(table.textContent).toContain('324')
   expect(card.getByText(/値段の列:/).textContent).toContain('standardize')
 })
+
+test('時間をまたぐ量の判断のデータセットは, 分割ごとの発注を決める日の範囲と期間の合計を出す', async () => {
+  vi.spyOn(api, 'datasets').mockResolvedValue([
+    {
+      form: 'table',
+      name: 'daily',
+      path: '/home/datasets/daily',
+      format_version: 1,
+      created_at: '2026-11-21T10:00:00+09:00',
+      kind: 'timeseries',
+      task: 'demand',
+      target: 'demand',
+      splits: { train: 20, valid: 11, test: 8 },
+      features: 3,
+      model: {
+        inputs: [{ name: 'x', shape: [null, 3], dtype: 'float32' }],
+        task: 'demand',
+        target: 'demand',
+        classes: [],
+        outputs: 1,
+      },
+      anomaly: null,
+      uplift: null,
+      price: null,
+      demand: {
+        id: 'row_id',
+        product: 'product_id',
+        date: 'date',
+        units: 'units',
+        stock: null,
+        target: 'demand',
+        previous: 'demand_previous',
+        horizon: 7,
+        interval: 7,
+        unlabeled: 'drop',
+        skipped: { previous: 8, boundary: 0 },
+        splits: {
+          train: {
+            rows: 20,
+            products: 4,
+            date_min: '2025-01-13',
+            date_max: '2025-02-17',
+            demand_mean: 78.95,
+            previous_mean: 79.3,
+            stockout: null,
+          },
+        },
+      },
+    },
+  ])
+  renderPage()
+  const card = within((await screen.findByText('daily')).closest('section')!)
+  expect(card.getByText(/時間をまたぐ量の判断/)).toBeInTheDocument()
+  expect(card.getByText(/1 \(先の期間の需要の/)).toBeInTheDocument()
+  const table = card.getByRole('table', { name: /分割ごとの行と商品の数, 発注を決める日/ })
+  expect(table.textContent).toContain('2025-02-17')
+  expect(table.textContent).toContain('78.95')
+  expect(card.getByText(/在庫の数の列:/).textContent).toContain('なし')
+})
