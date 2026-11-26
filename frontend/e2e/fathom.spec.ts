@@ -1164,3 +1164,43 @@ test('日ごとの売れた数の記録で商品と日付と在庫の数を選�
   await expect(card.getByText(/1 \(先の期間の需要の/)).toBeVisible()
   await expect(card.getByText(/在庫の数の列:/)).toContainText('stock')
 })
+
+test('時間をまたぐ量の判断の問題の設定から始め, 書き戻してプロジェクトへ書き出す', async ({
+  page,
+}) => {
+  // 置き換えの確かめは既定で受ける (やり直しで前の書き出しが残っていても進めるように)
+  page.on('dialog', (dialog) => void dialog.accept())
+
+  // 一覧から始めると, 答えた列と先の期間の日数を入れたレシピで始まる
+  await page.goto('/')
+  await page.getByRole('button', { name: '問題の設定から始める' }).click()
+  const stored = page.getByRole('list', { name: '保存した問題の設定' })
+  await stored.getByRole('button', { name: /発注のプロジェクト/ }).click()
+  await page.getByRole('button', { name: 'この問題の設定から始める' }).click()
+  await expect(page.getByRole('heading', { name: '発注のプロジェクト' })).toBeVisible()
+  await page.getByRole('tab', { name: '前処理と書き出し' }).click()
+  const notes = page.getByRole('region', { name: '始めたときの知らせ' })
+  await expect(notes.getByText(/one_hot で数の列にして/)).toBeVisible({ timeout: 20_000 })
+  await expect(page.getByLabel('タスク')).toHaveValue('demand')
+  await expect(page.getByLabel('商品の id の列')).toHaveValue('product_id')
+  await expect(page.getByLabel('日付の列')).toHaveValue('date')
+  await expect(page.getByLabel('在庫の数の列')).toHaveValue('stock')
+  await expect(page.getByLabel('分割', { exact: true })).toHaveValue('time')
+  await expect(page.getByText('問題の設定との食い違いはありません.')).toBeVisible()
+
+  // 種類の列を数にする手順を足し, 書き戻してから骨組みの読む場所 (outputs/dataset) へ書き出す
+  await page.getByLabel('足す手順').selectOption('one_hot')
+  await page.getByRole('button', { name: '足す', exact: true }).click()
+  await page.getByRole('checkbox', { name: 'auto (型から選ぶ)' }).last().uncheck()
+  await page.locator('#step-3-columns').selectOption('category')
+  await expect(page.getByText('問題の設定との食い違いはありません.')).toBeVisible()
+  await page.getByRole('button', { name: '問題の設定に書き戻す' }).click()
+  await expect(page.getByText(/書き戻しました/)).toBeVisible()
+  const splits = page.getByRole('table', { name: /分割ごとの行と商品の数, 発注を決める日/ })
+  await expect(splits).toContainText('valid', { timeout: 20_000 })
+  await expect(page.getByText(/demand_project\/outputs\/dataset$/)).toBeVisible()
+  await page.getByRole('button', { name: 'プロジェクトへ書き出す' }).click()
+  await expect(page.getByText(/プロジェクトへ書き出しました/)).toBeVisible({ timeout: 20_000 })
+  // 結果にも発注を決める日と期間の合計の説明が出る
+  await expect(page.getByText(/正解の列 demand はその日から 7 日/).last()).toBeVisible()
+})

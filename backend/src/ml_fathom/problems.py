@@ -24,6 +24,7 @@ from ml_fathom.api import (
     pair_result,
     source_view,
 )
+from ml_fathom.demand import DEMAND_KINDS
 from ml_fathom.groups import (
     MAX_COLUMNS,
     MAX_GROUPS,
@@ -452,6 +453,64 @@ def price_supported() -> bool:
     return supported
 
 
+def demand_supported() -> bool:
+    """
+    組の ML-Quest が時間をまたぐ量の判断の問題の設定を受けるかを返す関数
+
+    Parameters
+    ----------
+    None
+
+    Returns
+    ----------
+    supported: bool
+        書き出す骨組みの型 (SKELETON_TYPES) に demand を持つ版か
+    """
+    # 骨組みの型の並び (受けない版は持たないか, demand を含まない)
+    supported = "demand" in getattr(ml_quest, "SKELETON_TYPES", ())
+
+    return supported
+
+
+def is_demand(problem: dict[str, Any]) -> bool:
+    """
+    受け持ちが時間をまたぐ量の判断 (予測するで, 正解の種類が先の期間の
+    需要. 作り方が既製のモデルをそのままでない) かを返す関数
+
+    受ける版の ML-Quest では, 書き出す骨組みの型 (skeleton_type) で見分ける
+    (決まりを写して持たないため). 受けない版では理由を出して止めるために,
+    答えのまま見分ける
+
+    Parameters
+    ----------
+    problem: dict[str, Any]
+        問題の設定 (版 2)
+
+    Returns
+    ----------
+    demand: bool
+        時間をまたぐ量の判断の受け持ちか
+    """
+    # 受ける版は ML-Quest の骨組みの型 (形の崩れた問題の設定は違う受け持ち
+    # とし, 他の確かめが誤りを返す)
+    if demand_supported():
+        try:
+            demand = bool(ml_quest.skeleton_type(problem) == "demand")
+        except SHAPE_ERRORS:
+            demand = False
+        return demand
+
+    # 受けない版は受け持ち, 正解の種類と作り方の答え
+    part = ml_quest.PART
+    demand = bool(
+        ml_quest.active_value(problem, f"{part}.role") == "predict"
+        and ml_quest.active_value(problem, f"{part}.target.kind") == "demand"
+        and ml_quest.active_value(problem, f"{part}.method") != "pretrained"
+    )
+
+    return demand
+
+
 def choice_text(choices: list[dict[str, Any]], value: Any) -> str:
     """
     ML-Quest の選択肢の値を, 画面の言葉と値の組の文にする関数
@@ -482,13 +541,13 @@ def choice_text(choices: list[dict[str, Any]], value: Any) -> str:
 def require_recipe(problem: dict[str, Any]) -> None:
     """
     受け持ちが, 登録したデータとレシピで書き出すもの (列の予測, 画像か
-    表の生成, 異常の検知, 効果の見積もりと値段を変える判断) でなければ止める
-    関数
+    表の生成, 異常の検知, 効果の見積もり, 値段を変える判断と時間をまたぐ
+    量の判断) でなければ止める関数
 
     ML-Quest の版 2 の問題の設定は, 受け持ち (作る, 並べるなど) と正解の
     種類 (領域, 点群など) を持つ. 登録したデータのレシピの下書きと書き戻し
-    は列の予測, 画像か表の生成, 異常の検知, 効果の見積もりと値段を変える
-    判断だけ (ファイルの組の受け持ちは require_items)
+    は列の予測, 画像か表の生成, 異常の検知, 効果の見積もり, 値段を変える
+    判断と時間をまたぐ量の判断だけ (ファイルの組の受け持ちは require_items)
 
     Parameters
     ----------
@@ -503,8 +562,8 @@ def require_recipe(problem: dict[str, Any]) -> None:
     ----------
     HTTPException
         他の受け持ちは 422 (使えない受け持ちと正解の種類, 理由, 使える
-        受け持ちの文). 値段を変える判断を受けない版の ML-Quest での値段を
-        変える判断も 422
+        受け持ちの文). 値段を変える判断か時間をまたぐ量の判断を受けない版
+        の ML-Quest でのそれぞれの問題の設定も 422
     """
     # 値段を変える判断は, 受ける版の ML-Quest でだけ (受けない版は効果の
     # 見積もりとしてレシピを作るため)
@@ -515,6 +574,15 @@ def require_recipe(problem: dict[str, Any]) -> None:
             422, "問題の設定を渡せません: 値段を変える判断の問題の設定です"
             "が, 組の ML-Quest は値段を変える判断を受けない版です. ML-Quest "
             "を値段を変える判断を受ける版に上げてください"
+        )
+    # 時間をまたぐ量の判断も, 受ける版の ML-Quest でだけ
+    if is_demand(problem):
+        if demand_supported():
+            return
+        raise HTTPException(
+            422, "問題の設定を渡せません: 時間をまたぐ量の判断の問題の設定"
+            "ですが, 組の ML-Quest は時間をまたぐ量の判断を受けない版です. "
+            "ML-Quest を時間をまたぐ量の判断を受ける版に上げてください"
         )
     # 使えない受け持ちと正解の種類を, 画面の選択肢と同じ言葉で
     if is_column_part(problem) or is_generate(problem) or (
@@ -554,8 +622,8 @@ def require_recipe(problem: dict[str, Any]) -> None:
         f"この問題の設定の受け持ち {choice_text(ml_quest.ROLES, role)} "
         f"(正解の種類 {choice_text(ml_quest.TARGET_KINDS, kind)}) は, "
         f"問題の設定から始めることと書き戻しに使えません ({why}). 使える"
-        "のは, 予測するで正解の種類が表の列, 画像の領域, 点群, 異常の場合"
-        "と, "
+        "のは, 予測するで正解の種類が表の列, 画像の領域, 点群, 異常, 先の"
+        "期間の需要の場合と, "
         "作るで正解の種類が画像か表の場合と, 並べるかまとめるで学習する"
         "場合と, 効果を見積もる (今ある記録から. 値段を変える判断も) "
         "場合です. "
@@ -588,11 +656,12 @@ def require_items(problem: dict[str, Any]) -> None:
         return
     if is_column_part(problem) or is_generate(problem) or is_rank(problem) or (
         is_group(problem) or is_anomaly(problem) or is_uplift(problem)
-        or is_price(problem)
+        or is_price(problem) or is_demand(problem)
     ):
         raise HTTPException(
             422, "この問題の設定は列の予測か, 画像か表の生成か, 異常の検知か, "
-            "効果の見積もりか, 値段を変える判断か, 並べるか, まとめるです. "
+            "効果の見積もりか, 値段を変える判断か, 時間をまたぐ量の判断か, "
+            "並べるか, まとめるです. "
             "データの画面の「問題の設定から始める」で始めてください"
         )
     require_recipe(problem)
@@ -776,8 +845,8 @@ def start_from_problem(
     started: dict[str, Any]
         source (登録したデータ. ファイルの組の受け持ちでは None),
         problem (problem.yaml の場所), form (ファイルの組の書き出しの画面の
-        欄. 列の予測, 画像か表の生成, 異常の検知, 効果の見積もりと値段を
-        変える判断では None), notes
+        欄. 列の予測, 画像か表の生成, 異常の検知, 効果の見積もり, 値段を
+        変える判断と時間をまたぐ量の判断では None), notes
         (知らせの文の並び), tab (開くタブ. まとめるでは groups, 他は None)
 
     Raises
@@ -823,7 +892,9 @@ def start_from_problem(
     # 正解の列と行の id の列があること. 効果の見積もりは表であることと,
     # 結果の列, 処置の列と行の id の列があること. 値段を変える判断は表で
     # あることと, 答えた売れた数, 値段, 原価, 商品の id, 行の id の列がある
-    # こと) を確かめて登録し, レシピを保存
+    # こと. 時間をまたぐ量の判断は表であることと, 答えた日ごとの売れた数,
+    # 商品の id, 日付, 在庫の数, 行の id の列があること) を確かめて登録し,
+    # レシピを保存
     data_path = Path(load["path"])
     if not data_path.exists():
         raise HTTPException(404, f"{data_path} がありません")
@@ -855,6 +926,8 @@ def start_from_problem(
         check_uplift_start(data, data_path, recipe)
     elif is_price(problem):
         check_price_start(data, data_path, recipe)
+    elif is_demand(problem):
+        check_demand_start(data, data_path, recipe)
     elif target not in [str(name) for name in data.frame.columns]:
         raise HTTPException(
             422, f"目的の列 {target} がデータにありません"
@@ -997,6 +1070,52 @@ def check_price_start(
     for key, title in (("target", "売れた数の列"), ("price", "値段の列"),
                        ("cost", "原価の列"), ("product", "商品の id の列"),
                        ("id", "行の id の列")):
+        name = recipe.get(key)
+        if name is not None and name not in columns:
+            raise HTTPException(
+                422, f"{title} {name} がデータにありません"
+            )
+
+
+def check_demand_start(
+    data: ml_eda.Data, data_path: Path, recipe: dict[str, Any]
+) -> None:
+    """
+    時間をまたぐ量の判断の問題の設定から始める表を確かめる関数
+
+    Parameters
+    ----------
+    data: ml_eda.Data
+        読み込んだ入れたデータ
+    data_path: Path
+        入れたデータの場所
+    recipe: dict[str, Any]
+        ML-Quest の recipe_from のレシピ (task: demand)
+
+    Returns
+    ----------
+    None
+
+    Raises
+    ----------
+    HTTPException
+        表か時系列でない場合と, 日ごとの売れた数, 商品の id, 日付, 在庫の数
+        か行の id の列が表に無い場合は 422
+    """
+    # ML-EDA の需要の予測が読む種類 (表と時系列). 日ごとの売れた数, 商品の
+    # id と日付の列 (必ずある) と, 在庫の数と行の id の列 (答えたときだけ
+    # レシピにある)
+    if data.kind not in DEMAND_KINDS:
+        raise HTTPException(
+            422, f"{data_path.name} は表ではありません (種類 {data.kind}). "
+            "時間をまたぐ量の判断の問題の設定には, ML-Pathfinder の「手元の"
+            "データは」で商品の id, 日付と日ごとの売れた数の列を持つ表を入れ"
+            "てください"
+        )
+    columns = [str(name) for name in data.frame.columns]
+    for key, title in (("target", "日ごとの売れた数の列"),
+                       ("product", "商品の id の列"), ("date", "日付の列"),
+                       ("stock", "在庫の数の列"), ("id", "行の id の列")):
         name = recipe.get(key)
         if name is not None and name not in columns:
             raise HTTPException(

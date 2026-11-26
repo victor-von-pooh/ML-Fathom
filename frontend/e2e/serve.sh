@@ -458,6 +458,47 @@ for product in range(5):
 pd.DataFrame(rows).to_csv(sys.argv[1], index=False)
 PY
 
+# ML-Pathfinder の置き場に, 時間をまたぐ量の判断の問題の設定 (上の日ごとの記録
+# を入れ, 商品の id, 日付, 売れた数, 在庫の数の列と発注の判断を答えた. ML-Quest
+# で骨組みのプロジェクトを作った記録付き)
+uv run python - "$WORK" <<'PY'
+import sys
+from pathlib import Path
+
+import ml_quest
+from ml_quest import example_problem
+
+work = Path(sys.argv[1])
+problem = example_problem("解約の引き止め")
+problem["ml"]["parts"] = [{}]
+for key in ("decision", "basis", "current"):
+    problem["action"].pop(key, None)
+problem = ml_quest.answer(
+    problem, "information.columns",
+    ["product_id", "date", "category", "units", "stock"],
+)
+answers = [("role", "predict"), ("unit", "row"), ("output", "distribution"),
+           ("target.kind", "demand"), ("target.source", "column"),
+           ("method", "scratch"), ("what", "先の 7 日の売れる数"),
+           ("item", "商品と発注を決める日ごとの 1 行"),
+           ("baseline", "前の 7 日と同じ数を発注する"),
+           ("demand.product", "product_id"), ("demand.date", "date"),
+           ("demand.units", "units"), ("demand.stock", "stock"),
+           ("demand.columns", ["category"]), ("evaluation.metric", "loss"),
+           ("evaluation.link", "分位点の損失が小さいほど発注の数の損が減る")]
+for key, value in answers:
+    problem = ml_quest.answer(problem, f"ml.parts.0.{key}", value)
+problem = ml_quest.answer(problem, "action.decision", {
+    "type": "order", "shortage_cost": 3, "holding_cost": 1, "max_order": 60
+})
+problem = ml_quest.attach_data(problem, work / "daily.csv")
+problem["name"] = "発注のプロジェクト"
+project = work / "demand_project"
+ml_quest.make_project(problem, project)
+problem = ml_quest.record_project(problem, project)
+ml_quest.save_problem(problem, work / "pathfinder" / "problems" / "demand")
+PY
+
 # 記録した軌跡の見本 (ML-EDA のテストの見本を写す. 守りの付いた Discrete の
 # 行動の軌跡, Box の行動の軌跡と, 行動を選んだ確率の列を持つ軌跡. どれも表と
 # 説明の JSON)
