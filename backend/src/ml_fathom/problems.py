@@ -491,9 +491,13 @@ def is_demand(problem: dict[str, Any]) -> bool:
     demand: bool
         時間をまたぐ量の判断の受け持ちか
     """
-    # 受ける版は ML-Quest の骨組みの型
+    # 受ける版は ML-Quest の骨組みの型 (形の崩れた問題の設定は違う受け持ち
+    # とし, 他の確かめが誤りを返す)
     if demand_supported():
-        demand = bool(ml_quest.skeleton_type(problem) == "demand")
+        try:
+            demand = bool(ml_quest.skeleton_type(problem) == "demand")
+        except SHAPE_ERRORS:
+            demand = False
         return demand
 
     # 受けない版は受け持ち, 正解の種類と作り方の答え
