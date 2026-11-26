@@ -1,11 +1,15 @@
 import type { ColumnInfo, Finding, Profile, RecipeStep } from '../api/types'
 
-/** 気付きから作る手順の候補 */
+/**
+ * 気付きから作る手順の候補. タスクが異常の検知なら, 目的の列の欠けた行を落とす手順を作らない
+ * (正解の欠けた行を正常と見なして残すため. タスクを変えた直後の前の分析の気付きにも効かせる)
+ */
 export function suggestSteps(
   findings: Finding[],
   target: string | null,
   columns: Record<string, ColumnInfo>,
   roles: Record<string, string> = {},
+  task: string | null = null,
 ): RecipeStep[] {
   const drop = new Set<string>()
   const steps: RecipeStep[] = []
@@ -43,6 +47,7 @@ export function suggestSteps(
     } else if (item.code === 'high_cardinality') {
       steps.push({ op: 'label_encode', columns: [column] })
     } else if (item.code === 'target_missing') {
+      if (task === 'anomaly') continue
       steps.push({ op: 'drop_missing', columns: [column] })
     } else if (item.code === 'mixed_forms') {
       // 大文字と小文字だけが違う組があれば小文字にもそろえる
@@ -65,7 +70,8 @@ export function suggestSteps(
  * 列の型から, 学習できる形 (全て数値, 欠損なし) にする手順の並びを作る
  *
  * 文, ID, 定数の列は落とし, 日時は分解し, カテゴリはワンホット (値が多い
- * 場合は番号付け), 欠損は埋め, 偏った数値は対数を取り, 最後に標準化する
+ * 場合は番号付け), 欠損は埋め, 偏った数値は対数を取り, 最後に標準化する.
+ * 目的の列の欠けた行は落とす (タスクが異常の検知なら正常と見なして残すので落とさない)
  */
 export function autoRecipe(
   columns: Record<string, ColumnInfo>,
@@ -75,6 +81,7 @@ export function autoRecipe(
   period: number | null = null,
   seriesBy: string | null = null,
   interval: number | null = null,
+  task: string | null = null,
 ): RecipeStep[] {
   const drop: string[] = []
   const oneHot: string[] = []
@@ -128,7 +135,10 @@ export function autoRecipe(
   }
   if (findings.some((item) => item.code === 'duplicate_rows')) steps.push({ op: 'drop_duplicates' })
   if (drop.length) steps.push({ op: 'drop_columns', columns: drop })
-  if (target && columns[target]?.missing) steps.push({ op: 'drop_missing', columns: [target] })
+  // 異常の検知は正解の欠けた行を正常と見なして残すので落とさない
+  if (target && columns[target]?.missing && task !== 'anomaly') {
+    steps.push({ op: 'drop_missing', columns: [target] })
+  }
   if (dates.length) steps.push({ op: 'datetime_parts', columns: dates })
   if (numericMissing.length)
     steps.push({ op: 'impute', columns: numericMissing, strategy: 'median', indicator: true })
