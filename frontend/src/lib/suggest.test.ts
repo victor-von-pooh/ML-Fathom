@@ -238,3 +238,18 @@ test('系列が多ければ, 系列を分ける列は番号付けにする', () 
   expect(steps.some((step) => step.op === 'one_hot')).toBe(false)
   expect(steps.find((step) => step.op === 'lag')).toMatchObject({ by: ['item'] })
 })
+
+test('異常の検知では, 目的の列の欠けた行を落とす手順を作らない', () => {
+  const missing = { ...columns, label: column('boolean', { missing: 90, missing_ratio: 0.9 }) }
+  const found: Finding[] = [
+    { severity: 'warning', code: 'target_missing', message: '', columns: ['label'] },
+  ]
+  const dropsTarget = (steps: { op: string; columns?: unknown }[]) =>
+    steps.some((step) => step.op === 'drop_missing' && JSON.stringify(step.columns) === '["label"]')
+  expect(dropsTarget(suggestSteps(found, 'label', missing, {}, 'classification'))).toBe(true)
+  expect(suggestSteps(found, 'label', missing, {}, 'anomaly')).toEqual([])
+  expect(dropsTarget(autoRecipe(missing, 'label', found, {}))).toBe(true)
+  expect(dropsTarget(autoRecipe(missing, 'label', found, {}, null, null, null, 'anomaly'))).toBe(
+    false,
+  )
+})

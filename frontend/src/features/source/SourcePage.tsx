@@ -197,6 +197,7 @@ export function SourcePage() {
             options={source.options}
             problem={source.problem}
             problemNotes={source.problem_notes ?? []}
+            stale={profile.isPlaceholderData}
           />
         )}
       </div>

@@ -306,6 +306,7 @@ export function RecipeTab({
   options,
   problem,
   problemNotes = [],
+  stale = false,
 }: {
   sourceId: string
   sourceName: string
@@ -324,6 +325,11 @@ export function RecipeTab({
   problem?: string | null
   /** 問題の設定から始めたときの知らせ */
   problemNotes?: string[]
+  /**
+   * 分析を求め直している間 (タスクか目的の列を変えた直後で, 前の分析を出したまま) か.
+   * その間は前の気付きで手順を組まないように, 手順を作る押しボタンを止める
+   */
+  stale?: boolean
 }) {
   const media = ITEM_KINDS.includes(kind)
   const [addingItem, setAddingItem] = useState('')
@@ -427,9 +433,13 @@ export function RecipeTab({
     const keyOf = (step: RecipeStep) =>
       JSON.stringify([step.op, step.columns ?? step.column ?? null])
     const present = new Set((recipe?.steps ?? []).map(keyOf))
-    return suggestSteps(profile.findings, target, profile.columns, profile.overview.roles).filter(
-      (step) => !present.has(keyOf(step)),
-    )
+    return suggestSteps(
+      profile.findings,
+      target,
+      profile.columns,
+      profile.overview.roles,
+      recipe?.task ?? null,
+    ).filter((step) => !present.has(keyOf(step)))
   }, [profile, target, recipe])
   const infoOf = (op: string) => steps.find((item) => item.op === op)
   const [decided, decide] = useDecided(sourceId)
@@ -1031,6 +1041,8 @@ export function RecipeTab({
               <Button
                 icon={Wand2}
                 className={clsx(media && 'hidden')}
+                disabled={stale}
+                aria-describedby={stale ? 'recipe-stale-help' : undefined}
                 onClick={() => {
                   const made = autoRecipe(
                     profile.columns,
@@ -1040,6 +1052,7 @@ export function RecipeTab({
                     target ? (profile.timeseries?.columns[target]?.period ?? null) : null,
                     profile.timeseries?.series_by ?? null,
                     profile.timeseries?.interval_seconds ?? null,
+                    recipe.task,
                   )
                   if (
                     recipe.steps.length === 0 ||
@@ -1056,6 +1069,8 @@ export function RecipeTab({
               {suggestions.length > 0 && (
                 <Button
                   icon={Sparkles}
+                  disabled={stale}
+                  aria-describedby={stale ? 'recipe-stale-help' : undefined}
                   onClick={() => setSteps([...recipe.steps, ...suggestions])}
                   title="気付き (ID らしい列, 欠損, 偏った分布など) に合う手順を足す"
                 >
@@ -1065,6 +1080,14 @@ export function RecipeTab({
             </div>
           }
         >
+          {/* 前の分析の気付き (前のタスクの正解の欠けなど) で手順を組まないように, 理由を出して待つ */}
+          <div role="status">
+            {stale && (
+              <p id="recipe-stale-help" className="mb-2 text-xs text-ink-2">
+                タスクか目的の列を変えたので, 分析を求め直しています. 終わるまで手順を作れません
+              </p>
+            )}
+          </div>
           <ol className="space-y-2">
             {recipe.steps.map((step, index) => (
               <StepEditor
