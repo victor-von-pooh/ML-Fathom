@@ -26,6 +26,15 @@ const SKIPPED: PairExportResult = {
   notes: [
     '画像のディレクトリの外を指すリンクが 1 件あり, 除きました (例: a.png. 読むには 引数 follow_links=True にしてください)',
   ],
+  notices: [
+    {
+      code: 'outside_links',
+      count: 1,
+      label: '画像',
+      message:
+        '画像のディレクトリの外を指すリンクが 1 件あり, 除きました (例: a.png. 読むには 引数 follow_links=True にしてください)',
+    },
+  ],
 }
 
 function renderPage(path = '/datasets/pairs') {
@@ -68,7 +77,7 @@ test('外を指すリンクの先は既定で写さず, 印を付けた場合だ
     expect(panel.queryByText(/外を指すリンクが 1 件あり/)).not.toBeInTheDocument(),
   )
   expect(panel.getByText(/データセットの中に写します/)).toBeInTheDocument()
-  exporter.mockResolvedValue({ ...SKIPPED, notes: [] })
+  exporter.mockResolvedValue({ ...SKIPPED, notes: [], notices: [] })
   fireEvent.click(panel.getByRole('button', { name: 'ファイルの組を書き出す' }))
   expect(await panel.findByText('書き出しの注意はありません.')).toBeInTheDocument()
   expect(exporter.mock.calls[1]![0]).toMatchObject({ follow_links: true })
@@ -112,4 +121,30 @@ test('問題の設定から始めた書き出しは印なしで始め, 印を書
   const body = exporter.mock.calls[0]![0]
   expect(body.follow_links).toBe(true)
   expect(body.export.options).not.toHaveProperty('follow_links')
+})
+
+test('外を指すリンクの案内は, 注意の文の言い回しでなく注意の印の種類で出す', async () => {
+  // 言い回しの違う文でも印があれば案内し, 文に言葉があっても印が無ければ案内しない
+  vi.spyOn(api, 'info').mockResolvedValue(INFO)
+  const exporter = vi.spyOn(api, 'exportImageMasks').mockResolvedValue({
+    ...SKIPPED,
+    notes: ['画像の 1 件を写しませんでした'],
+    notices: [
+      { code: 'outside_links', count: 1, label: '画像', message: '画像の 1 件を写しませんでした' },
+    ],
+  })
+  renderPage()
+  const panel = imagePanel()
+  fireEvent.change(panel.getByLabelText('画像のディレクトリ'), { target: { value: '/d/images' } })
+  fireEvent.change(panel.getByLabelText('領域のディレクトリ'), { target: { value: '/d/masks' } })
+  fireEvent.change(panel.getByLabelText('データセットの名前'), { target: { value: 'shapes' } })
+  fireEvent.click(panel.getByRole('button', { name: 'ファイルの組を書き出す' }))
+  expect(await panel.findByText(/に印を付けて書き出し直してください/)).toBeInTheDocument()
+
+  // 文に「外を指すリンク」の言葉があっても, 印が無ければ案内しない
+  exporter.mockResolvedValue({ ...SKIPPED, notices: [] })
+  fireEvent.change(panel.getByLabelText('データセットの名前'), { target: { value: 'again' } })
+  fireEvent.click(panel.getByRole('button', { name: 'ファイルの組を書き出す' }))
+  expect(await panel.findByText(/外を指すリンクが 1 件あり/)).toBeInTheDocument()
+  expect(panel.queryByText(/に印を付けて書き出し直してください/)).not.toBeInTheDocument()
 })

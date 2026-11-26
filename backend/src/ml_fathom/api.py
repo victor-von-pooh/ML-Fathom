@@ -1674,17 +1674,22 @@ def pair_result(target: Path, info: dict[str, Any]) -> dict[str, Any]:
     target: Path
         書き出した場所
     info: dict[str, Any]
-        dataset.yaml の中身
+        ML-EDA の書き出しの結果 (dataset.yaml の中身と, 注意の印
+        notices)
 
     Returns
     ----------
     result: dict[str, Any]
-        場所, dataset.yaml の中身, 注意
+        場所, dataset.yaml の中身 (notices を除く), 注意の文と, 注意の印
+        (code, count, message と添え)
     """
-    # 注意は画面で並べるので取り出す
+    # 注意の文は画面で並べ, 注意の印は種類で案内を出し分けるので取り出す
+    written = {key: value for key, value in info.items()
+               if key != "notices"}
     result = {
-        "path": str(target), "info": to_json(info),
+        "path": str(target), "info": to_json(written),
         "notes": [str(note) for note in info.get("notes") or []],
+        "notices": to_json(list(info.get("notices") or [])),
     }
 
     return result

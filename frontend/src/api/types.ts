@@ -821,10 +821,23 @@ export interface CaptureCloudExport extends PairExportBase {
   cloud_units: string
 }
 
+/** ML-EDA のファイルの組の書き出しの注意の印 (code は ML-EDA の NOTICE_CODES) */
+export interface ExportNotice {
+  code: string
+  count: number
+  message: string
+  /** ファイルの呼び名 (画像, 領域, 撮影, 点群) */
+  label?: string
+  /** 分割の名前 */
+  split?: string
+}
+
 export interface PairExportResult {
   path: string
   info: Record<string, unknown>
   notes: string[]
+  /** 注意の印 (notes と同じ順. 種類で案内を出し分ける. ファイルの組の書き出しだけ) */
+  notices?: ExportNotice[]
 }
 
 /** ML-Quest のファイルの組の書き出しの設定 (問題の設定の data.export) */

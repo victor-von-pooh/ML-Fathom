@@ -80,6 +80,14 @@ def test_image_masks_export_and_list(
     assert Path(result["path"], "dataset.yaml").is_file()
     assert result["info"]["format_version"] == 2
     assert any("orphan" in note for note in result["notes"])
+    # 注意の印 (種類と数) は notes と同じ順で, info (dataset.yaml) には無い
+    assert [item["message"] for item in result["notices"]] == result["notes"]
+    unpaired = [item for item in result["notices"]
+                if item["code"] == "unpaired"]
+    assert [(item["label"], item["count"]) for item in unpaired] == [
+        ("領域", 1)
+    ]
+    assert "notices" not in result["info"]
 
     # 同じ名前は置き換えの指定が無ければ 409, 名前の誤りは 422
     assert client.post(
