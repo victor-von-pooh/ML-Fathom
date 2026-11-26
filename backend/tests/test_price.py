@@ -25,10 +25,6 @@ ROWS = 240
 COLUMNS = ["record_id", "product_id", "category", "weekday", "price",
            "units", "unit_cost", "leftover"]
 
-# 組の ML-Quest が値段を変える判断を受けるか (受けない版では本物の問題の
-# 設定のテストを飛ばす)
-QUEST_PRICE = problems.price_supported()
-
 
 @pytest.fixture
 def client(tmp_path: Path) -> TestClient:
@@ -595,8 +591,6 @@ def test_start_old_quest(
     assert listed[0]["reason"] == detail
 
 
-@pytest.mark.skipif(not QUEST_PRICE,
-                    reason="組の ML-Quest が値段を変える判断を受けない版")
 def test_start_refused(
     client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -694,8 +688,6 @@ def quest_problem(tmp_path: Path, data: Path) -> tuple[Path, Path]:
     return paths
 
 
-@pytest.mark.skipif(not QUEST_PRICE,
-                    reason="組の ML-Quest が値段を変える判断を受けない版")
 def test_quest_price(
     client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
