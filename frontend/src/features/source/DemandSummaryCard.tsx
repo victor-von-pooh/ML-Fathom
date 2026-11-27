@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 
-import { api } from '../../api/client'
+import { useApi } from '../../api/client'
 import type { DemandRequest, Recipe } from '../../api/types'
 import { Card, ErrorBox, Spinner } from '../../components/ui'
 import { formatNumber, formatPercent } from '../../lib/format'
@@ -59,6 +59,7 @@ function Num({ value, warn = false }: { value: unknown; warn?: boolean }) {
  * 商品ごとの記録の日数と抜けの日, 在庫が 0 の日と気付きを, 読み込んだ元の日ごとの表で数えて出す
  */
 export function DemandSummaryCard({ sourceId, recipe }: { sourceId: string; recipe: Recipe }) {
+  const api = useApi()
   // 売れた数, 商品の id, 日付の列を選ぶまでは求めない
   const horizon = recipe.horizon ?? DEMAND_HORIZON
   const body: DemandRequest | null =

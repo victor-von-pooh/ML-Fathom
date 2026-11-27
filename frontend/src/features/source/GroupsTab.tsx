@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ClipboardCheck, FolderOutput, Shapes, Upload } from 'lucide-react'
 import { type ReactNode, useId, useState } from 'react'
 
-import { api, ApiError } from '../../api/client'
+import { ApiError, useApi } from '../../api/client'
 import type {
   GroupAnswers,
   GroupChoice,
@@ -214,6 +214,7 @@ function GroupWriteBack({
   differs: boolean
   onWritten: (result: GroupWritten) => void
 }) {
+  const api = useApi()
   const queryClient = useQueryClient()
   // 群の数を打つたびに確かめないよう, 少し待った選び方で確かめる
   const pending = useDebounced(choice)
@@ -314,6 +315,7 @@ function ProjectExportCard({
   problem: GroupProblem
   fetching: boolean
 }) {
+  const api = useApi()
   const queryClient = useQueryClient()
   const exporter = useMutation({
     mutationFn: (overwrite: boolean) => api.exportGroupProject(sourceId, overwrite),
@@ -407,6 +409,7 @@ function ExportCard({
   onIdChange: (id: string) => void
   k: number
 }) {
+  const api = useApi()
   const [name, setName] = useState(() => `${defaultDatasetName(source.name, source.path)}_groups`)
   const [overwrite, setOverwrite] = useState(false)
   const [method, setMethod] = useState<'random' | 'none'>('random')
@@ -573,6 +576,7 @@ function ExportCard({
  * 開くたびに問題の設定を読み直し, まとめるの答えで欄を埋める
  */
 export function GroupsTab({ source, profile }: { source: Source; profile: Profile }) {
+  const api = useApi()
   const linked = Boolean(source.problem)
   const problem = useQuery({
     queryKey: ['group_problem', source.id],
@@ -624,6 +628,7 @@ function GroupsBody({
   fetching: boolean
   onWritten: (result: GroupWritten) => void
 }) {
+  const api = useApi()
   const all = Object.keys(profile.columns)
   const answers: GroupAnswers | null = problem?.group ?? null
   const [columns, setColumns] = useState(() =>

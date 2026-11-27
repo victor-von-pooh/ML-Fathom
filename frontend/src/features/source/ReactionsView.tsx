@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { FolderOutput } from 'lucide-react'
 import { Link, useSearchParams } from 'react-router'
 
-import { api, ApiError } from '../../api/client'
+import { ApiError, useApi } from '../../api/client'
 import type { ReactionCounts, ReactionsResult, ReactionsSummary, Source } from '../../api/types'
 import {
   Button,
@@ -173,6 +173,7 @@ function BiasPanel({ summary }: { summary: ReactionsSummary }) {
  * 前に置いたファイルは確かめてから置き換え, ファイルでないものは置き換えない
  */
 function ExportPanel({ sourceId }: { sourceId: string }) {
+  const api = useApi()
   const queryClient = useQueryClient()
   const place = useQuery({
     queryKey: ['project', sourceId],
@@ -248,6 +249,7 @@ function ExportPanel({ sourceId }: { sourceId: string }) {
 
 /** 並べるの反応の表の分析 (ML-EDA の describe_reactions) と, プロジェクトへの書き出し */
 export function ReactionsView({ source }: { source: Source }) {
+  const api = useApi()
   const [search, setSearch] = useSearchParams()
   const result = useQuery({
     queryKey: ['reactions', source.id],

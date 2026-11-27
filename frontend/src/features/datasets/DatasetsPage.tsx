@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { AlertTriangle, Database, Upload } from 'lucide-react'
 import { Link } from 'react-router'
 
-import { api } from '../../api/client'
+import { useApi } from '../../api/client'
 import type { ItemsDataset, TableDataset, UnreadableDataset, DatasetSummary } from '../../api/types'
 import { Card, EmptyState, ErrorBox, PageHeader, Spinner } from '../../components/ui'
 import { stepText } from '../../lib/entrySteps'
@@ -275,6 +275,7 @@ function Badge({ children }: { children: string }) {
 
 /** 書き出した学習用のデータセットの一覧 */
 export function DatasetsPage() {
+  const api = useApi()
   const datasets = useQuery({ queryKey: ['datasets'], queryFn: api.datasets })
   return (
     <>

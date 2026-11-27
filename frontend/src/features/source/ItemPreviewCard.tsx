@@ -3,7 +3,7 @@ import clsx from 'clsx'
 import { Eye } from 'lucide-react'
 import { useState } from 'react'
 
-import { api } from '../../api/client'
+import { useApi } from '../../api/client'
 import type { AudioPreviewItem, ItemPreviewItem, PointsItem, Recipe } from '../../api/types'
 import { Button, Card, ErrorBox, Spinner } from '../../components/ui'
 import { formatCount } from '../../lib/format'
@@ -188,6 +188,7 @@ export function ItemPreviewCard({
   /** 試せない理由を並べた要素の id (理由があれば押せない) */
   reasons?: string
 }) {
+  const api = useApi()
   const run = useMutation({
     mutationFn: (current: Recipe) => api.itemPreview(sourceId, current),
   })

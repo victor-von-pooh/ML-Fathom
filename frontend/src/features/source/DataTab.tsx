@@ -2,7 +2,7 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { ArrowDown, ArrowUp } from 'lucide-react'
 import { useState } from 'react'
 
-import { api } from '../../api/client'
+import { useApi } from '../../api/client'
 import { useDebounced } from '../../lib/useDebounced'
 import { Button, ErrorBox, Spinner } from '../../components/ui'
 import { formatNumber } from '../../lib/format'
@@ -12,6 +12,7 @@ const PAGE = 50
 
 /** 表の中身 (並べ替え, 絞り込み, ページ送り) */
 export function DataTab({ sourceId }: { sourceId: string }) {
+  const api = useApi()
   const [offset, setOffset] = useState(0)
   const [sort, setSort] = useState<{ column: string; descending: boolean } | null>(null)
   const [query, setQuery] = useState('')

@@ -1,7 +1,7 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useParams, useSearchParams } from 'react-router'
 
-import { api } from '../../api/client'
+import { useApi } from '../../api/client'
 import { ErrorBox, PageHeader, Spinner, Tabs, type TabItem } from '../../components/ui'
 import { readDraft, useRecipeDraft, writeDraft } from '../../lib/drafts'
 import { KIND_LABELS } from '../../lib/format'
@@ -27,6 +27,7 @@ const GROUP_KINDS = new Set(['table', 'timeseries'])
 
 /** 1 つのデータの分析と前処理 */
 export function SourcePage() {
+  const api = useApi()
   const { id = '' } = useParams()
   const [search, setSearch] = useSearchParams()
   const queryClient = useQueryClient()

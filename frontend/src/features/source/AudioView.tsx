@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import clsx from 'clsx'
 import { useState } from 'react'
 
-import { api } from '../../api/client'
+import { useApi } from '../../api/client'
 import type { AudioItem } from '../../api/types'
 import { ErrorBox, Spinner } from '../../components/ui'
 import { formatNumber } from '../../lib/format'
@@ -10,6 +10,7 @@ import { formatSeconds, WAVE, waveformPath } from '../../lib/waveform'
 
 /** 1 つの音声の再生と波形 (どちらも先頭の決まった秒まで) */
 export function AudioView({ sourceId, index }: { sourceId: string; index: number }) {
+  const api = useApi()
   const item = useQuery({
     queryKey: ['item', sourceId, index],
     queryFn: () => api.item<AudioItem>(sourceId, index),

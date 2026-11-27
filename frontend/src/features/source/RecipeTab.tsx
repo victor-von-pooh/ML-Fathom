@@ -7,7 +7,7 @@ import { useRecipeDraft } from '../../lib/drafts'
 import { useDebounced } from '../../lib/useDebounced'
 import YAML from 'yaml'
 
-import { api } from '../../api/client'
+import { useApi } from '../../api/client'
 import type {
   FrameView,
   ItemStepInfo,
@@ -331,6 +331,7 @@ export function RecipeTab({
    */
   stale?: boolean
 }) {
+  const api = useApi()
   const media = ITEM_KINDS.includes(kind)
   const [addingItem, setAddingItem] = useState('')
   const queryClient = useQueryClient()

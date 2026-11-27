@@ -2,13 +2,13 @@ import { keepPreviousData, useMutation, useQuery } from '@tanstack/react-query'
 import clsx from 'clsx'
 import { ArrowUp, ClipboardList, File, Folder, Home } from 'lucide-react'
 import { useState } from 'react'
-import { useNavigate } from 'react-router'
 
-import { api } from '../../api/client'
+import { useApi } from '../../api/client'
 import type { ProblemStarted, Source } from '../../api/types'
 import { Dialog } from '../../components/Dialog'
 import { Button, ErrorBox, Spinner } from '../../components/ui'
 import { formatBytes, KIND_LABELS } from '../../lib/format'
+import { useStartFromProblem } from './useStartFromProblem'
 
 /**
  * ML-Pathfinder の置き場にある問題の設定の一覧. 押すとその問題の設定を選ぶ.
@@ -21,6 +21,7 @@ function StoredProblems({
   picked: string | null
   onPick: (path: string) => void
 }) {
+  const api = useApi()
   const problems = useQuery({ queryKey: ['problems'], queryFn: api.problems })
   const list = problems.data
   return (
@@ -98,6 +99,7 @@ export function AddSourceDialog({
   onAdded: (source: Source, tab?: ProblemStarted['tab']) => void
   mode?: 'data' | 'problem'
 }) {
+  const api = useApi()
   const fromProblem = mode === 'problem'
   const [dir, setDir] = useState('~')
   const [typed, setTyped] = useState('')
@@ -114,20 +116,8 @@ export function AddSourceDialog({
     queryFn: () => api.detect(picked!),
     enabled: picked !== null && !fromProblem,
   })
-  const navigate = useNavigate()
-  const start = useMutation({
-    mutationFn: () => api.startFromProblem(picked!),
-    // ファイルの組の受け持ちはデータを登録せず, 書き出しの画面へ問題の設定を付けて移る
-    onSuccess: (result) => {
-      if (result.source) {
-        onAdded(result.source, result.tab)
-        return
-      }
-      const search = new URLSearchParams({ form: result.form ?? '', problem: result.problem })
-      onClose()
-      void navigate(`/datasets/export?${search.toString()}`)
-    },
-  })
+  // ファイルの組の受け持ちはデータを登録せず, 対話を閉じて書き出しの画面へ移る
+  const start = useStartFromProblem({ onAdded, onLeave: onClose })
   const add = useMutation({
     mutationFn: () => api.createSource({ path: picked!, loader: loader || undefined }),
     onSuccess: (source) => onAdded(source),
@@ -258,7 +248,11 @@ export function AddSourceDialog({
           <div className="mb-2 truncate font-mono text-sm">{picked}</div>
           {fromProblem && (
             <div className="flex justify-end">
-              <Button variant="primary" disabled={start.isPending} onClick={() => start.mutate()}>
+              <Button
+                variant="primary"
+                disabled={start.isPending}
+                onClick={() => start.mutate(picked)}
+              >
                 {start.isPending ? '読み込み中…' : 'この問題の設定から始める'}
               </Button>
             </div>

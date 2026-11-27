@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { Plus } from 'lucide-react'
 
-import { api } from '../../api/client'
+import { useApi } from '../../api/client'
 import type { Recipe, UpliftRequest } from '../../api/types'
 import { Button, Card, ErrorBox, Spinner } from '../../components/ui'
 import { formatNumber, formatPercent } from '../../lib/format'
@@ -29,6 +29,7 @@ export function UpliftSummaryCard({
   /** 列を落とす手順を足す */
   onDrop: (columns: string[]) => void
 }) {
+  const api = useApi()
   // 結果の列と処置の列を選ぶまでは求めない
   const body: UpliftRequest | null =
     recipe.target && recipe.treatment

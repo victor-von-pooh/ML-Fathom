@@ -2,7 +2,7 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import clsx from 'clsx'
 import { useState } from 'react'
 
-import { api } from '../../api/client'
+import { useApi } from '../../api/client'
 import type { PointsItem, Profile, Source } from '../../api/types'
 import { Button, Card, ErrorBox, Spinner, StatTile } from '../../components/ui'
 import { formatCount, formatNumber } from '../../lib/format'
@@ -23,6 +23,7 @@ const THUMBNAIL = 256
 
 /** 1 つの点群を読んで 3D で描く */
 function PointCloudItem({ sourceId, index }: { sourceId: string; index: number }) {
+  const api = useApi()
   const item = useQuery({
     queryKey: ['item', sourceId, index],
     queryFn: () => api.item<PointsItem>(sourceId, index),
@@ -101,6 +102,7 @@ function breakdown(counts: Record<string, number>, unit: string): string {
 
 /** 画像, 文, 点群, 多視点の撮影, 音声の中身を 1 件ずつ見る */
 export function SamplesTab({ source, profile }: { source: Source; profile: Profile }) {
+  const api = useApi()
   const kind = source.kind
   const page = PAGE[kind] ?? 30
   const [offset, setOffset] = useState(0)

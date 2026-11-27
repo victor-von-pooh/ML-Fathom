@@ -1,7 +1,7 @@
 import { useIsFetching, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useId } from 'react'
 
-import { api } from '../../api/client'
+import { useApi } from '../../api/client'
 import type { Profile, Source } from '../../api/types'
 import { ErrorBox } from '../../components/ui'
 import { clearDraft } from '../../lib/drafts'
@@ -19,6 +19,7 @@ function currentValue(options: Record<string, unknown>): string {
 
 /** 表を, 表, 時系列 (日時の列), 文 (文の列) のどれとして読むかを選ぶ */
 export function ReadAsControl({ source, profile }: { source: Source; profile: Profile }) {
+  const api = useApi()
   const queryClient = useQueryClient()
   const change = useMutation({
     mutationFn: (value: string) => {
