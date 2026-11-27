@@ -201,7 +201,9 @@ describe('StageApp', () => {
   it('選んだ問題の設定から始めると, データの画面へ移り, 同じ値は知らせない', async () => {
     const fetchMock = stubApi()
     const { onProjectChange, onProjectsChange } = renderStage({ project: 'aaaaaaaaaaaa' })
-    fireEvent.click(await screen.findByRole('button', { name: 'この問題の設定から始める' }))
+    // 殻の通しの確かめと同じく, 欄を区域の名前で選ぶ
+    const card = await screen.findByRole('region', { name: '選んだ問題の設定' })
+    fireEvent.click(await within(card).findByRole('button', { name: 'この問題の設定から始める' }))
     await waitFor(() => expect(window.location.pathname).toBe('/data/sources/new'))
     const start = fetchMock.mock.calls.find(
       ([input]) => String(input) === '/api/data/problems/start',

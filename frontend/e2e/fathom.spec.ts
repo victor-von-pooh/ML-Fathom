@@ -135,9 +135,7 @@ test('グループと時刻の組とグループの層化で分け, 使えない
   ).toBeVisible()
   await expect(page.getByText(/stratified_group/).first()).toBeVisible({ timeout: 20_000 })
   // 欄と誤りの文は左のカードの中に収まる (長い選択肢でもはみ出さない)
-  const card = page
-    .locator('section')
-    .filter({ has: page.getByRole('heading', { name: '目的と分割' }) })
+  const card = page.getByRole('region', { name: '目的と分割' })
   const cardBox = (await card.boundingBox())!
   for (const target of [split, page.getByRole('combobox', { name: 'グループの列', exact: true })]) {
     const box = (await target.boundingBox())!
@@ -393,18 +391,14 @@ test('音声で中身の手順を分析から作り, 数件で試して前と後
   // 分析 (8000 Hz, 1 チャンネル, 長さの中央値 18 秒) から, 周波数, チャンネル, 長さの順の手順を作る
   await page.getByRole('tab', { name: '前処理と書き出し' }).click()
   await page.getByRole('button', { name: '学習用の配列にする手順を作る' }).click()
-  const steps = page.locator('section', {
-    has: page.getByRole('heading', { name: '中身の手順 (3)' }),
-  })
+  const steps = page.getByRole('region', { name: '中身の手順 (3)' })
   await expect(steps.locator('ol > li code')).toHaveText(['resample', 'mix_channels', 'fix_length'])
   await expect(steps.getByLabel('rate', { exact: true })).toHaveValue('8000')
   await expect(steps.getByLabel('channels', { exact: true })).toHaveValue('1')
   await expect(steps.getByLabel('seconds', { exact: true })).toHaveValue('18')
 
   // 数件で試すと, 選んだ 1 件の前と後の再生と波形が出る
-  const preview = page.locator('section', {
-    has: page.getByRole('heading', { name: '中身の手順の前と後' }),
-  })
+  const preview = page.getByRole('region', { name: '中身の手順の前と後' })
   await preview.getByRole('button', { name: '数件で試す' }).click()
   await expect(preview.getByText(/学習用の .+ 件で当てはめた/)).toBeVisible({ timeout: 20_000 })
   const sounds: Record<string, Buffer> = {}
@@ -469,9 +463,7 @@ test('中身の手順の引数が上限を超えると, 理由を出して試す
   // 周波数を上限 (192000 Hz) より大きくすると, 理由が出て試すと書き出すを押せない
   await page.getByRole('tab', { name: '前処理と書き出し' }).click()
   await page.getByRole('button', { name: '学習用の配列にする手順を作る' }).click()
-  const steps = page.locator('section', {
-    has: page.getByRole('heading', { name: /^中身の手順 \(/ }),
-  })
+  const steps = page.getByRole('region', { name: /^中身の手順 \(/ })
   const rate = steps.getByLabel('rate', { exact: true })
   await rate.fill('200000')
   await rate.blur()
@@ -823,7 +815,7 @@ test('記録した軌跡を登録し, 分布と行動の偏りと守りとエピ
   await expect(page.getByRole('img', { name: '終わり方ごとのエピソードの数' })).toBeVisible()
   await expect(page.getByText('守り付きの評価')).toBeVisible()
   // 表の分析の目的の列と前処理のタブは出さない
-  await expect(page.getByLabel('目的の列')).toHaveCount(0)
+  await expect(page.getByLabel('目的の列', { exact: true })).toHaveCount(0)
   await expect(page.getByRole('tab', { name: '前処理と書き出し' })).toHaveCount(0)
 
   // 観測と行動: 守りで止めた行は行動の欠けに数え, Discrete の行動は値ごとの数を描く
@@ -894,9 +886,7 @@ test('行動を選んだ確率のある軌跡で, 確率の列の欠けと範囲
 
   // 確率の列: 守りで止めた 2 行は欠け, 範囲の外は無い
   await page.getByRole('tab', { name: '観測と行動' }).click()
-  const card = page
-    .locator('section')
-    .filter({ has: page.getByRole('heading', { name: '行動を選んだ確率', exact: true }) })
+  const card = page.getByRole('region', { name: '行動を選んだ確率', exact: true })
   await expect(card.getByText('欠け', { exact: true }).locator('..')).toContainText('2')
   await expect(card.getByText(/^範囲の外/).locator('..')).toContainText('0')
 })
@@ -946,7 +936,7 @@ test('並べるの問題の設定から始め, 反応の表の偏りを見てプ
   await expect(
     page.getByText(/反応の強さ \(qty\) が 0 以下か数でない \d+ 行を除きました/),
   ).toBeVisible()
-  const time = page.locator('section', { has: page.getByRole('heading', { name: '時刻の範囲' }) })
+  const time = page.getByRole('region', { name: '時刻の範囲' })
   await expect(time.getByText('日時')).toBeVisible()
   await expect(time.getByText(/^2025-01-01 \d\d:00:00$/)).toBeVisible()
 
@@ -984,7 +974,7 @@ test('正解の無い表で群を作る列と群の数を選び, 群の要約を
   await expect(fields.getByRole('checkbox', { name: /spend/ })).toBeChecked()
   await expect(fields.getByRole('checkbox', { name: /region/ })).toBeChecked()
   await expect(fields.getByRole('checkbox', { name: /member/ })).not.toBeChecked()
-  await page.getByLabel('群の数').fill('3')
+  await page.getByLabel('群の数', { exact: true }).fill('3')
   await page.getByRole('button', { name: '群を作る' }).click()
 
   // 3 つの群が 40 行ずつで, 種を変えても同じ群になる
@@ -1025,7 +1015,7 @@ test('まとめるの問題の設定から始め, 答えの列で群を作って
   await expect(fields.getByRole('checkbox', { name: /spend/ })).toBeChecked()
   await expect(fields.getByRole('checkbox', { name: /visits/ })).toBeChecked()
   await expect(fields.getByRole('checkbox', { name: /region/ })).not.toBeChecked()
-  await expect(page.getByLabel('群の数')).toHaveValue('3')
+  await expect(page.getByLabel('群の数', { exact: true })).toHaveValue('3')
 
   // 安定性の数え方は答えの「標本を変えて作り直す」で, 骨組みと同じ数え方と添える
   await expect(page.getByText('標本を変えて作り直す')).toBeVisible()
@@ -1066,7 +1056,7 @@ test('まとめるの問題の設定から始め, 答えの列で群を作って
 
   // 群の数を答えと違う値にすると, 変わる点を確かめてから問題の設定に書き戻せる.
   // 書き戻すと答えが欄と同じになり, 知らせが消える
-  await page.getByLabel('群の数').fill('4')
+  await page.getByLabel('群の数', { exact: true }).fill('4')
   await expect(page.getByText(/問題の設定の答えと違います/)).toBeVisible()
   const changes = page.getByRole('region', { name: '書き戻すと変わる点' })
   await expect(changes).toContainText('群の数を 4 に書き戻した', { timeout: 20_000 })
@@ -1075,7 +1065,7 @@ test('まとめるの問題の設定から始め, 答えの列で群を作って
   await expect(page.getByText('問題の設定に書き戻しました.')).toBeVisible({ timeout: 20_000 })
   await expect(page.getByText(/問題の設定の答えと違います/)).toHaveCount(0)
   await expect(page.getByRole('button', { name: '問題の設定に書き戻す' })).toHaveCount(0)
-  await expect(page.getByLabel('群の数')).toHaveValue('4')
+  await expect(page.getByLabel('群の数', { exact: true })).toHaveValue('4')
 })
 
 test('値段を変えた売れ行きの記録で値段と原価と商品を選び, 要約を見て値段を変える判断を書き出す', async ({

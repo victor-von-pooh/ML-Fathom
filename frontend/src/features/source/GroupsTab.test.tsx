@@ -321,7 +321,11 @@ test('答えと同じ選び方なら知らせず, 受け持ちが変わったら
     group: { ...GROUP_PROBLEM.group!, columns: ['spend', 'region'], stability: 'seed' },
   })
   const view = renderLinked()
-  expect(await screen.findByRole('button', { name: 'プロジェクトへ書き出す' })).toBeEnabled()
+  // 書き出しの欄は見出しの名前の区域で選べる
+  const exportCard = await screen.findByRole('region', { name: 'プロジェクトへ書き出す' })
+  expect(
+    await within(exportCard).findByRole('button', { name: 'プロジェクトへ書き出す' }),
+  ).toBeEnabled()
   expect(screen.queryByText(/問題の設定の答えと違います/)).not.toBeInTheDocument()
   expect(screen.queryByText(/ここの調整ランド指数も骨組みと同じく/)).not.toBeInTheDocument()
   // 種を変えるの答えなら, 種を変えて数える
