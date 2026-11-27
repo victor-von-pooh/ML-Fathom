@@ -53,10 +53,10 @@ from ml_fathom.reactions import (
     rank_answers,
     read_reactions,
 )
-from ml_fathom.settings import get_problems_dir
 from ml_fathom.uplift import UPLIFT_KINDS
 
-router = APIRouter(prefix="/api")
+# 頭なしの router (頭は mount する側が決める)
+router = APIRouter()
 
 # 問題の設定のファイルを読めないときの例外
 READ_ERRORS = (OSError, ValueError, yaml.YAMLError)
@@ -1813,13 +1813,14 @@ def updated_of(entry: dict[str, Any]) -> str:
 
 
 @router.get("/problems")
-def list_problems() -> dict[str, Any]:
+def list_problems(request: Request) -> dict[str, Any]:
     """
     ML-Pathfinder の置き場にある問題の設定の一覧を返す関数
 
     Parameters
     ----------
-    None
+    request: Request
+        リクエスト (request.app.state.problems_dir が問題の設定の置き場)
 
     Returns
     ----------
@@ -1828,7 +1829,7 @@ def list_problems() -> dict[str, Any]:
         error (置き場を読めない場合の理由)
     """
     # problems/<識別子>/problem.yaml (置き場が無ければ空)
-    root = get_problems_dir()
+    root: Path = request.app.state.problems_dir
     files: list[Path] = []
     error = None
     try:

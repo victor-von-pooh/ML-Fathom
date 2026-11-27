@@ -7,7 +7,8 @@ from pydantic import BaseModel, ConfigDict, Field
 from ml_fathom.api import find_source, load_source
 from ml_fathom.jsonable import to_json
 
-router = APIRouter(prefix="/api")
+# 頭なしの router (頭は mount する側が決める)
+router = APIRouter()
 
 # 需要の記録の要約を求められるデータの種類 (ML-EDA の describe_demand と需要
 # の予測が読むもの. 日時の列を見つけた表も中身は表なので timeseries も)
