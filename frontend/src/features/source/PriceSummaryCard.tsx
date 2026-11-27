@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 
-import { api } from '../../api/client'
+import { useApi } from '../../api/client'
 import type { PriceRequest, Recipe } from '../../api/types'
 import { Card, ErrorBox, Spinner } from '../../components/ui'
 import { formatNumber, formatPercent } from '../../lib/format'
@@ -46,6 +46,7 @@ function Num({ value }: { value: unknown }) {
  * 他の列の関わりと気付きを, 読み込んだ元の表で数えて出す
  */
 export function PriceSummaryCard({ sourceId, recipe }: { sourceId: string; recipe: Recipe }) {
+  const api = useApi()
   // 売れた数の列と値段の列を選ぶまでは求めない
   const body: PriceRequest | null =
     recipe.target && recipe.price

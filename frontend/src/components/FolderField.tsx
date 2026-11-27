@@ -2,7 +2,7 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { ArrowUp, Folder, Home } from 'lucide-react'
 import { useId, useState } from 'react'
 
-import { api } from '../api/client'
+import { useApi } from '../api/client'
 import { Dialog } from './Dialog'
 import { Button, ErrorBox, Spinner } from './ui'
 
@@ -18,6 +18,7 @@ function FolderDialog({
   onPick: (path: string) => void
   onClose: () => void
 }) {
+  const api = useApi()
   const [dir, setDir] = useState(start || '~')
   // 開けないディレクトリの後も, 前の一覧と「上へ」を使えるように
   const listing = useQuery({

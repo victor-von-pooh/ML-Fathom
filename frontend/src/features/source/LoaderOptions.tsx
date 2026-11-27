@@ -2,7 +2,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Settings2 } from 'lucide-react'
 import { useId, useRef, useState } from 'react'
 
-import { api } from '../../api/client'
+import { useApi } from '../../api/client'
 import type { LoaderInfo, Source } from '../../api/types'
 import { Button, ErrorBox } from '../../components/ui'
 import { clearDraft } from '../../lib/drafts'
@@ -80,6 +80,7 @@ export function LoaderOptions({
   /** Excel のシートの名前 (分析の概要から. 数の名前のシートを番号と取り違えない) */
   sheets?: string[]
 }) {
+  const api = useApi()
   const queryClient = useQueryClient()
   const id = useId()
   const box = useRef<HTMLDivElement>(null)

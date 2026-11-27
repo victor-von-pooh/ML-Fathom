@@ -3,7 +3,7 @@ import { Upload } from 'lucide-react'
 import { useEffect, useState, type ReactNode } from 'react'
 import { Link, useSearchParams } from 'react-router'
 
-import { api, ApiError } from '../../api/client'
+import { ApiError, useApi } from '../../api/client'
 import type {
   PairExportBase,
   ExportNotice,
@@ -401,6 +401,7 @@ function initialDrafts(form: keyof PairSteps, draft: PairSettings | undefined): 
 
 /** 選べる中身の手順 (ML-EDA の登録簿を項目の種類で絞ったもの) を読む */
 function usePairSteps(): PairSteps | undefined {
+  const api = useApi()
   const info = useQuery({ queryKey: ['info'], queryFn: api.info, staleTime: Infinity })
   return info.data?.pair_steps
 }
@@ -649,6 +650,7 @@ function linkedErrors(errors: string[], linked: Linked | undefined): string[] {
 
 /** 画像と領域の対の書き出し */
 function ImageMasksForm({ linked }: { linked?: Linked }) {
+  const api = useApi()
   const client = useQueryClient()
   const draft = linked?.pairs.export
   const [images, setImages] = useState(draft?.inputs ?? '')
@@ -774,6 +776,7 @@ function ImageMasksForm({ linked }: { linked?: Linked }) {
 
 /** 多視点の撮影と正解の点群の対の書き出し */
 function CaptureCloudsForm({ linked }: { linked?: Linked }) {
+  const api = useApi()
   const client = useQueryClient()
   const draft = linked?.pairs.export
   const [captures, setCaptures] = useState(draft?.inputs ?? '')
@@ -893,6 +896,7 @@ function CaptureCloudsForm({ linked }: { linked?: Linked }) {
  * 問題の設定から始めた書き出し. 問題の設定を読み直し, 正解の種類の欄だけを下書きで埋めて出す
  */
 function ProblemPairsView({ path }: { path: string }) {
+  const api = useApi()
   const client = useQueryClient()
   const pairs = useQuery({
     queryKey: ['problem-pairs', path],

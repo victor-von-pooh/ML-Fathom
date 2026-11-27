@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import clsx from 'clsx'
 import { useState } from 'react'
 
-import { api } from '../../api/client'
+import { useApi } from '../../api/client'
 import type { CaptureItem } from '../../api/types'
 import { Button, ErrorBox, Spinner } from '../../components/ui'
 import { MAP, gapPath } from '../../lib/orbit'
@@ -86,6 +86,7 @@ function OrbitMap({ layout }: { layout: CaptureItem['layout'] }) {
 
 /** 撮影の点群を読んで 3D で描く */
 function CaptureCloud({ sourceId, index }: { sourceId: string; index: number }) {
+  const api = useApi()
   const cloud = useQuery({
     queryKey: ['capture-cloud', sourceId, index],
     queryFn: () => api.captureCloud(sourceId, index),
@@ -97,6 +98,7 @@ function CaptureCloud({ sourceId, index }: { sourceId: string; index: number }) 
 
 /** 多視点の撮影の 1 件 (配置, 各枚の画像と深度と信頼度, 点群) */
 export function CaptureView({ sourceId, index }: { sourceId: string; index: number }) {
+  const api = useApi()
   const [layer, setLayer] = useState<Layer>('image')
   // 点群を開いた撮影 (別の撮影を選んだら閉じる. 層の選び方は比べられるように残す)
   const [cloudFor, setCloudFor] = useState<number | null>(null)

@@ -3,7 +3,7 @@ import { Download, Info } from 'lucide-react'
 import { useMemo, type ReactNode } from 'react'
 import { Link, useSearchParams } from 'react-router'
 
-import { api } from '../../api/client'
+import { useApi } from '../../api/client'
 import type {
   Source,
   TrajectoryElement,
@@ -400,6 +400,7 @@ function EpisodesPanel({ summary }: { summary: TrajectorySummary }) {
 
 /** 記録した軌跡の分析 (ML-EDA の describe_trajectory) */
 export function TrajectoryView({ source }: { source: Source }) {
+  const api = useApi()
   const [search, setSearch] = useSearchParams()
   const summary = useQuery({
     queryKey: ['trajectory', source.id],

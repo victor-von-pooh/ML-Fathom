@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { FolderOutput } from 'lucide-react'
 
-import { api, ApiError } from '../../api/client'
+import { ApiError, useApi } from '../../api/client'
 import type { Recipe } from '../../api/types'
 import { Button, ErrorBox, Spinner } from '../../components/ui'
 import { anomalyOf, demandOf, priceOf, upliftOf } from '../../lib/recipe'
@@ -29,6 +29,7 @@ export function ProjectExport({
   /** 書き出せない理由を並べた要素の id (理由があれば押せない) */
   reasons?: string
 }) {
+  const api = useApi()
   const queryClient = useQueryClient()
   const place = useQuery({
     queryKey: ['project', sourceId],

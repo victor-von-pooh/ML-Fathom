@@ -4,7 +4,7 @@ import { ClipboardList } from 'lucide-react'
 import { useId, useState } from 'react'
 import { Link } from 'react-router'
 
-import { api, ApiError } from '../../api/client'
+import { ApiError, useApi } from '../../api/client'
 import type { GroupProblem, ProblemFinding, Recipe } from '../../api/types'
 import { Button, Card, ErrorBox, Spinner } from '../../components/ui'
 
@@ -44,6 +44,7 @@ export function ProblemCard({
   paused?: boolean
   onWritten: (recipe: Recipe) => void
 }) {
+  const api = useApi()
   const queryClient = useQueryClient()
   const idBase = useId()
   const [picked, setPicked] = useState<Record<string, 'known' | 'drop'>>({})

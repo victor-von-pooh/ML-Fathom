@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { CircleHelp } from 'lucide-react'
 
-import { api } from '../../api/client'
+import { useApi } from '../../api/client'
 import type { Recipe } from '../../api/types'
 import { Button, Card, ErrorBox } from '../../components/ui'
 import type { Decision, DecisionChoice } from '../../lib/decisions'
@@ -19,6 +19,7 @@ export function DecisionsCard({
   onRecipe: (recipe: Recipe) => void
   onDecide: (id: string) => void
 }) {
+  const api = useApi()
   const queryClient = useQueryClient()
   // 読み方と目的の列はデータの設定を変える (読み方を変えると分析をやり直す)
   const source = useMutation({

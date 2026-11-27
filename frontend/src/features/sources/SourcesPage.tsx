@@ -3,18 +3,95 @@ import { AlertTriangle, ClipboardList, FolderSearch, Plus, Sparkles, Trash2 } fr
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router'
 
-import { api } from '../../api/client'
+import { useApi } from '../../api/client'
+import type { ProblemStarted, Source } from '../../api/types'
 import { clearDraft } from '../../lib/drafts'
 import { Button, Card, EmptyState, ErrorBox, PageHeader, Spinner } from '../../components/ui'
 import { KIND_LABELS } from '../../lib/format'
+import { problemIdOf, useStage } from '../../lib/stage'
 import { AddSourceDialog } from './AddSourceDialog'
+import { useStartFromProblem } from './useStartFromProblem'
+
+/**
+ * 殻で選んだ問題の設定の欄. 名前と「この問題の設定から始める」を出す.
+ * 始められなければ理由を, 置き場に無ければ無いと出す
+ */
+function ProjectProblem({
+  project,
+  onAdded,
+}: {
+  project: string
+  onAdded: (source: Source, tab?: ProblemStarted['tab']) => void
+}) {
+  const api = useApi()
+  const problems = useQuery({ queryKey: ['problems'], queryFn: api.problems })
+  const start = useStartFromProblem({ onAdded })
+  const item = problems.data?.problems.find((entry) => problemIdOf(entry.path) === project)
+  return (
+    <Card title="選んだ問題の設定" className="mb-4">
+      {problems.isPending && <Spinner />}
+      {problems.error && <ErrorBox error={problems.error} live={false} />}
+      {problems.data?.error && <p className="text-sm text-critical-text">{problems.data.error}</p>}
+      {problems.data && !problems.data.error && !item && (
+        <p className="text-sm text-critical-text">
+          問題の設定 <span className="font-mono">{project}</span> は置き場 (
+          <span className="font-mono">{problems.data.root}</span>) にありません.
+        </p>
+      )}
+      {item && (
+        <div className="flex flex-wrap items-center gap-3">
+          <ClipboardList size={16} className="shrink-0 text-accent" aria-hidden />
+          <div className="min-w-0 flex-1">
+            <div className="truncate font-semibold">{item.name}</div>
+            <div className="truncate font-mono text-xs text-ink-3" title={item.path}>
+              {item.path}
+            </div>
+            {item.reason && <p className="text-sm text-warning-text">{item.reason}</p>}
+          </div>
+          {item.startable && (
+            <Button
+              variant="primary"
+              disabled={start.isPending}
+              onClick={() => start.mutate(item.path)}
+            >
+              {start.isPending ? '読み込み中…' : 'この問題の設定から始める'}
+            </Button>
+          )}
+        </div>
+      )}
+      {start.error && (
+        <div className="mt-3">
+          <ErrorBox error={start.error} />
+        </div>
+      )}
+    </Card>
+  )
+}
 
 /** 登録したデータの一覧 */
 export function SourcesPage() {
+  const api = useApi()
   const sources = useQuery({ queryKey: ['sources'], queryFn: api.listSources })
   const [adding, setAdding] = useState<'data' | 'problem' | null>(null)
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const { project } = useStage()
+  // 殻で問題の設定を選んでいれば, そこから始めたデータに絞る (外すと全てを出す). 外したのは
+  // そのときの問題の設定だけ (殻で選び直したら, また絞るため)
+  const [allFor, setAllFor] = useState<string | null>(null)
+  const showAll = project !== null && allFor === project
+  const filtered = project !== null && !showAll
+  const shown = filtered
+    ? sources.data?.filter(
+        (source) => source.problem != null && problemIdOf(source.problem) === project,
+      )
+    : sources.data
+  // 登録したら一覧を読み直して, そのデータの画面 (開くタブがあればそのタブ) へ
+  const added = (source: Source, tab?: ProblemStarted['tab']) => {
+    void queryClient.invalidateQueries({ queryKey: ['sources'] })
+    setAdding(null)
+    void navigate(`/sources/${source.id}${tab ? `?tab=${tab}` : ''}`)
+  }
   // 途中で失敗しても登録できた分を一覧に出すため, 成否によらず読み直す
   const samples = useMutation({
     mutationFn: api.addSamples,
@@ -49,6 +126,17 @@ export function SourcesPage() {
           </>
         }
       />
+      {project !== null && <ProjectProblem project={project} onAdded={added} />}
+      {project !== null && (
+        <label className="mb-3 flex items-center gap-2 text-sm text-ink-2">
+          <input
+            type="checkbox"
+            checked={showAll}
+            onChange={(event) => setAllFor(event.target.checked ? project : null)}
+          />
+          全てのデータを出す (選んだ問題の設定から始めていないものも)
+        </label>
+      )}
       {sources.isPending && <Spinner />}
       {sources.error && <ErrorBox error={sources.error} />}
       {samples.error && <ErrorBox error={samples.error} />}
@@ -65,8 +153,14 @@ export function SourcesPage() {
           点群の見本を登録できます
         </EmptyState>
       )}
+      {filtered && sources.data && sources.data.length > 0 && shown?.length === 0 && (
+        <p className="mb-3 text-sm text-ink-3">
+          選んだ問題の設定から始めたデータはまだありません. 「この問題の設定から始める」で始めるか,
+          「全てのデータを出す」で他のデータを開けます.
+        </p>
+      )}
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-        {sources.data?.map((source) => (
+        {shown?.map((source) => (
           <Card key={source.id} className="relative">
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
@@ -109,17 +203,7 @@ export function SourcesPage() {
           </Card>
         ))}
       </div>
-      {adding && (
-        <AddSourceDialog
-          mode={adding}
-          onClose={() => setAdding(null)}
-          onAdded={(source, tab) => {
-            void queryClient.invalidateQueries({ queryKey: ['sources'] })
-            setAdding(null)
-            void navigate(`/sources/${source.id}${tab ? `?tab=${tab}` : ''}`)
-          }}
-        />
-      )}
+      {adding && <AddSourceDialog mode={adding} onClose={() => setAdding(null)} onAdded={added} />}
     </>
   )
 }
