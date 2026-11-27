@@ -27,7 +27,6 @@ from ml_fathom.items import (
 )
 from ml_fathom.jsonable import to_json
 from ml_fathom.samples import sample_target, write_samples
-from ml_fathom.settings import get_problems_dir
 from ml_fathom.store import SourceStore
 from ml_fathom.trajectories import (
     TRAJECTORY_KIND,
@@ -38,7 +37,8 @@ from ml_fathom.trajectories import (
     trajectory_files,
 )
 
-router = APIRouter(prefix="/api")
+# 頭なしの router (頭は mount する側が決める)
+router = APIRouter()
 
 # 見本を書いて登録する処理を 1 つずつにする鍵
 SAMPLES_LOCK = threading.Lock()
@@ -1536,14 +1536,15 @@ def model_hints(
     return hints
 
 
-def problem_datasets() -> list[tuple[Path, str]]:
+def problem_datasets(root: Path) -> list[tuple[Path, str]]:
     """
     ML-Pathfinder の置き場の問題の設定から, プロジェクトの記録の書き出し先
     を集める関数
 
     Parameters
     ----------
-    None
+    root: Path
+        問題の設定の置き場 (problems)
 
     Returns
     ----------
@@ -1553,7 +1554,6 @@ def problem_datasets() -> list[tuple[Path, str]]:
     """
     # problems/<識別子>/problem.yaml (置き場が無いか読めなければ空)
     places: list[tuple[Path, str]] = []
-    root = get_problems_dir()
     try:
         files = sorted(root.glob("*/problem.yaml")) if root.is_dir() else []
     except OSError:
@@ -1607,8 +1607,9 @@ def list_datasets(request: Request) -> list[dict[str, Any]]:
             places.append(
                 (Path(written), str(source.get("name") or ""), "source")
             )
+    problems_dir: Path = request.app.state.problems_dir
     places += [(place, name, "problem")
-               for place, name in problem_datasets()]
+               for place, name in problem_datasets(problems_dir)]
     datasets = []
     seen: set[str] = set()
     for place, project, origin in places:

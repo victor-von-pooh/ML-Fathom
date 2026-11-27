@@ -7,7 +7,8 @@ from pydantic import BaseModel, ConfigDict, Field
 from ml_fathom.api import find_source, load_source
 from ml_fathom.jsonable import to_json
 
-router = APIRouter(prefix="/api")
+# 頭なしの router (頭は mount する側が決める)
+router = APIRouter()
 
 # 値段を変えた記録の要約を求め, 値段を変える判断の問題の設定から始められる
 # データの種類 (ML-EDA の describe_price と値段を変える判断が読むもの. 日時

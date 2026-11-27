@@ -13,7 +13,8 @@ from ml_fathom.api import (
 )
 from ml_fathom.jsonable import to_json
 
-router = APIRouter(prefix="/api")
+# 頭なしの router (頭は mount する側が決める)
+router = APIRouter()
 
 # 画面から作れる群の数の上限 (k-means を置き方を変えて繰り返し, 作り直して
 # 安定性も数えるので, 大きな数で手元の計算機を長く使わないように. 画面の

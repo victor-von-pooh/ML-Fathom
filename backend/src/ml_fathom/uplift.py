@@ -7,7 +7,8 @@ from pydantic import BaseModel, ConfigDict, Field
 from ml_fathom.api import find_source, load_source
 from ml_fathom.jsonable import to_json
 
-router = APIRouter(prefix="/api")
+# 頭なしの router (頭は mount する側が決める)
+router = APIRouter()
 
 # 介入の記録の要約を求め, 効果の見積もりの問題の設定から始められるデータ
 # の種類 (ML-EDA の describe_uplift と効果を見積もるが読むもの. 日時の列を
