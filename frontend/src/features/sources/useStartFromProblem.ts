@@ -27,10 +27,11 @@ export function useStartFromProblem({
   return useMutation({
     mutationFn: (path: string) => api.startFromProblem(path),
     onSuccess: (result) => {
-      // 置き場にある問題の設定だけを知らせ, 殻の選びと同じなら知らせない (行き来し続けないため)
+      // 置き場にある問題の設定だけを (場所で比べて) 知らせ, 殻の選びと同じなら知らせない
+      // (行き来し続けないため)
       const id = problemIdOf(result.problem)
       const stored = queryClient.getQueryData<ProblemList>(['problems'])
-      const known = stored?.problems.some((item) => problemIdOf(item.path) === id) ?? false
+      const known = stored?.problems.some((item) => item.path === result.problem) ?? false
       if (id !== null && known && id !== project) onProjectChange(id)
       if (result.source) {
         onAdded(result.source, result.tab)

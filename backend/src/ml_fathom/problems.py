@@ -1828,11 +1828,13 @@ def list_problems(request: Request) -> dict[str, Any]:
         root (置き場の problems), problems (更新の新しい順の 1 件の並び),
         error (置き場を読めない場合の理由)
     """
-    # problems/<識別子>/problem.yaml (置き場が無ければ空)
+    # problems/<識別子>/problem.yaml (置き場が無ければ空). 始めたときの場所
+    # (problem_file) と比べられるように, 置き場は実際のパスにする
     root: Path = request.app.state.problems_dir
     files: list[Path] = []
     error = None
     try:
+        root = root.resolve()
         if root.is_dir():
             files = [
                 child / "problem.yaml" for child in sorted(root.iterdir())

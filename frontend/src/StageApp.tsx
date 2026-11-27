@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { BrowserRouter, useNavigate } from 'react-router'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { BrowserRouter, useLocation, useNavigate } from 'react-router'
 
 import { App } from './App'
 import { ApiContext, ApiError, createApi } from './api/client'
@@ -40,7 +40,7 @@ function makeQueryClient(): QueryClient {
  * 殻が project を替えたら, データの一覧に移す
  *
  * 最初に受け取った値と, 部品が知らせた値が返ってきたときは移さない (開いた URL と,
- * 始めた後のデータの画面に留まるため)
+ * 始めた後のデータの画面に留まるため). 既に一覧にいれば移さない (履歴を増やさないため)
  */
 function FollowProject({
   project,
@@ -51,6 +51,12 @@ function FollowProject({
   reportedBack: (project: string | null) => boolean
 }) {
   const navigate = useNavigate()
+  const { pathname } = useLocation()
+  // 経路は移動のたびに変わるので, 移すかを決めるときだけ読む
+  const path = useRef(pathname)
+  useLayoutEffect(() => {
+    path.current = pathname
+  }, [pathname])
   // 前に合わせた値 (undefined はまだ合わせていない. StrictMode の 2 度の実行でも 1 度だけ移す)
   const followed = useRef<string | null | undefined>(undefined)
   useEffect(() => {
@@ -58,7 +64,7 @@ function FollowProject({
     const first = followed.current === undefined
     followed.current = project
     const own = reportedBack(project)
-    if (first || own) return
+    if (first || own || path.current === '/') return
     void navigate('/')
   }, [project, reportedBack, navigate])
   return null

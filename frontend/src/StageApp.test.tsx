@@ -57,7 +57,8 @@ const PROBLEMS: ProblemList = {
 const LISTING: Listing = { path: '/home/user', parent: null, home: '/home/user', entries: [] }
 
 /** API の頭 `/api/data` の下だけに答える fetch (他の場所を呼べば 404) */
-function stubApi() {
+/** 始めた場所を差し替えると, 置き場の外の写しから始めた形になる */
+function stubApi(startedAt?: string) {
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input)
     const method = init?.method ?? 'GET'
@@ -72,7 +73,7 @@ function stubApi() {
       return Response.json(
         {
           source: { ...sourceOf('new', '始めたデータ', id) },
-          problem,
+          problem: startedAt ?? problem,
           form: null,
           notes: [],
           tab: null,
@@ -224,6 +225,19 @@ describe('StageApp', () => {
     await waitFor(() => expect(window.location.pathname).toBe('/data/sources/new'))
   })
 
+  it('置き場の外の同じ名前の写しから始めても知らせない', async () => {
+    stubApi('/backup/bbbbbbbbbbbb/problem.yaml')
+    const { onProjectChange } = renderStage({ project: 'aaaaaaaaaaaa' })
+    fireEvent.click(await screen.findByRole('button', { name: '問題の設定から始める' }))
+    const dialog = await screen.findByRole('dialog', { hidden: true })
+    fireEvent.click(await within(dialog).findByRole('button', { name: /解約の予測/, hidden: true }))
+    fireEvent.click(
+      within(dialog).getByRole('button', { name: 'この問題の設定から始める', hidden: true }),
+    )
+    await waitFor(() => expect(window.location.pathname).toBe('/data/sources/new'))
+    expect(onProjectChange).not.toHaveBeenCalled()
+  })
+
   it('殻が project を替えると, データの一覧へ移る', async () => {
     stubApi()
     window.history.replaceState(null, '', '/data/datasets')
@@ -242,6 +256,26 @@ describe('StageApp', () => {
     )
     await waitFor(() => expect(window.location.pathname).toBe('/data'))
     expect(await screen.findByText('解約の予測')).toBeInTheDocument()
+
+    // 全てを出した印は選び直すと外れ, 一覧にいれば移さない (履歴を増やさない)
+    fireEvent.click(screen.getByRole('checkbox', { name: /全てのデータを出す/ }))
+    expect(screen.getByRole('checkbox', { name: /全てのデータを出す/ })).toBeChecked()
+    const length = window.history.length
+    rerender(
+      <StageApp
+        basename="/data"
+        apiBase="/api/data"
+        project="aaaaaaaaaaaa"
+        onProjectChange={() => {}}
+        onProjectsChange={() => {}}
+        embedded
+      />,
+    )
+    await waitFor(() =>
+      expect(screen.getByRole('checkbox', { name: /全てのデータを出す/ })).not.toBeChecked(),
+    )
+    expect(window.history.length).toBe(length)
+    expect(window.location.pathname).toBe('/data')
   })
 
   it('単独では名前と明暗の切り替えを出し, 絞らない', async () => {

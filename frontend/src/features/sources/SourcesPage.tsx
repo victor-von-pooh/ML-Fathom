@@ -76,8 +76,10 @@ export function SourcesPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { project } = useStage()
-  // 殻で問題の設定を選んでいれば, そこから始めたデータに絞る (外すと全てを出す)
-  const [showAll, setShowAll] = useState(false)
+  // 殻で問題の設定を選んでいれば, そこから始めたデータに絞る (外すと全てを出す). 外したのは
+  // そのときの問題の設定だけ (殻で選び直したら, また絞るため)
+  const [allFor, setAllFor] = useState<string | null>(null)
+  const showAll = project !== null && allFor === project
   const filtered = project !== null && !showAll
   const shown = filtered
     ? sources.data?.filter(
@@ -130,7 +132,7 @@ export function SourcesPage() {
           <input
             type="checkbox"
             checked={showAll}
-            onChange={(event) => setShowAll(event.target.checked)}
+            onChange={(event) => setAllFor(event.target.checked ? project : null)}
           />
           全てのデータを出す (選んだ問題の設定から始めていないものも)
         </label>
