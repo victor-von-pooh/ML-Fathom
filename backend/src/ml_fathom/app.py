@@ -122,7 +122,9 @@ async def check_token(
     # 手元のファイルを読めるので, 同じ端末の他の利用者からも使えないように確認
     token: str = request.app.state.token
     path = request.url.path
-    if path.startswith(API_PREFIX) and path != AUTH_PATH:
+    # トークンを受け取る GET /api/auth だけを除く (他のメソッドは確かめる)
+    opening = path == AUTH_PATH and request.method == "GET"
+    if path.startswith(API_PREFIX) and not opening:
         given = [
             request.cookies.get(cookie_name(token), ""),
             request.headers.get("x-fathom-token", "")
