@@ -63,6 +63,7 @@ function ProjectRow({ item }: { item: DatasetSummary }) {
 function TableCard({ item }: { item: TableDataset }) {
   return (
     <Card
+      landmark={false}
       title={<span className="font-mono">{item.name}</span>}
       actions={
         <span className="flex gap-1">
@@ -135,6 +136,7 @@ function ItemsCard({ item }: { item: ItemsDataset }) {
   const grouped = item.role === 'group'
   return (
     <Card
+      landmark={false}
       title={<span className="font-mono">{item.name}</span>}
       actions={
         <span className="flex gap-1">
@@ -248,6 +250,7 @@ function ItemsCard({ item }: { item: ItemsDataset }) {
 function UnreadableCard({ item }: { item: UnreadableDataset }) {
   return (
     <Card
+      landmark={false}
       title={<span className="font-mono">{item.name}</span>}
       actions={
         <span className="flex items-center gap-1 text-xs text-critical-text">
