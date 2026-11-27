@@ -238,6 +238,10 @@ test('版 3 は項目と中身の手順と出どころ, 版 1 は表, 知らな�
   const future = within(screen.getByText('future').closest('section')!)
   expect(future.getByText('読めない版')).toBeInTheDocument()
   expect(future.getByText(/読める版 \(1, 2, 3\) ではありません/)).toBeInTheDocument()
+
+  // データセットごとの欄は数が決まらないので区域にせず, 見出しは h2 のまま
+  expect(screen.queryByRole('region')).toBeNull()
+  expect(screen.getByRole('heading', { level: 2, name: 'people' })).toBeInTheDocument()
 })
 
 test('群分けの表は正解なしと列の項目を出し, 正解の出どころを出さない', async () => {
