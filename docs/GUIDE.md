@@ -286,7 +286,7 @@ item = train[0]                         # {"id", "split", "group", "image", "mas
 paths = dataset.split("train", read=False)[0]   # 配列の代わりに場所
 ```
 
-学習の環境に ML-EDA を入れる方法は ML-EDA の README を参照. 表や画像のデータセット (版 1) は `load_dataset` で, ファイルの組のデータセットは `load_items` で読み, ML-Found の学習スクリプトがそのまま使う.
+学習の環境に ML-EDA を入れる方法は ML-EDA の README を参照. 読んだデータセットは前処理済みなので, ML-Found のプロジェクトの学習のスクリプトにそのまま渡せる.
 
 ## 9. 自分のデータを入れる
 
