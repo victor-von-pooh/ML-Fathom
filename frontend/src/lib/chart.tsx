@@ -23,14 +23,19 @@ function mergeOption(
   return merged
 }
 
-/** ECharts のグラフ. option を変えると描き直し, 大きさの変化に合わせる */
+/**
+ * ECharts のグラフ. option を変えると描き直し, 大きさの変化に合わせる
+ *
+ * CSS の変数 (`cssVar`) から色を読む設定は, option を設定を返す関数で渡す. 関数は描く時
+ * (明暗の html のクラスを替えた後) に呼ぶので, 切り替えた後は新しい色で描き直す
+ */
 export function Chart({
   option,
   height = 240,
   label,
   onClick,
 }: {
-  option: echarts.EChartsOption
+  option: echarts.EChartsOption | (() => echarts.EChartsOption)
   height?: number
   label: string
   onClick?: (params: echarts.ECElementEvent) => void
@@ -53,9 +58,11 @@ export function Chart({
     }
   }, [])
 
-  // 設定 (と明るさ) が変わったら描き直す
+  // 設定 (と明るさ) が変わったら描き直す. 色は描画の中でなくここで読む (単独では描画の
+  // 後に html のクラスを替えるため)
   useEffect(() => {
-    chart.current?.setOption(mergeOption(baseOption(), option), { notMerge: true })
+    const own = typeof option === 'function' ? option() : option
+    chart.current?.setOption(mergeOption(baseOption(), own), { notMerge: true })
   }, [option, theme])
 
   // 押したときの処理

@@ -97,6 +97,7 @@ ML-Fathom の今の設計と決まりをまとめる. まだやっていない�
 - 部品は自分のルーター (`BrowserRouter` に `basename`) と TanStack Query の client を持つ (殻に中の作りを出さないため). API の頭は部品の中で 1 度決めて context で渡し, 画面の部品は `useApi()` で呼び出しの一式を取る (呼び出しごとに頭を渡し忘れないため)
 - 画面のソースでは根から始まる絶対パスを使わない. 移動は `Link` と `navigate` で `basename` の下にし, `window.location` を書き換えない (殻の下では根が殻の画面を指すため). `index.html` の `/favicon.svg` は単独の起動のためのもの
 - 明暗は `html` 要素のクラス `dark` と `localStorage` の `theme` で持つ. 単独では切り替えで両方を書き, `index.html` が描画の前に読む. `embedded` では書かずに読むだけにし, `html` のクラスの変化を見て読み直す (殻の切り替えで, CSS の変数から色を読むグラフと点群も描き直すため)
+- CSS の変数 (`cssVar`) から読む色は描画の中で読まず, 描く時 (effect) に読む. グラフの設定で色を読む場合は `Chart` の `option` を設定を返す関数で渡す (単独では描画の後に `html` のクラスを替えるので, 描画の中で読むと切り替えの前の色が残るため)
 - `stage.css` は段階に固有の CSS (Tailwind の読み込みと色のトークン以外. 数の桁をそろえる `.tabular`). 単独では `index.css` が Tailwind と色のトークンと一緒に読む
 
 ### 殻で選んだ問題の設定
