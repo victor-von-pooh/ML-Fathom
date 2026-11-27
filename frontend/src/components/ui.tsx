@@ -2,12 +2,17 @@ import clsx from 'clsx'
 import { AlertTriangle, Loader2, type LucideIcon } from 'lucide-react'
 import {
   useEffect,
+  useId,
   useRef,
   type ButtonHTMLAttributes,
   type KeyboardEvent,
   type ReactNode,
 } from 'react'
 
+/**
+ * 枠で囲んだ欄. 見出し (title) を持つときは, 見出しを名前にした区域 (region) として
+ * 読み上げる (欄を見出しの名前で探せるように). 見出しの無い欄は名前を持たない
+ */
 export function Card({
   title,
   actions,
@@ -21,8 +26,10 @@ export function Card({
   className?: string
   padded?: boolean
 }) {
+  const titleId = useId()
   return (
     <section
+      aria-labelledby={title ? titleId : undefined}
       className={clsx(
         'rounded-xl border border-line bg-surface shadow-sm shadow-black/[0.03]',
         className,
@@ -30,7 +37,9 @@ export function Card({
     >
       {(title || actions) && (
         <header className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-4 py-2.5">
-          <h2 className="text-sm font-semibold text-ink">{title}</h2>
+          <h2 id={titleId} className="text-sm font-semibold text-ink">
+            {title}
+          </h2>
           {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
         </header>
       )}
