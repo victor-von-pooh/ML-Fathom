@@ -28,8 +28,9 @@ export function TimeSeriesTab({ series }: { series: TimeSeriesInfo }) {
     })),
   }
   const acf = series.columns[acfColumn]
-  const acfOption: EChartsOption | null = acf
-    ? {
+  // 周期の棒の色を CSS の変数から読むので, 描く時に呼ぶ関数で渡す
+  const acfOption: (() => EChartsOption) | null = acf
+    ? () => ({
         tooltip: { trigger: 'axis' },
         xAxis: { type: 'category', data: acf.acf.map((_, index) => index + 1), name: 'ずらし幅' },
         yAxis: { type: 'value', min: -1, max: 1 },
@@ -42,7 +43,7 @@ export function TimeSeriesTab({ series }: { series: TimeSeriesInfo }) {
             })),
           },
         ],
-      }
+      })
     : null
   return (
     <div className="space-y-4">

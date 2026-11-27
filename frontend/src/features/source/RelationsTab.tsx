@@ -9,7 +9,7 @@ import { TASK_LABELS } from '../../lib/format'
 import { countsOption } from '../../lib/charts'
 import { Link2 } from 'lucide-react'
 
-/** 正方行列のヒートマップの設定 (-1 から 1 か 0 から 1) */
+/** 正方行列のヒートマップの設定 (-1 から 1 か 0 から 1. 色を CSS の変数から読むので描く時に呼ぶ) */
 function heatmapOption(
   names: string[],
   matrix: (number | null)[][],
@@ -133,7 +133,7 @@ export function RelationsTab({ profile }: { profile: Profile }) {
           <Chart
             label="相関のヒートマップ"
             height={size(correlations.columns.length)}
-            option={heatmapOption(correlations.columns, correlations[method], true)}
+            option={() => heatmapOption(correlations.columns, correlations[method], true)}
           />
         </Card>
       )}
@@ -142,7 +142,7 @@ export function RelationsTab({ profile }: { profile: Profile }) {
           <Chart
             label="カテゴリの列の関連のヒートマップ"
             height={size(associations.columns.length)}
-            option={heatmapOption(associations.columns, associations.cramers_v, false)}
+            option={() => heatmapOption(associations.columns, associations.cramers_v, false)}
           />
         </Card>
       )}
