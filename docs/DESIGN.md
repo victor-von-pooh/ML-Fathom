@@ -101,7 +101,7 @@ API と, 確かめと画面の配信を, 2 つの FastAPI のアプリに分け�
     - 置き場は `app.state.store` (登録したデータ, レシピ, データセット) と `app.state.problems_dir` (ML-Pathfinder の問題の設定の置き場) に持ち, ルートは `request.app.state` から取る. Starlette では mount した sub-app の中の `request.app` は sub-app を指すので, 殻の下でもルートはそのまま動く
     - `data_dir` はこのアプリのデータの置き場 (無ければ既定の置き場. 下の「6. 置き場」). `problems_dir` は問題の設定の置き場. 渡さなければ作ったときの `ML_PATHFINDER_HOME` (無ければ既定) の下の `problems`. 殻は ML-Pathfinder と同じ置き場を渡す
     - 例外ハンドラ, 子プロセス, プロセス全体の登録簿は持たない
-- `create_app(data_dir=None, token=None, allowed_hosts=None)`: 単独で起動するアプリ. 確かめ (トークン, Origin, ホスト名), `/api/auth`, 画面の配信を持つ外側のアプリに, `create_api(data_dir)` を `/api` で mount する. 確かめは外側の middleware なので, mount した API にも効く. `/api/auth` は mount より先に登録し, 画面の配信 (他のパスは index.html) は最後に置く. `/api` ちょうどと `/api/` の下の無いパスは画面でなく 404 を返す
+- `create_app(data_dir=None, token=None, allowed_hosts=None)`: 単独で起動するアプリ. 確かめ (トークン, Origin, ホスト名), `/api/auth`, 画面の配信を持つ外側のアプリに, `create_api(data_dir)` を `/api` で mount する. 確かめは外側の middleware なので, mount した API にも効く. `/api/auth` は mount より先に登録し, 画面の配信 (他のパスは index.html) は最後に置く. `/api` ちょうどと `/api/` の下の無いパスは画面でなく 404 を返す. 仕様の画面 (`/docs`, `/redoc`, `/openapi.json`) は外側のアプリでも閉じる (トークン無しで API の形を見せないため)
 - 仕様の書き出し (`ml-fathom --openapi`) は `create_api` の仕様のパスに `/api` を付けて書き出す (外側のアプリの仕様には mount した API が入らないため)
 - ポートはアプリが持たず, 起動の `ml-fathom --port` (か殻) が決める
 
