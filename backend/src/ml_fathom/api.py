@@ -1103,7 +1103,7 @@ def get_item(
     """
     data = load_source(find_source(request, source_id))
     if not 0 <= index < len(data.frame):
-        raise HTTPException(404, f"{index} 番目の行が見つかりません")
+        raise HTTPException(404, f"行 {index} が見つかりません")
     response = item_response(data, index, size)
 
     return response
@@ -1132,7 +1132,7 @@ def get_item_audio(
     """
     data = load_source(find_source(request, source_id))
     if not 0 <= index < len(data.frame):
-        raise HTTPException(404, f"{index} 番目の行が見つかりません")
+        raise HTTPException(404, f"行 {index} が見つかりません")
     response = audio_response(data, index)
 
     return response
@@ -1206,7 +1206,7 @@ def get_capture_cloud(
     # 撮影のディレクトリの中の点群だけ
     item = capture_of(request, source_id, index)
     if not item.get("point_cloud"):
-        raise HTTPException(404, f"{index} 番目の撮影の点群が見つかりません")
+        raise HTTPException(404, f"撮影の点群 {index} が見つかりません")
     try:
         cloud = ml_eda.read_cloud(Path(item["point_cloud"]))
     except Exception as error:
@@ -1247,7 +1247,7 @@ def capture_of(
     if data.kind != "capture":
         raise HTTPException(422, "多視点の撮影のデータではありません")
     if not 0 <= index < len(data.frame):
-        raise HTTPException(404, f"{index} 番目の行が見つかりません")
+        raise HTTPException(404, f"行 {index} が見つかりません")
     key = f"{source_key(source)}:{index}"
     item: Optional[dict[str, Any]] = CAPTURE_CACHE.get(key)
     if item is not None:

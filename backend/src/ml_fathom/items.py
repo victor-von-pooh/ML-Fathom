@@ -393,7 +393,7 @@ def capture_layer(
     from PIL import Image
 
     if not 0 <= frame < len(item["frames"]):
-        raise HTTPException(404, f"{frame} 枚目のフレームが見つかりません")
+        raise HTTPException(404, f"フレーム {frame} が見つかりません")
     entry = item["frames"][frame]
     place = {
         "image": entry.get("image"),
@@ -402,7 +402,7 @@ def capture_layer(
     }.get(layer)
     if not place:
         raise HTTPException(
-            404, f"{frame} 枚目のフレームの層 {layer} が見つかりません"
+            404, f"フレーム {frame} の層 {layer} が見つかりません"
         )
     if layer == "image":
         array: np.ndarray = read_image(Path(place))

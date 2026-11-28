@@ -907,7 +907,7 @@ function ProblemPairsView({ path }: { path: string }) {
   })
   const [version, setVersion] = useState<string | null>(null)
   if (pairs.isPending) return <Spinner />
-  if (pairs.error) return <ErrorBox error={pairs.error} />
+  if (pairs.error) return <ErrorBox live={false} error={pairs.error} />
   const data = pairs.data
   const linked: Linked = {
     pairs: data,

@@ -18,6 +18,8 @@ test('画面の頭の見出しは段階の名前で, 対話の枠は Esc と外�
   await add.click()
   const dialog = page.getByRole('dialog', { name: 'データを登録' })
   await expect(dialog).toBeVisible()
+  // 開いたときはパスの欄に focus がある
+  await expect(dialog.getByLabel('ディレクトリのパス')).toBeFocused()
   await page.keyboard.press('Escape')
   await expect(dialog).toHaveCount(0)
   await expect(add).toBeFocused()

@@ -1,7 +1,7 @@
 import { keepPreviousData, useMutation, useQuery } from '@tanstack/react-query'
 import clsx from 'clsx'
 import { ArrowUp, ClipboardList, File, Folder, Home } from 'lucide-react'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 
 import { useApi } from '../../api/client'
 import type { ProblemStarted, Source } from '../../api/types'
@@ -101,6 +101,8 @@ export function AddSourceDialog({
   const api = useApi()
   const fromProblem = mode === 'problem'
   const [dir, setDir] = useState('~')
+  // 開いたときはパスの欄に focus を置く (打って移るのが最初の操作のため)
+  const pathRef = useRef<HTMLInputElement>(null)
   const [typed, setTyped] = useState('')
   const [picked, setPicked] = useState<string | null>(null)
   const [loader, setLoader] = useState<string>('')
@@ -136,6 +138,7 @@ export function AddSourceDialog({
       onClose={onClose}
       // 登録か始める途中は閉じない (結果を見せるため)
       busy={add.isPending || start.isPending}
+      initialFocus={pathRef}
     >
       {fromProblem ? (
         <p className="mb-3 text-xs text-ink-2">
@@ -173,6 +176,7 @@ export function AddSourceDialog({
         </label>
         <input
           id="browse-path"
+          ref={pathRef}
           value={typed}
           onChange={(event) => setTyped(event.target.value)}
           placeholder={listing.data?.path ?? '~/data'}

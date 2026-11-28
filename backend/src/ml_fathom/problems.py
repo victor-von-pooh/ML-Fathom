@@ -211,7 +211,7 @@ def problem_file(text: str) -> Path:
             422, f"問題の場所として読めません: {error}"
         ) from error
     if not found:
-        raise HTTPException(404, f"問題の設定 {path} が見つかりません")
+        raise HTTPException(404, f"問題 {path} が見つかりません")
     if path.suffix.lower() not in SUFFIXES:
         raise HTTPException(
             422, f"{path.name} は YAML のファイル (.yaml) ではありません"
@@ -725,7 +725,7 @@ def linked_versioned(
     text = source.get("problem")
     if not isinstance(text, str):
         raise HTTPException(
-            404, f"データ {source_id} の問題の設定が見つかりません"
+            404, f"データ {source_id} は問題から始めたデータではありません"
         )
     path = problem_file(text)
     problem, version = read_problem_bytes(path)

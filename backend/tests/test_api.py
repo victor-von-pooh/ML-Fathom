@@ -357,6 +357,21 @@ def test_not_found_messages(client: TestClient, tmp_path: Path) -> None:
     assert response.json()["detail"] == (
         f"場所 {missing.resolve()} が見つかりません"
     )
+    response = client.get("/api/problems/pairs", params={"path": str(missing)})
+    assert response.status_code == 404
+    assert response.json()["detail"] == (
+        f"問題 {missing.resolve()} が見つかりません"
+    )
+
+    # 問題から始めていないデータの問題の操作
+    table = tmp_path / "plain.csv"
+    pd.DataFrame({"x": [1, 2, 3]}).to_csv(table, index=False)
+    sid = client.post("/api/sources", json={"path": str(table)}).json()["id"]
+    response = client.get(f"/api/sources/{sid}/project")
+    assert response.status_code == 404
+    assert response.json()["detail"] == (
+        f"データ {sid} は問題から始めたデータではありません"
+    )
 
 
 def test_rows_with_nullable_values(

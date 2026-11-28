@@ -1143,7 +1143,7 @@ export function RecipeTab({
           {/* 値段の列は値段の手順だけで, 原価と商品の id の列は落とす手順だけで書ける (ML-EDA は
               他の手順を誤りにする) */}
           {priceErrors.length > 0 && (
-            <ul role="alert" className="mt-2 space-y-1 text-xs text-critical-text">
+            <ul className="mt-2 space-y-1 text-xs text-critical-text">
               {priceErrors.map((message) => (
                 <li key={message}>{message}</li>
               ))}
@@ -1157,7 +1157,7 @@ export function RecipeTab({
           {/* 時間をまたぐ量の判断の lag の書き方と位置, 商品の id と在庫の数の列 (ML-EDA は
               他の書き方を誤りにする) */}
           {demandErrors.length > 0 && (
-            <ul role="alert" className="mt-2 space-y-1 text-xs text-critical-text">
+            <ul className="mt-2 space-y-1 text-xs text-critical-text">
               {demandErrors.map((message) => (
                 <li key={message}>{message}</li>
               ))}
