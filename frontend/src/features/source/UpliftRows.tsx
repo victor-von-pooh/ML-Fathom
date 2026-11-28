@@ -56,15 +56,21 @@ export function UpliftRows({ summary }: { summary: UpliftSplits }) {
                 <th scope="row" className="py-1 pr-3 text-left font-mono font-normal">
                   {splitLabel(split)}
                 </th>
-                <td className="tabular pr-3 text-right font-mono">{formatNumber(rows.treated)}</td>
-                <td className="tabular pr-3 text-right font-mono">{formatNumber(rows.control)}</td>
-                <td className="tabular pr-3 text-right font-mono">
+                <td className="tabular-nums pr-3 text-right font-mono">
+                  {formatNumber(rows.treated)}
+                </td>
+                <td className="tabular-nums pr-3 text-right font-mono">
+                  {formatNumber(rows.control)}
+                </td>
+                <td className="tabular-nums pr-3 text-right font-mono">
                   {formatNumber(rows.treated_mean)}
                 </td>
-                <td className="tabular pr-3 text-right font-mono">
+                <td className="tabular-nums pr-3 text-right font-mono">
                   {formatNumber(rows.control_mean)}
                 </td>
-                <td className="tabular pr-3 text-right font-mono">{formatNumber(rows.effect)}</td>
+                <td className="tabular-nums pr-3 text-right font-mono">
+                  {formatNumber(rows.effect)}
+                </td>
               </tr>
             ))}
           </tbody>

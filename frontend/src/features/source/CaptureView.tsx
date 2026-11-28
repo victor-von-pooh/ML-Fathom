@@ -4,7 +4,7 @@ import { useState } from 'react'
 
 import { useApi } from '../../api/client'
 import type { CaptureItem } from '../../api/types'
-import { Button, ErrorBox, Spinner } from '../../components/ui'
+import { Button, ErrorBox, Spinner } from '../../components/common'
 import { MAP, gapPath } from '../../lib/orbit'
 import { PointCloudView } from './PointCloudView'
 

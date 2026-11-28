@@ -333,9 +333,10 @@ test('他のタスクに変えると, 日付, 在庫の数, 期間と商品の i
 test('分割が時刻の順でなければ誤りを出し, 日付の列が無ければ要約を求めない', async () => {
   const { date: _date, ...rest } = RECIPE
   const demand = renderTab({ ...rest, split: { ...RECIPE.split, method: 'random' } })
-  expect((await screen.findByRole('alert')).textContent).toContain(
-    '時間をまたぐ量の判断の分割は時刻の順だけ',
-  )
+  // 欄の下の誤りは分割の欄から結び, 欄を正しくない値にする
+  const split = await screen.findByLabelText('分割')
+  expect(split).toHaveAttribute('aria-invalid', 'true')
+  expect(split).toHaveAccessibleDescription(new RegExp('時間をまたぐ量の判断の分割は時刻の順だけ'))
   expect(screen.getByText(/商品の id の列と日付の列を選ぶと/)).toBeTruthy()
   expect(demand).not.toHaveBeenCalled()
 })

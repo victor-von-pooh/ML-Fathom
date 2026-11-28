@@ -6,7 +6,7 @@ import { Link, useNavigate } from 'react-router'
 import { useApi } from '../../api/client'
 import type { ProblemStarted, Source } from '../../api/types'
 import { clearDraft } from '../../lib/drafts'
-import { Button, Card, EmptyState, ErrorBox, PageHeader, Spinner } from '../../components/ui'
+import { Button, Card, EmptyState, ErrorBox, PageHeader, Spinner } from '../../components/common'
 import { KIND_LABELS } from '../../lib/format'
 import { problemIdOf, useStage } from '../../lib/stage'
 import { AddSourceDialog } from './AddSourceDialog'
@@ -110,7 +110,7 @@ export function SourcesPage() {
   return (
     <>
       <PageHeader
-        title="データ"
+        title="データの分析"
         subtitle="分析して前処理するデータ. 元のファイルは変えません"
         actions={
           <>
@@ -138,7 +138,7 @@ export function SourcesPage() {
         </label>
       )}
       {sources.isPending && <Spinner />}
-      {sources.error && <ErrorBox error={sources.error} />}
+      {sources.error && <ErrorBox live={false} error={sources.error} />}
       {samples.error && <ErrorBox error={samples.error} />}
       <p role="status" className="mb-3 text-sm text-ink-2 empty:hidden">
         {samples.data &&

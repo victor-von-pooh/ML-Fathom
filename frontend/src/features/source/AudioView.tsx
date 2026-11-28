@@ -4,7 +4,7 @@ import { useState } from 'react'
 
 import { useApi } from '../../api/client'
 import type { AudioItem } from '../../api/types'
-import { ErrorBox, Spinner } from '../../components/ui'
+import { ErrorBox, Spinner } from '../../components/common'
 import { formatNumber } from '../../lib/format'
 import { formatSeconds, WAVE, waveformPath } from '../../lib/waveform'
 

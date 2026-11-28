@@ -2,7 +2,7 @@ import clsx from 'clsx'
 import { useMemo, useState } from 'react'
 
 import type { ColumnInfo, Profile } from '../../api/types'
-import { Card } from '../../components/ui'
+import { Card } from '../../components/common'
 import { Chart } from '../../lib/chart'
 import { countsOption, histogramOption } from '../../lib/charts'
 import { formatNumber, formatPercent, TYPE_LABELS } from '../../lib/format'
@@ -13,7 +13,7 @@ export function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex justify-between gap-3 border-b border-line py-1 text-sm last:border-0">
       <span className="text-ink-3">{label}</span>
-      <span className="tabular font-mono">{value}</span>
+      <span className="tabular-nums font-mono">{value}</span>
     </div>
   )
 }
@@ -62,7 +62,7 @@ function ColumnDetail({
   }
   return (
     <div className="space-y-4">
-      <Card title={<span className="font-mono">{name}</span>}>
+      <Card name="選んだ列" title={<span className="font-mono">{name}</span>}>
         <div className="grid gap-6 lg:grid-cols-[18rem_1fr]">
           <div>
             {stats.map(([label, value]) => (

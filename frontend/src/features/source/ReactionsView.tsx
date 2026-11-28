@@ -4,6 +4,7 @@ import { Link, useSearchParams } from 'react-router'
 
 import { ApiError, useApi } from '../../api/client'
 import type { ReactionCounts, ReactionsResult, ReactionsSummary, Source } from '../../api/types'
+import { tabPanelProps } from '../../components/common-utils'
 import {
   Button,
   Card,
@@ -13,7 +14,7 @@ import {
   StatTile,
   Tabs,
   type TabItem,
-} from '../../components/ui'
+} from '../../components/common'
 import { Chart } from '../../lib/chart'
 import { countsOption } from '../../lib/charts'
 import { formatCount, formatNumber, formatPercent, KIND_LABELS } from '../../lib/format'
@@ -44,7 +45,7 @@ function OverviewPanel({ result }: { result: ReactionsResult }) {
         />
         <StatTile label="並べる件数 (K)" value={formatNumber(result.k)} />
       </div>
-      <Card title={`気付き (${summary.notes.length} 件)`}>
+      <Card name="気付き" title={`気付き (${summary.notes.length} 件)`}>
         <Notes notes={summary.notes} />
       </Card>
       <div className="grid gap-4 xl:grid-cols-2">
@@ -151,7 +152,7 @@ function BiasPanel({ summary }: { summary: ReactionsSummary }) {
                   <th scope="row" className="py-1 text-left font-mono font-normal break-all">
                     {String(row.item)}
                   </th>
-                  <td className="tabular pl-3 text-right font-mono">
+                  <td className="tabular-nums pl-3 text-right font-mono">
                     {formatNumber(row.reactions)}
                   </td>
                 </tr>
@@ -267,7 +268,7 @@ export function ReactionsView({ source }: { source: Source }) {
   return (
     <>
       <PageHeader
-        breadcrumb={<Link to="/">データ</Link>}
+        breadcrumb={<Link to="/">データの分析</Link>}
         title={source.name}
         subtitle={
           <span className="font-mono" title={source.path}>
@@ -287,13 +288,7 @@ export function ReactionsView({ source }: { source: Source }) {
         idBase="reactions"
         label="反応の表の分析"
       />
-      <div
-        id="reactions-panel"
-        role="tabpanel"
-        aria-labelledby={`reactions-tab-${tab}`}
-        tabIndex={0}
-        className="pt-4"
-      >
+      <div {...tabPanelProps('reactions', tab)} tabIndex={0} className="pt-4">
         {tab !== 'data' && tab !== 'export' && result.isPending && (
           <Spinner label="分析しています" />
         )}

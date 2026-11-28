@@ -4,7 +4,7 @@ import { useState } from 'react'
 
 import { useApi } from '../../api/client'
 import type { PointsItem, Profile, Source } from '../../api/types'
-import { Button, Card, ErrorBox, Spinner, StatTile } from '../../components/ui'
+import { Button, Card, ErrorBox, Spinner, StatTile } from '../../components/common'
 import { formatCount, formatNumber } from '../../lib/format'
 import { useDebounced } from '../../lib/useDebounced'
 import { formatSeconds } from '../../lib/waveform'
@@ -267,7 +267,7 @@ export function SamplesTab({ source, profile }: { source: Source; profile: Profi
             return (
               <li key={data.index[at]} className="px-4 py-2 text-sm">
                 <div className="mb-1 flex gap-2 text-xs text-ink-3">
-                  <span className="tabular">#{data.index[at]}</span>
+                  <span className="tabular-nums">#{data.index[at]}</span>
                   {label !== undefined && (
                     <span className="font-semibold text-ink-2">{String(label)}</span>
                   )}
@@ -311,7 +311,10 @@ export function SamplesTab({ source, profile }: { source: Source; profile: Profi
               )
             })}
           </ul>
-          <Card title={selected === null ? '点群を選んでください' : `${selected} 番目の点群`}>
+          <Card
+            name="選んだ点群"
+            title={selected === null ? '点群を選んでください' : `${selected} 番目の点群`}
+          >
             {selected === null ? (
               <p className="text-sm text-ink-3">左の一覧から選ぶと, 3D で表示します.</p>
             ) : (
@@ -356,7 +359,10 @@ export function SamplesTab({ source, profile }: { source: Source; profile: Profi
               )
             })}
           </ul>
-          <Card title={selected === null ? '音声を選んでください' : `${selected} 番目の音声`}>
+          <Card
+            name="選んだ音声"
+            title={selected === null ? '音声を選んでください' : `${selected} 番目の音声`}
+          >
             {selected === null ? (
               <p className="text-sm text-ink-3">
                 左の一覧から選ぶと, 再生できるようにし, 波形を表示します.
@@ -402,7 +408,10 @@ export function SamplesTab({ source, profile }: { source: Source; profile: Profi
               )
             })}
           </ul>
-          <Card title={selected === null ? '撮影を選んでください' : `${selected} 番目の撮影`}>
+          <Card
+            name="選んだ撮影"
+            title={selected === null ? '撮影を選んでください' : `${selected} 番目の撮影`}
+          >
             {selected === null ? (
               <p className="text-sm text-ink-3">
                 左の一覧から選ぶと, 上から見たカメラの配置と各枚の画像を表示します.

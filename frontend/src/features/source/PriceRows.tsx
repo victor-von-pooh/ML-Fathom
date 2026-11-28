@@ -65,7 +65,7 @@ export function PriceRows({ summary }: { summary: PriceSplits }) {
                   rows.units_mean,
                   rows.cost_mean,
                 ].map((value, index) => (
-                  <td key={index} className="tabular pr-3 text-right font-mono">
+                  <td key={index} className="tabular-nums pr-3 text-right font-mono">
                     {formatNumber(value)}
                   </td>
                 ))}

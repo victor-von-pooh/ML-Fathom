@@ -1,6 +1,8 @@
 import clsx from 'clsx'
-import { Database, FolderInput, Moon, Sun, Telescope } from 'lucide-react'
-import { NavLink, Route, Routes } from 'react-router'
+import { Database, FolderInput, Moon, SearchX, Sun, Telescope } from 'lucide-react'
+import { Link, NavLink, Route, Routes } from 'react-router'
+
+import { EmptyState, PageHeader } from './components/common'
 
 import { DatasetsPage } from './features/datasets/DatasetsPage'
 import { PairExportPage } from './features/datasets/PairExportPage'
@@ -30,11 +32,26 @@ function NavItem({ to, icon: Icon, label }: { to: string; icon: typeof Database;
   )
 }
 
+/** 段階の中の知らない経路 (段階の頭の画面へのリンクを出す) */
+function NotFound() {
+  return (
+    <>
+      <PageHeader title="データの分析" />
+      <EmptyState icon={SearchX} title="ページが見つかりません">
+        <Link to="/" className="text-accent-text hover:underline">
+          データの一覧へ戻る
+        </Link>
+      </EmptyState>
+    </>
+  )
+}
+
 export function App() {
   const { theme, toggle } = useTheme()
   const { embedded } = useStage()
   return (
-    <div className="flex h-full">
+    // キーの操作と portal の出し先を, この範囲の中に限る (殻の R9)
+    <div data-stage-root className="flex h-full">
       <a
         href="#main"
         className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:rounded focus:bg-surface focus:px-3 focus:py-2"
@@ -71,7 +88,7 @@ export function App() {
           <Route path="/sources/:id" element={<SourcePage />} />
           <Route path="/datasets" element={<DatasetsPage />} />
           <Route path="/datasets/export" element={<PairExportPage />} />
-          <Route path="*" element={<p className="text-ink-3">ページが見つかりません.</p>} />
+          <Route path="*" element={<NotFound />} />
         </Routes>
       </main>
     </div>

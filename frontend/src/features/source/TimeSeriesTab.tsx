@@ -2,7 +2,7 @@ import type { EChartsOption } from 'echarts'
 import { useState } from 'react'
 
 import type { TimeSeriesInfo } from '../../api/types'
-import { Card, StatTile } from '../../components/ui'
+import { Card, StatTile } from '../../components/common'
 import { Chart } from '../../lib/chart'
 import { cssVar } from '../../lib/chartTheme'
 import { formatInterval } from '../../lib/format'

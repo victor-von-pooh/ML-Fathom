@@ -1,7 +1,7 @@
 import { Plus } from 'lucide-react'
 
 import type { Recipe } from '../../api/types'
-import { Button } from '../../components/ui'
+import { Button } from '../../components/common'
 import {
   DEMAND_HORIZON,
   demandSteps,

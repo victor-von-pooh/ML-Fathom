@@ -211,7 +211,7 @@ def problem_file(text: str) -> Path:
             422, f"問題の場所として読めません: {error}"
         ) from error
     if not found:
-        raise HTTPException(404, f"{path} に問題がありません")
+        raise HTTPException(404, f"問題 {path} が見つかりません")
     if path.suffix.lower() not in SUFFIXES:
         raise HTTPException(
             422, f"{path.name} は YAML のファイル (.yaml) ではありません"
@@ -724,7 +724,9 @@ def linked_versioned(
     source = find_source(request, source_id)
     text = source.get("problem")
     if not isinstance(text, str):
-        raise HTTPException(404, "問題から始めたデータではありません")
+        raise HTTPException(
+            404, f"データ {source_id} は問題から始めたデータではありません"
+        )
     path = problem_file(text)
     problem, version = read_problem_bytes(path)
     created = source.get("problem_created")
@@ -895,7 +897,7 @@ def start_from_problem(
     # レシピを保存
     data_path = Path(load["path"])
     if not data_path.exists():
-        raise HTTPException(404, f"{data_path} がありません")
+        raise HTTPException(404, f"データ {data_path} が見つかりません")
     options = dict(load.get("options") or {})
     loader = load.get("loader")
     if not loader:
@@ -1203,7 +1205,7 @@ def load_place(
         raise HTTPException(422, reason)
     data_path = Path(place["path"])
     if not data_path.exists():
-        raise HTTPException(404, f"{data_path} がありません")
+        raise HTTPException(404, f"データ {data_path} が見つかりません")
     if not data_path.is_file():
         raise HTTPException(
             422, f"{data_path.name} はファイルではありません. {what}は"
@@ -1923,7 +1925,7 @@ def export_place(record: Optional[dict[str, str]]) -> Path:
     # ように)
     if not root.is_dir():
         raise HTTPException(
-            404, f"学習のプロジェクト {project} がありません. 消したか動かした"
+            404, f"学習のプロジェクト {project} が見つかりません. 消したか動かした"
             "場合は, 問題の設定の段階で学習のプロジェクトを書き出し直してください"
         )
 

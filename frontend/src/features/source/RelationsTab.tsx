@@ -2,7 +2,7 @@ import type { EChartsOption } from 'echarts'
 import { useState } from 'react'
 
 import type { Profile } from '../../api/types'
-import { Card, EmptyState } from '../../components/ui'
+import { Card, EmptyState } from '../../components/common'
 import { Chart } from '../../lib/chart'
 import { cssVar } from '../../lib/chartTheme'
 import { TASK_LABELS } from '../../lib/format'
@@ -82,7 +82,10 @@ export function RelationsTab({ profile }: { profile: Profile }) {
     <div className="space-y-4">
       {target ? (
         <div className="grid gap-4 xl:grid-cols-2">
-          <Card title={`目的の列 ${target.column} (${TASK_LABELS[target.task] ?? target.task})`}>
+          <Card
+            name="目的の列"
+            title={`目的の列 ${target.column} (${TASK_LABELS[target.task] ?? target.task})`}
+          >
             {target.classes ? (
               <Chart
                 label="クラスの件数"

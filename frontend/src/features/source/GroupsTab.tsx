@@ -12,7 +12,7 @@ import type {
   Profile,
   Source,
 } from '../../api/types'
-import { Button, Card, ErrorBox, Spinner, StatTile } from '../../components/ui'
+import { Button, Card, ErrorBox, Spinner, StatTile } from '../../components/common'
 import { defaultDatasetName, formatNumber, formatPercent, TYPE_LABELS } from '../../lib/format'
 import {
   answerColumns,
@@ -107,11 +107,15 @@ function SummaryTable({ summary }: { summary: GroupSummary }) {
                 <th scope="row" className="py-1 pr-3 text-left font-normal">
                   {groupLabel(row.group)}
                 </th>
-                <td className="tabular pr-3 text-right font-mono">{formatNumber(row.rows)}</td>
-                <td className="tabular pr-3 text-right font-mono">{formatPercent(row.share)}</td>
-                <td className="tabular pr-3 text-right font-mono">{cellText(row.stability)}</td>
+                <td className="tabular-nums pr-3 text-right font-mono">{formatNumber(row.rows)}</td>
+                <td className="tabular-nums pr-3 text-right font-mono">
+                  {formatPercent(row.share)}
+                </td>
+                <td className="tabular-nums pr-3 text-right font-mono">
+                  {cellText(row.stability)}
+                </td>
                 {columns.map((name) => (
-                  <td key={name} className="tabular pr-3 text-right font-mono break-all">
+                  <td key={name} className="tabular-nums pr-3 text-right font-mono break-all">
                     {cellText(row[name] ?? null)}
                   </td>
                 ))}
@@ -752,7 +756,7 @@ function GroupsBody({
       {summary && (
         <>
           <Measures summary={summary} />
-          <Card title={`気付き (${summary.notes.length} 件)`}>
+          <Card name="気付き" title={`気付き (${summary.notes.length} 件)`}>
             <Notes notes={summary.notes} />
           </Card>
           <SummaryTable summary={summary} />

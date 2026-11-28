@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import { expect, test } from 'vitest'
 
-import { Card } from './ui'
+import { Card } from './common'
 
 test('見出しを持つ欄は見出しを名前にした区域になる', () => {
   render(
