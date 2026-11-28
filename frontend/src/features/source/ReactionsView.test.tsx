@@ -36,11 +36,26 @@ const COUNTS = {
 /** 反応の表の要約 (ML-EDA の describe_reactions の形) */
 function summaryOf(overrides: Partial<ReactionsSummary> = {}): ReactionsSummary {
   return {
-    columns: { user: 'member', item: 'item_id', time: 'ts', reaction: 'qty' },
+    columns: {
+      user: 'member',
+      item: 'item_id',
+      time: 'ts',
+      reaction: 'qty',
+      shown: null,
+      presentation: null,
+    },
     source: { path: '/data/reactions.csv', loader: 'csv', options: {} },
     rows: 10,
     reactions: 6,
-    dropped: { missing: 3, unreadable_time: 1, not_positive: 1, total: 4 },
+    dropped: {
+      missing: 3,
+      unreadable_time: 1,
+      not_positive: 1,
+      unreadable_shown: 0,
+      conflict: 0,
+      duplicate_shown: 0,
+      total: 4,
+    },
     users: 3,
     items: 2,
     pairs: 5,
@@ -59,6 +74,7 @@ function summaryOf(overrides: Partial<ReactionsSummary> = {}): ReactionsSummary 
     },
     time: { kind: 'datetime', min: '2025-01-01T00:00:00', max: '2025-01-05T12:00:00', distinct: 6 },
     reaction: { min: 1, max: 2, mean: 1.5, std: 0.5, median: 1.5 },
+    shown: null,
     notes: ['利用者, 品物か時刻の欠けた 3 行を除きました'],
     ...overrides,
   }
@@ -127,14 +143,84 @@ test('概要に数, 気付き, 読んだ列, 除いた行, 時刻の範囲を出
 test('反応の強さの列が無ければ, 全ての行を反応とみなすと知らせる', async () => {
   renderView(
     summaryOf({
-      columns: { user: 'member', item: 'item_id', time: 'ts', reaction: null },
+      columns: {
+        user: 'member',
+        item: 'item_id',
+        time: 'ts',
+        reaction: null,
+        shown: null,
+        presentation: null,
+      },
       reaction: null,
     }),
   )
   const columns = (await screen.findByText('読んだ列 (問題の答え)')).closest('section')!
-  expect(within(columns).getByText('なし')).toBeInTheDocument()
+  expect(within(columns).getByText('反応の強さ').nextSibling).toHaveTextContent('なし')
   expect(within(columns).getByText(/全ての行を反応とみなします/)).toBeInTheDocument()
   expect(screen.queryByText('反応の強さ (残した反応)')).not.toBeInTheDocument()
+})
+
+test('見せただけの印の列があれば, 見せただけの記録の要約と除いた行の内訳を出す', async () => {
+  renderView(
+    summaryOf({
+      columns: {
+        user: 'member',
+        item: 'item_id',
+        time: 'ts',
+        reaction: 'qty',
+        shown: 'shown_only',
+        presentation: 'impression_id',
+      },
+      dropped: {
+        missing: 1,
+        unreadable_time: 0,
+        not_positive: 0,
+        unreadable_shown: 1,
+        conflict: 1,
+        duplicate_shown: 1,
+        total: 4,
+      },
+      shown: {
+        negatives: 12,
+        users: 3,
+        items: 4,
+        by: 'presentation',
+        presentations: 5,
+        chosen_presentations: 4,
+        unseen_items: 2,
+      },
+    }),
+  )
+  const columns = (await screen.findByText('読んだ列 (問題の答え)')).closest('section')!
+  expect(within(columns).getByText('見せただけの印').nextSibling).toHaveTextContent('shown_only')
+  expect(within(columns).getByText('提示').nextSibling).toHaveTextContent('impression_id')
+  expect(within(columns).getByText(/学習の負の例/)).toBeInTheDocument()
+  const dropped = card('除いた行')
+  expect(within(dropped).getByText('利用者, 品物, 時刻か提示の欠け').nextSibling).toHaveTextContent(
+    '1',
+  )
+  expect(within(dropped).getByText('見せただけの印が読めない').nextSibling).toHaveTextContent('1')
+  expect(
+    within(dropped).getByText('選んだ行と同じ提示の同じ品物の見せただけの行').nextSibling,
+  ).toHaveTextContent('1')
+  expect(
+    within(dropped).getByText('同じ提示の同じ品物の見せただけの行の 2 行目から').nextSibling,
+  ).toHaveTextContent('1')
+  const shown = card('見せただけの記録')
+  expect(within(shown).getByText('残した見せただけの行 (負の例)').nextSibling).toHaveTextContent(
+    '12',
+  )
+  expect(within(shown).getByText('選んだ反応のある提示').nextSibling).toHaveTextContent('4')
+  expect(within(shown).getByText('反応の表に無い品物の行').nextSibling).toHaveTextContent('2')
+  expect(within(shown).getByText(/同じ利用者と提示の行を 1 回の提示/)).toBeInTheDocument()
+})
+
+test('見せただけの印の列が無ければ, 見せただけの記録と内訳を出さない', async () => {
+  renderView(summaryOf())
+  const dropped = (await screen.findByText('除いた行', { selector: 'h2' })).closest('section')!
+  expect(within(dropped).queryByText('見せただけの印が読めない')).not.toBeInTheDocument()
+  expect(screen.queryByText('見せただけの記録', { selector: 'h2' })).not.toBeInTheDocument()
+  expect(screen.queryByText('提示')).not.toBeInTheDocument()
 })
 
 test('偏りに人気の偏りと多い品物, 利用者ごとと品物ごとの分布を出す', async () => {

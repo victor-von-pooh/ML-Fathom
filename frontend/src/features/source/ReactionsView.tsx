@@ -25,10 +25,10 @@ import { Notes } from './TrajectoryView'
 
 type TabId = 'overview' | 'bias' | 'data' | 'export'
 
-/** 概要: 数, 気付き, 読んだ列, 除いた行, 時刻の範囲, 反応の強さ */
+/** 概要: 数, 気付き, 読んだ列, 除いた行, 時刻の範囲, 反応の強さ, 見せただけの記録 */
 function OverviewPanel({ result }: { result: ReactionsResult }) {
   const summary = result.summary
-  const { columns, dropped, time, reaction } = summary
+  const { columns, dropped, time, reaction, shown } = summary
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-8">
@@ -54,20 +54,45 @@ function OverviewPanel({ result }: { result: ReactionsResult }) {
           <Stat label="品物" value={columns.item} />
           <Stat label="時刻" value={columns.time} />
           <Stat label="反応の強さ" value={columns.reaction ?? 'なし'} />
+          <Stat label="見せただけの印" value={columns.shown ?? 'なし'} />
+          {columns.shown && <Stat label="提示" value={columns.presentation ?? 'なし'} />}
           <p className="mt-2 text-xs text-ink-3">
             {columns.reaction
               ? '反応の強さが 0 より大きい行だけを反応とみなします.'
               : '反応の強さの列が無いので, 全ての行を反応とみなします.'}{' '}
+            {columns.shown &&
+              '見せただけの印が真の行は見せただけの記録 (学習の負の例) にし, 反応には数えません. '}
             他の列は読みません. 列は問題の設定の段階で答え直せます.
           </p>
         </Card>
         <Card title="除いた行">
-          <Stat label="利用者, 品物か時刻の欠け" value={formatNumber(dropped.missing)} />
+          <Stat
+            label={
+              columns.presentation ? '利用者, 品物, 時刻か提示の欠け' : '利用者, 品物か時刻の欠け'
+            }
+            value={formatNumber(dropped.missing)}
+          />
           <Stat
             label="うち, 日時として読めない時刻"
             value={formatNumber(dropped.unreadable_time)}
           />
           <Stat label="反応の強さが 0 以下か数でない" value={formatNumber(dropped.not_positive)} />
+          {columns.shown && (
+            <>
+              <Stat
+                label="見せただけの印が読めない"
+                value={formatNumber(dropped.unreadable_shown)}
+              />
+              <Stat
+                label="選んだ行と同じ提示の同じ品物の見せただけの行"
+                value={formatNumber(dropped.conflict)}
+              />
+              <Stat
+                label="同じ提示の同じ品物の見せただけの行の 2 行目から"
+                value={formatNumber(dropped.duplicate_shown)}
+              />
+            </>
+          )}
           <Stat label="合計" value={formatNumber(dropped.total)} />
           <p className="mt-2 text-xs text-ink-3">
             骨組みの学習のスクリプトも同じ決まりで除き, 除いた数を train.log に書きます.
@@ -82,6 +107,23 @@ function OverviewPanel({ result }: { result: ReactionsResult }) {
             骨組みは反応を時刻の順に並べ, 古い反応を学習用, 新しい反応を検証用とテスト用にします.
           </p>
         </Card>
+        {shown && (
+          <Card title="見せただけの記録">
+            <Stat label="残した見せただけの行 (負の例)" value={formatNumber(shown.negatives)} />
+            <Stat label="利用者" value={formatNumber(shown.users)} />
+            <Stat label="品物" value={formatNumber(shown.items)} />
+            <Stat label="提示" value={formatNumber(shown.presentations)} />
+            <Stat label="選んだ反応のある提示" value={formatNumber(shown.chosen_presentations)} />
+            <Stat label="反応の表に無い品物の行" value={formatNumber(shown.unseen_items)} />
+            <p className="mt-2 text-xs text-ink-3">
+              {shown.by === 'presentation'
+                ? '同じ利用者と提示の行を 1 回の提示とみなします.'
+                : '提示の列が無いので, 同じ利用者と時刻の行を 1 回の提示とみなします.'}{' '}
+              骨組みは見せただけの品物を学習の負の例にし, 1
+              回の提示の中で選んだ品物を上に並べられたかも確かめます.
+            </p>
+          </Card>
+        )}
         {reaction && (
           <Card title="反応の強さ (残した反応)">
             <Stat label="平均" value={formatNumber(reaction.mean)} />

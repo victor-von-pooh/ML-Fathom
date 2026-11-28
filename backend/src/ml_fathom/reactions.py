@@ -16,8 +16,9 @@ from ml_fathom.places import Parent
 # の分析を出す)
 REACTIONS_KIND = "reactions"
 
-# 反応の表の列の役割 (ML-Quest の ml.parts.<n>.rank の問い)
-ROLES = ("user", "item", "time", "reaction")
+# 反応の表の列の役割 (ML-Quest の ml.parts.<n>.rank の問い. 見せただけの
+# 印と提示は任意)
+ROLES = ("user", "item", "time", "reaction", "shown", "presentation")
 
 
 def is_rank(problem: dict[str, Any]) -> bool:
@@ -57,8 +58,8 @@ def rank_answers(problem: dict[str, Any]) -> dict[str, Any]:
     Returns
     ----------
     answers: dict[str, Any]
-        user, item, time, reaction (列の名前. 答えていなければ None) と k
-        (並べる件数)
+        user, item, time, reaction, shown, presentation (列の名前. 答えて
+        いなければ None) と k (並べる件数)
     """
     # ml.parts.<n>.rank の答え (文字でない列の名前は答えていないもの)
     base = f"{ml_quest.PART}.rank"
@@ -131,13 +132,17 @@ def read_reactions(
     Raises
     ----------
     HTTPException
-        列の答えの誤り, 列が無い, 時刻を読めない場合は 422
+        列の答えの誤り, 列が無い, 時刻を読めない, 見せただけの印を読めない
+        か選んだ反応が残らない場合は 422
     """
-    # 骨組みの学習のスクリプトと同じ決まりで, 除く行を数える
+    # 骨組みの学習のスクリプトと同じ決まりで, 除く行を数える (提示の列は
+    # 見せただけの印の列と一緒のときだけ. ML-Quest の問いと同じ)
+    shown = answers["shown"]
     try:
         reactions = ml_eda.load_reactions(
             data, answers["user"], answers["item"], answers["time"],
-            answers["reaction"]
+            answers["reaction"], shown=shown,
+            presentation=answers["presentation"] if shown else None
         )
     except (ValueError, TypeError, KeyError) as error:
         raise HTTPException(
