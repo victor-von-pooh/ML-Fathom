@@ -56,7 +56,7 @@ test('書き出した表の読み方の例に場所と群の数を入れる', ()
   expect(text).toContain('describe_groups(dataset, k=3)')
 })
 
-test('問題の設定の答えの列は表にあるものを表の順に, 違う選び方は列の順を問わずに見分ける', () => {
+test('問題の答えの列は表にあるものを表の順に, 違う選び方は列の順を問わずに見分ける', () => {
   const answers: GroupAnswers = {
     columns: ['region', 'spend', 'income'],
     id: null,

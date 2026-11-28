@@ -111,7 +111,7 @@ test('概要に数, 気付き, 読んだ列, 除いた行, 時刻の範囲を出
   expect(await screen.findByText('利用者, 品物か時刻の欠けた 3 行を除きました')).toBeInTheDocument()
   expect(screen.getByText('並べる件数 (K)').parentElement).toHaveTextContent('10')
   expect(screen.getByText('除いた行', { selector: 'div' }).parentElement).toHaveTextContent('4')
-  const columns = card('読んだ列 (問題の設定の答え)')
+  const columns = card('読んだ列 (問題の答え)')
   expect(within(columns).getByText('qty')).toBeInTheDocument()
   expect(within(columns).getByText(/0 より大きい行だけ/)).toBeInTheDocument()
   const dropped = card('除いた行')
@@ -131,7 +131,7 @@ test('反応の強さの列が無ければ, 全ての行を反応とみなすと
       reaction: null,
     }),
   )
-  const columns = (await screen.findByText('読んだ列 (問題の設定の答え)')).closest('section')!
+  const columns = (await screen.findByText('読んだ列 (問題の答え)')).closest('section')!
   expect(within(columns).getByText('なし')).toBeInTheDocument()
   expect(within(columns).getByText(/全ての行を反応とみなします/)).toBeInTheDocument()
   expect(screen.queryByText('反応の強さ (残した反応)')).not.toBeInTheDocument()
@@ -165,11 +165,11 @@ test('前に置いたファイルは確かめてから置き換えて書き出�
   renderView(summaryOf(), 'export')
   expect(await screen.findByText(PLACE.dataset!)).toBeInTheDocument()
   expect(screen.getByText(/前に置いたファイルがあります/)).toBeInTheDocument()
-  fireEvent.click(screen.getByRole('button', { name: 'プロジェクトへ書き出す' }))
+  fireEvent.click(screen.getByRole('button', { name: '学習のプロジェクトへ書き出す' }))
   expect(confirm).toHaveBeenCalledTimes(1)
   await waitFor(() => expect(exporter).toHaveBeenCalledWith('s1', true))
   expect(await screen.findByRole('status')).toHaveTextContent(
-    `プロジェクトへ書き出しました: ${PLACE.dataset} (骨組みが反応とみなす行 6, 除く行 4)`,
+    `学習のプロジェクトへ書き出しました: ${PLACE.dataset} (骨組みが反応とみなす行 6, 除く行 4)`,
   )
 })
 
@@ -177,7 +177,7 @@ test('置き換えを断れば書き出さず, 書き出せない理由を出す
   const exporter = vi.spyOn(api, 'exportReactions')
   vi.spyOn(window, 'confirm').mockReturnValue(false)
   renderView(summaryOf(), 'export')
-  fireEvent.click(await screen.findByRole('button', { name: 'プロジェクトへ書き出す' }))
+  fireEvent.click(await screen.findByRole('button', { name: '学習のプロジェクトへ書き出す' }))
   expect(exporter).not.toHaveBeenCalled()
 })
 
@@ -186,8 +186,10 @@ test('書き出し先がファイルでなければ, 理由を出して押せる
     ...PLACE,
     state: 'occupied',
     ready: false,
-    reason: '/work/project/data/reactions.csv はファイルではないので置き換えません',
+    reason: '/work/project/data/reactions.csv はファイルではないので上書きしません',
   })
-  expect(await screen.findByText(/ファイルではないので置き換えません/)).toBeInTheDocument()
-  expect(screen.queryByRole('button', { name: 'プロジェクトへ書き出す' })).not.toBeInTheDocument()
+  expect(await screen.findByText(/ファイルではないので上書きしません/)).toBeInTheDocument()
+  expect(
+    screen.queryByRole('button', { name: '学習のプロジェクトへ書き出す' }),
+  ).not.toBeInTheDocument()
 })

@@ -259,7 +259,7 @@ def dataset_summary(path: Path) -> Optional[dict[str, Any]]:
         summary.update(
             form="unreadable", unknown_version=True,
             error=(
-                f"format_version {version} は, この ML-Fathom の ML-EDA が"
+                f"format_version {version} は, 組み込んだ ML-EDA が"
                 f"読める版 ({', '.join(str(v) for v in known)}) ではありません"
             )
         )

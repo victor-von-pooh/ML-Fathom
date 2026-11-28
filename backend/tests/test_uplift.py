@@ -503,7 +503,7 @@ def test_start_refused(
     started = client.post("/api/problems/start", json={"path": str(path)})
     assert started.status_code == 422
     detail = started.json()["detail"]
-    assert "問題の設定を渡せません" in detail
+    assert "問題を渡せません" in detail
     assert client.get("/api/sources").json() == []
 
     # 一覧でも始められず, 同じ理由がある

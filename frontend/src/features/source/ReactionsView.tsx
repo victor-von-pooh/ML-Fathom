@@ -48,7 +48,7 @@ function OverviewPanel({ result }: { result: ReactionsResult }) {
         <Notes notes={summary.notes} />
       </Card>
       <div className="grid gap-4 xl:grid-cols-2">
-        <Card title="読んだ列 (問題の設定の答え)">
+        <Card title="読んだ列 (問題の答え)">
           <Stat label="利用者" value={columns.user} />
           <Stat label="品物" value={columns.item} />
           <Stat label="時刻" value={columns.time} />
@@ -57,7 +57,7 @@ function OverviewPanel({ result }: { result: ReactionsResult }) {
             {columns.reaction
               ? '反応の強さが 0 より大きい行だけを反応とみなします.'
               : '反応の強さの列が無いので, 全ての行を反応とみなします.'}{' '}
-            他の列は読みません. 列は ML-Pathfinder の問題の設定で答え直せます.
+            他の列は読みません. 列は問題の設定の段階で答え直せます.
           </p>
         </Card>
         <Card title="除いた行">
@@ -189,14 +189,14 @@ function ExportPanel({ sourceId }: { sourceId: string }) {
       }
     },
   })
-  if (place.isPending) return <Spinner label="プロジェクトの書き出し先を調べています" />
+  if (place.isPending) return <Spinner label="学習のプロジェクトの書き出し先を調べています" />
   if (place.error) return <ErrorBox error={place.error} />
   const data = place.data
   const run = () => {
     const replace = data.state === 'file'
     if (
       replace &&
-      !window.confirm(`${data.dataset} には前に置いた反応の表があります. 置き換えますか?`)
+      !window.confirm(`${data.dataset} には前に置いた反応の表があります. 上書きしますか?`)
     ) {
       return
     }
@@ -204,11 +204,11 @@ function ExportPanel({ sourceId }: { sourceId: string }) {
   }
   const done = exporter.data
   return (
-    <Card title="プロジェクトへ書き出す">
+    <Card title="学習のプロジェクトへ書き出す">
       <p className="text-sm text-ink-2">
         反応の表を前処理せず, ファイル 1 つのまま,
-        問題の設定に記録した学習のプロジェクトの骨組みが読む場所 (config の data.dataset)
-        に写します. 並べるはレシピを持たず, 分割は骨組みが時刻で行います.
+        問題に記録した学習のプロジェクトの骨組みが読む場所 (config の data.dataset) に写します.
+        並べるはレシピを持たず, 分割は骨組みが時刻で行います.
       </p>
       {data.dataset && (
         <p className="mt-2 truncate font-mono text-xs" title={data.dataset}>
@@ -217,7 +217,7 @@ function ExportPanel({ sourceId }: { sourceId: string }) {
       )}
       {data.state === 'file' && (
         <p className="text-xs text-ink-3">
-          前に置いたファイルがあります (書き出すと, 確かめてから置き換えます)
+          前に置いたファイルがあります (書き出すと, 確かめてから上書きします)
         </p>
       )}
       {data.reason && <p className="mt-1 text-xs text-warning-text">{data.reason}</p>}
@@ -230,14 +230,14 @@ function ExportPanel({ sourceId }: { sourceId: string }) {
           disabled={exporter.isPending || place.isFetching}
           onClick={run}
         >
-          {exporter.isPending ? '書き出し中…' : 'プロジェクトへ書き出す'}
+          {exporter.isPending ? '書き出し中…' : '学習のプロジェクトへ書き出す'}
         </Button>
       )}
       {exporter.error && <ErrorBox error={exporter.error} />}
       {done && (
         <p role="status" className="mt-3 text-sm text-good-text">
           {done.copied
-            ? `プロジェクトへ書き出しました: ${done.path}`
+            ? `学習のプロジェクトへ書き出しました: ${done.path}`
             : `書き出し先は登録した反応の表そのものなので, 写さずにそのまま使います: ${done.path}`}{' '}
           (骨組みが反応とみなす行 {formatNumber(done.reactions)}, 除く行{' '}
           {formatNumber(done.dropped)})
@@ -277,7 +277,7 @@ export function ReactionsView({ source }: { source: Source }) {
       />
       {source.problem && (
         <p className="mb-3 truncate text-xs text-ink-3" title={source.problem}>
-          並べるの問題の設定から始めました: <span className="font-mono">{source.problem}</span>
+          並べるの問題から始めました: <span className="font-mono">{source.problem}</span>
         </p>
       )}
       <Tabs

@@ -63,7 +63,7 @@ READ_ERRORS = (OSError, ValueError, yaml.YAMLError)
 
 # 確かめた後に問題の設定が他で変わったときの断りの文
 CHANGED = (
-    "問題の設定が他で変わりました. 確かめ直したので, 見直してからもう一度"
+    "問題が他で変わりました. 確かめ直したので, 見直してからもう一度"
     "書き戻してください"
 )
 
@@ -103,19 +103,19 @@ class ProblemCheck(BaseModel):
 class ProjectExport(BaseModel):
     recipe: dict[str, Any]
     overwrite: bool = Field(
-        False, description="前に書き出したデータセットを置き換えるか"
+        False, description="前に書き出したデータセットを上書きするか"
     )
 
 
 class ReactionsExport(BaseModel):
     overwrite: bool = Field(
-        False, description="前に置いた反応の表を置き換えるか"
+        False, description="前に置いた反応の表を上書きするか"
     )
 
 
 class GroupProjectExport(BaseModel):
     overwrite: bool = Field(
-        False, description="前に置いた表を置き換えるか"
+        False, description="前に置いた表を上書きするか"
     )
 
 
@@ -146,7 +146,7 @@ class GroupWrite(BaseModel):
     model_config = ConfigDict(extra="forbid")
     group: GroupChoice
     version: str = Field(
-        description="確かめたときの問題の設定のファイルの中身の印"
+        description="確かめたときの問題のファイルの中身の印"
     )
 
 
@@ -156,14 +156,14 @@ class PairsExport(BaseModel):
 
     path: str = Field(description="problem.yaml か, それを持つディレクトリ")
     version: str = Field(
-        description="確かめたときの問題の設定のファイルの中身の印"
+        description="確かめたときの問題のファイルの中身の印"
     )
     export: dict[str, Any] = Field(
         description="ML-Quest の書き出しの設定 (function, inputs, targets, "
         "split, groups, origin, options. 中身の手順は options.item_steps)"
     )
     overwrite: bool = Field(
-        False, description="前に書き出したデータセットを置き換えるか"
+        False, description="前に書き出したデータセットを上書きするか"
     )
     # 問題の設定に書き戻さない欄 (外を写すかは書き出しのたびに選ぶもの)
     follow_links: bool = Field(
@@ -176,7 +176,7 @@ class ProblemWrite(BaseModel):
     recipe: dict[str, Any]
     choices: dict[str, Literal["known", "drop"]] = Field(default_factory=dict)
     version: str = Field(
-        description="確かめたときの問題の設定のファイルの中身の印"
+        description="確かめたときの問題のファイルの中身の印"
     )
 
 
@@ -208,10 +208,10 @@ def problem_file(text: str) -> Path:
         found = path.is_file()
     except (OSError, ValueError, RuntimeError) as error:
         raise HTTPException(
-            422, f"問題の設定の場所として読めません: {error}"
+            422, f"問題の場所として読めません: {error}"
         ) from error
     if not found:
-        raise HTTPException(404, f"{path} に問題の設定がありません")
+        raise HTTPException(404, f"{path} に問題がありません")
     if path.suffix.lower() not in SUFFIXES:
         raise HTTPException(
             422, f"{path.name} は YAML のファイル (.yaml) ではありません"
@@ -273,7 +273,7 @@ def read_problem_bytes(path: Path) -> tuple[dict[str, Any], str]:
         loaded = yaml.safe_load(data.decode("utf-8"))
         if not isinstance(loaded, dict):
             raise ValueError(
-                f"{path.name} は問題の設定のファイルではありません "
+                f"{path.name} は問題のファイルではありません "
                 "(format_version がありません)"
             )
         problem: dict[str, Any] = ml_quest.upgrade_problem(
@@ -281,13 +281,13 @@ def read_problem_bytes(path: Path) -> tuple[dict[str, Any], str]:
         )
     except READ_ERRORS as error:
         raise HTTPException(
-            422, f"問題の設定を読めません: {error}"
+            422, f"問題を読めません: {error}"
         ) from error
     if not isinstance(problem.get("name"), str) or not problem.get(
         "created_at"
     ):
         raise HTTPException(
-            422, f"{path.name} は問題の設定のファイルではありません"
+            422, f"{path.name} は問題のファイルではありません"
         )
     read = (problem, hashlib.sha256(data).hexdigest())
 
@@ -569,7 +569,7 @@ def require_recipe(problem: dict[str, Any]) -> None:
         if price_supported():
             return
         raise HTTPException(
-            422, "問題の設定を渡せません: 値段を変える判断の問題の設定です"
+            422, "問題を渡せません: 値段を変える判断の問題です"
             "が, 組の ML-Quest は値段を変える判断を受けない版です. ML-Quest "
             "を値段を変える判断を受ける版に上げてください"
         )
@@ -578,7 +578,7 @@ def require_recipe(problem: dict[str, Any]) -> None:
         if demand_supported():
             return
         raise HTTPException(
-            422, "問題の設定を渡せません: 時間をまたぐ量の判断の問題の設定"
+            422, "問題を渡せません: 時間をまたぐ量の判断の問題"
             "ですが, 組の ML-Quest は時間をまたぐ量の判断を受けない版です. "
             "ML-Quest を時間をまたぐ量の判断を受ける版に上げてください"
         )
@@ -592,15 +592,15 @@ def require_recipe(problem: dict[str, Any]) -> None:
     kind = ml_quest.active_value(problem, f"{part}.target.kind")
     if is_rank(problem):
         raise HTTPException(
-            422, "並べるの問題の設定はレシピを持ちません (反応の表をファイル "
+            422, "並べるの問題はレシピを持ちません (反応の表をファイル "
             "1 つのまま骨組みに渡し, 分割は骨組みが時刻で行うため). 反応の表"
-            "の分析の画面から, そのままプロジェクトへ書き出してください"
+            "の分析の画面から, そのまま学習のプロジェクトへ書き出してください"
         )
     if is_group(problem):
         raise HTTPException(
-            422, "まとめるの問題の設定はレシピを持ちません (表をファイル 1 つ"
+            422, "まとめるの問題はレシピを持ちません (表をファイル 1 つ"
             "のまま骨組みに渡し, 分割は骨組みが行うため). 群分けのタブから, "
-            "そのままプロジェクトへ書き出してください"
+            "そのまま学習のプロジェクトへ書き出してください"
         )
     if role == "effect" and ml_quest.active_value(
         problem, f"{part}.autonomous"
@@ -617,15 +617,15 @@ def require_recipe(problem: dict[str, Any]) -> None:
         why = "この受け持ちと正解の種類はまだ扱えません"
     raise HTTPException(
         422,
-        f"この問題の設定の受け持ち {choice_text(ml_quest.ROLES, role)} "
+        f"この問題の受け持ち {choice_text(ml_quest.ROLES, role)} "
         f"(正解の種類 {choice_text(ml_quest.TARGET_KINDS, kind)}) は, "
-        f"問題の設定から始めることと書き戻しに使えません ({why}). 使える"
+        f"問題から始めることと書き戻しに使えません ({why}). 使える"
         "のは, 予測するで正解の種類が表の列, 画像の領域, 点群, 異常, 先の"
         "期間の需要の場合と, "
         "作るで正解の種類が画像か表の場合と, 並べるかまとめるで学習する"
         "場合と, 効果を見積もる (今ある記録から. 値段を変える判断も) "
         "場合です. "
-        "データは「データを追加」から入れて分析できます"
+        "データは「データを登録」から入れて分析できます"
     )
 
 
@@ -657,10 +657,10 @@ def require_items(problem: dict[str, Any]) -> None:
         or is_price(problem) or is_demand(problem)
     ):
         raise HTTPException(
-            422, "この問題の設定は列の予測か, 画像か表の生成か, 異常の検知か, "
+            422, "この問題は列の予測か, 画像か表の生成か, 異常の検知か, "
             "効果の見積もりか, 値段を変える判断か, 時間をまたぐ量の判断か, "
             "並べるか, まとめるです. "
-            "データの画面の「問題の設定から始める」で始めてください"
+            "データの画面の「問題から始める」で始めてください"
         )
     require_recipe(problem)
 
@@ -724,13 +724,13 @@ def linked_versioned(
     source = find_source(request, source_id)
     text = source.get("problem")
     if not isinstance(text, str):
-        raise HTTPException(404, "問題の設定から始めたデータではありません")
+        raise HTTPException(404, "問題から始めたデータではありません")
     path = problem_file(text)
     problem, version = read_problem_bytes(path)
     created = source.get("problem_created")
     if created and str(problem.get("created_at")) != created:
         raise HTTPException(
-            422, f"{path} が始めたときと別の問題の設定に置き換わっています"
+            422, f"{path} が始めたときと別の問題に替わっています"
         )
     linked = (source, path, problem, version)
 
@@ -758,7 +758,7 @@ def version_of(path: Path) -> str:
         version = hashlib.sha256(path.read_bytes()).hexdigest()
     except OSError as error:
         raise HTTPException(
-            422, f"問題の設定を読めません: {error}"
+            422, f"問題を読めません: {error}"
         ) from error
 
     return version
@@ -876,12 +876,12 @@ def start_from_problem(
         recipe = ml_eda.load_recipe(start["recipe"])
     except SHAPE_ERRORS as error:
         raise HTTPException(
-            422, f"問題の設定を渡せません: {error}"
+            422, f"問題を渡せません: {error}"
         ) from error
     load = start["load"]
     if load is None:
         raise HTTPException(
-            422, "問題の設定にデータが入っていません (ML-Pathfinder の "
+            422, "問題にデータが入っていません (問題の設定の段階の "
             "「手元のデータは」で入れてください)"
         )
 
@@ -915,7 +915,7 @@ def start_from_problem(
         if data.kind not in GENERATE_KINDS[kind]:
             raise HTTPException(
                 422, f"{data_path.name} は{name}のデータではありません. "
-                f"作るものが{name}の問題の設定には, ML-Pathfinder の「手元"
+                f"作るものが{name}の問題には, 問題の設定の段階の「手元"
                 f"のデータは」で{name}のデータを入れてください"
             )
     elif is_anomaly(problem):
@@ -975,7 +975,7 @@ def check_anomaly_start(
     if data.kind not in ANOMALY_KINDS:
         raise HTTPException(
             422, f"{data_path.name} は表ではありません (種類 {data.kind}). "
-            "異常の検知の問題の設定には, ML-Pathfinder の「手元のデータは」"
+            "異常の検知の問題には, 問題の設定の段階の「手元のデータは」"
             "で度合いに使う列を持つ表を入れてください"
         )
     columns = [str(name) for name in data.frame.columns]
@@ -1017,7 +1017,7 @@ def check_uplift_start(
     if data.kind not in UPLIFT_KINDS:
         raise HTTPException(
             422, f"{data_path.name} は表ではありません (種類 {data.kind}). "
-            "効果の見積もりの問題の設定には, ML-Pathfinder の「手元のデータ"
+            "効果の見積もりの問題には, 問題の設定の段階の「手元のデータ"
             "は」で処置の列と結果の列を持つ表を入れてください"
         )
     columns = [str(name) for name in data.frame.columns]
@@ -1061,7 +1061,7 @@ def check_price_start(
     if data.kind not in PRICE_KINDS:
         raise HTTPException(
             422, f"{data_path.name} は表ではありません (種類 {data.kind}). "
-            "値段を変える判断の問題の設定には, ML-Pathfinder の「手元のデータ"
+            "値段を変える判断の問題には, 問題の設定の段階の「手元のデータ"
             "は」で値段の列と売れた数の列を持つ表を入れてください"
         )
     columns = [str(name) for name in data.frame.columns]
@@ -1106,7 +1106,7 @@ def check_demand_start(
     if data.kind not in DEMAND_KINDS:
         raise HTTPException(
             422, f"{data_path.name} は表ではありません (種類 {data.kind}). "
-            "時間をまたぐ量の判断の問題の設定には, ML-Pathfinder の「手元の"
+            "時間をまたぐ量の判断の問題には, 問題の設定の段階の「手元の"
             "データは」で商品の id, 日付と日ごとの売れた数の列を持つ表を入れ"
             "てください"
         )
@@ -1140,7 +1140,7 @@ def project_reason(problem: dict[str, Any]) -> Optional[str]:
         error = ml_quest.project_error(problem)
     except SHAPE_ERRORS as shape:
         error = str(shape)
-    reason = f"問題の設定を渡せません: {error}" if error else None
+    reason = f"問題を渡せません: {error}" if error else None
 
     return reason
 
@@ -1164,7 +1164,7 @@ def skeleton_reason(problem: dict[str, Any]) -> Optional[str]:
     reason_text = project_reason(problem)
     if reason_text is None and data_place(problem) is None:
         reason_text = (
-            "データが入っていません (ML-Pathfinder の「手元のデータは」で"
+            "データが入っていません (問題の設定の段階の「手元のデータは」で"
             "入れてください)"
         )
 
@@ -1342,7 +1342,7 @@ def start_group(
     if data.kind not in GROUP_KINDS:
         raise HTTPException(
             422, f"{loaded[0].name} は表として読めません (読み込みの種類 "
-            f"{data.kind}). まとめるの問題の設定には, ML-Pathfinder の「手元"
+            f"{data.kind}). まとめるの問題には, 問題の設定の段階の「手元"
             "のデータは」で 1 行が 1 つの対象の表を入れてください"
         )
     check_group_columns(data, group_answers(problem))
@@ -1380,7 +1380,7 @@ def pairs_draft(problem: dict[str, Any]) -> dict[str, Any]:
         start: dict[str, Any] = ml_quest.recipe_from(problem)
     except SHAPE_ERRORS as error:
         raise HTTPException(
-            422, f"問題の設定を渡せません: {error}"
+            422, f"問題を渡せません: {error}"
         ) from error
 
     return start
@@ -1526,11 +1526,11 @@ def export_problem_pairs(body: PairsExport) -> dict[str, Any]:
             state = opened_state(parent)
             if state == "occupied":
                 raise HTTPException(
-                    409, f"{target} はデータセットではないので置き換えません"
+                    409, f"{target} はデータセットではないので上書きしません"
                 )
             if state == "dataset" and not body.overwrite:
                 raise HTTPException(
-                    409, f"{target} には既にデータセットがあります. 置き換え"
+                    409, f"{target} には既にデータセットがあります. 上書きし"
                     "てよいかを確かめてから書き出してください"
                 )
             info = pair_call(
@@ -1548,14 +1548,14 @@ def export_problem_pairs(body: PairsExport) -> dict[str, Any]:
     # 保存の直前にも変わっていないこと (変わっていれば書き戻さない)
     if version_of(path) != body.version:
         raise HTTPException(
-            409, f"{target} に書き出しましたが, 問題の設定が他で変わったので"
+            409, f"{target} に書き出しましたが, 問題が他で変わったので"
             "書き戻していません. 開き直して書き出し直してください"
         )
     try:
         ml_quest.save_problem(updated, path)
     except OSError as error:
         raise HTTPException(
-            422, f"問題の設定を保存できません: {error}"
+            422, f"問題に書き戻せません: {error}"
         ) from error
     result = {
         **pair_result(target, info, model), "changes": trial["changes"],
@@ -1671,7 +1671,7 @@ def write_problem(
         ml_quest.save_problem(updated, path)
     except OSError as error:
         raise HTTPException(
-            422, f"問題の設定を保存できません: {error}"
+            422, f"問題に書き戻せません: {error}"
         ) from error
     get_store(request).write_recipe(source_id, recipe)
     result = {"changes": changes, "recipe": recipe, "path": str(path)}
@@ -1777,13 +1777,13 @@ def problem_entry(path: Path) -> dict[str, Any]:
         entry["reason"] = str(error.detail)
         return entry
     except SHAPE_ERRORS as error:
-        entry["reason"] = f"問題の設定を渡せません: {error}"
+        entry["reason"] = f"問題を渡せません: {error}"
         return entry
     if is_items_part(problem):
         entry["startable"] = True
     elif load is None:
         entry["reason"] = (
-            "データが入っていません (ML-Pathfinder の「手元のデータは」で"
+            "データが入っていません (問題の設定の段階の「手元のデータは」で"
             "入れてください)"
         )
     else:
@@ -1902,20 +1902,20 @@ def export_place(record: Optional[dict[str, str]]) -> Path:
     text = (record or {}).get("dataset")
     if not text:
         raise HTTPException(
-            422, "この問題の設定にはプロジェクトの記録 (project.dataset) が"
-            "ありません. ML-Pathfinder でプロジェクトを作ると書き出せます"
+            422, "この問題には学習のプロジェクトの記録 (project.dataset) が"
+            "ありません. 問題の設定の段階で学習のプロジェクトを書き出してください"
         )
     project = (record or {}).get("path")
     if not project:
         raise HTTPException(
-            422, "この問題の設定のプロジェクトの記録に場所 (project.path) "
-            "がありません. ML-Pathfinder でプロジェクトを作り直してください"
+            422, "この問題の学習のプロジェクトの記録に場所 (project.path) "
+            "がありません. 問題の設定の段階で学習のプロジェクトを書き出し直してください"
         )
     target = Path(text)
     root = Path(project)
     if not target.is_absolute() or not root.is_absolute():
         raise HTTPException(
-            422, "プロジェクトの記録 (project.path, project.dataset) が"
+            422, "学習のプロジェクトの記録 (project.path, project.dataset) が"
             "絶対パスではありません"
         )
 
@@ -1923,8 +1923,8 @@ def export_place(record: Optional[dict[str, str]]) -> Path:
     # ように)
     if not root.is_dir():
         raise HTTPException(
-            404, f"プロジェクト {project} がありません. 消したか動かした"
-            "場合は, ML-Pathfinder でプロジェクトを作り直してください"
+            404, f"学習のプロジェクト {project} がありません. 消したか動かした"
+            "場合は, 問題の設定の段階で学習のプロジェクトを書き出し直してください"
         )
 
     # 書き出し先はプロジェクトの中だけ (.. と途中のリンクをたどった後で
@@ -1938,9 +1938,9 @@ def export_place(record: Optional[dict[str, str]]) -> Path:
         item.is_relative_to(base) for item in places
     ):
         raise HTTPException(
-            422, f"書き出し先 {target} がプロジェクト {project} の中に"
-            "ありません. 外には書き出さないので, ML-Pathfinder で"
-            "プロジェクトを作り直してください"
+            422, f"書き出し先 {target} が学習のプロジェクト {project} の中に"
+            "ありません. 外には書き出さないので, 問題の設定の段階で"
+            "学習のプロジェクトを書き出し直してください"
         )
 
     return target
@@ -2071,8 +2071,8 @@ def project_place(
     result["state"] = state
     if state == "occupied":
         result["reason"] = (
-            f"{target} はファイルではないので置き換えません" if single
-            else f"{target} はデータセットではないので置き換えません"
+            f"{target} はファイルではないので上書きしません" if single
+            else f"{target} はデータセットではないので上書きしません"
         )
     else:
         result["ready"] = True
@@ -2122,11 +2122,11 @@ def export_project(
             state = opened_state(parent)
             if state == "occupied":
                 raise HTTPException(
-                    409, f"{target} はデータセットではないので置き換えません"
+                    409, f"{target} はデータセットではないので上書きしません"
                 )
             if state == "dataset" and not body.overwrite:
                 raise HTTPException(
-                    409, f"{target} には既にデータセットがあります. 置き換え"
+                    409, f"{target} には既にデータセットがあります. 上書きし"
                     "てよいかを確かめてから書き出してください"
                 )
             info = ml_eda.export_dataset(
@@ -2199,18 +2199,18 @@ def copy_to_project(
             state = opened_state(parent, single=True)
             if state == "occupied":
                 raise HTTPException(
-                    409, f"{target} はファイルではないので置き換えません"
+                    409, f"{target} はファイルではないので上書きしません"
                 )
             if state == "file" and not overwrite:
                 raise HTTPException(
-                    409, f"{target} には既にファイルがあります. 置き換えて"
+                    409, f"{target} には既にファイルがあります. 上書きして"
                     "よいかを確かめてから書き出してください"
                 )
             if target.suffix.lower() != data_path.suffix.lower():
                 raise HTTPException(
                     422, f"書き出し先 {target.name} と{what} "
-                    f"{data_path.name} の拡張子が違います. ML-Pathfinder で"
-                    "プロジェクトを作り直してください"
+                    f"{data_path.name} の拡張子が違います. 問題の設定の段階で"
+                    "学習のプロジェクトを書き出し直してください"
                 )
             done = copy_file(data_path, parent)
     except OSError as error:
@@ -2249,8 +2249,8 @@ def linked_rank(
     linked = linked_problem(request, source_id)
     if not is_rank(linked[2]):
         raise HTTPException(
-            422, "この問題の設定は並べるで学習する受け持ちではありません. "
-            "問題の設定から始め直してください"
+            422, "この問題は並べるで学習する受け持ちではありません. "
+            "問題から始め直してください"
         )
 
     return linked
@@ -2397,8 +2397,8 @@ def require_group(problem: dict[str, Any]) -> None:
     # 始めた後に受け持ちを答え直した場合
     if not is_group(problem):
         raise HTTPException(
-            422, "この問題の設定はまとめるで学習する受け持ちではありません. "
-            "問題の設定から始め直してください"
+            422, "この問題はまとめるで学習する受け持ちではありません. "
+            "問題から始め直してください"
         )
 
 
@@ -2570,7 +2570,7 @@ def write_group_problem(
         ml_quest.save_problem(updated, path)
     except OSError as error:
         raise HTTPException(
-            422, f"問題の設定を保存できません: {error}"
+            422, f"問題に書き戻せません: {error}"
         ) from error
     result = {
         "changes": trial["changes"], "group": group_answers(updated),

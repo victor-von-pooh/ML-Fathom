@@ -424,7 +424,7 @@ function StepsCard({
         1 件ずつのファイルにかける手順 (足した順にかける). 足すと版 3 で書き出し,
         かけた手順をデータセットに残す (推論で新しい 1 件に同じ手順をかけるため).
         {form === 'image_masks' &&
-          ' 領域には, 画像の resize と同じ大きさの resize_mask (最も近い画素) を ML-EDA が自動でかける.'}
+          ' 領域には, 画像の resize と同じ大きさの resize_mask (最も近い画素) を書き出すときに自動でかける.'}
       </p>
       {pairSteps ? (
         <div className="space-y-3">
@@ -475,8 +475,8 @@ function ExportCard({
   const result = mutation.data
   const written = result && 'changes' in result ? result : null
   const project = linked?.pairs.project
-  const replace = linked ? '前に書き出したデータセットを置き換える' : '同じ名前があれば置き換える'
-  const label = linked ? 'プロジェクトへ書き出す' : 'ファイルの組を書き出す'
+  const replace = linked ? '前に書き出したデータセットを上書きする' : '同じ名前があれば上書きする'
+  const label = linked ? '学習のプロジェクトへ書き出す' : 'ファイルの組を書き出す'
   const info = result?.info as
     | {
         splits?: Record<string, { items?: number } | undefined>
@@ -548,7 +548,7 @@ function ExportCard({
           {mutation.error instanceof ApiError &&
             mutation.error.status === 409 &&
             !fields.overwrite && (
-              <p className="mt-1 text-xs">置き換える場合は「{replace}」に印を付けてください.</p>
+              <p className="mt-1 text-xs">上書きする場合は「{replace}」に印を付けてください.</p>
             )}
         </ErrorBox>
       )}
@@ -559,7 +559,7 @@ function ExportCard({
             <p className="text-good-text">書き出しました: {result.path}</p>
             {written && (
               <>
-                <p className="text-good-text">問題の設定に書き戻しました.</p>
+                <p className="text-good-text">問題に書き戻しました.</p>
                 <ul className="list-disc pl-5 text-xs">
                   {written.changes.map((change) => (
                     <li key={change}>{change}</li>
@@ -918,11 +918,11 @@ function ProblemPairsView({ path }: { path: string }) {
   }
   return (
     <>
-      <Card title={`問題の設定: ${data.name ?? ''}`} className="mb-4">
+      <Card title={`問題: ${data.name ?? ''}`} className="mb-4">
         <p className="break-all font-mono text-xs text-ink-3">{data.path}</p>
         <p className="mt-2 text-sm text-ink-2">
-          問題の設定の値で欄を埋めました. 書き出すと, プロジェクトの書き出し先に書き出し,
-          欄の値を問題の設定に書き戻します.
+          問題の値で欄を埋めました. 書き出すと, 学習のプロジェクトの書き出し先に書き出し,
+          欄の値を問題に書き戻します.
         </p>
         {data.notes.length > 0 && (
           <ul className="mt-2 list-disc pl-5 text-xs text-warning-text">
@@ -951,7 +951,7 @@ export function PairExportPage() {
       <>
         <PageHeader
           title="ファイルの組を書き出す"
-          subtitle="問題の設定から始めた書き出し. ML-Quest の下書きで埋め, 書き出した設定を問題の設定に書き戻します"
+          subtitle="問題から始めた書き出し. 問題の答えで埋め, 書き出した設定を問題に書き戻します"
           breadcrumb={<Link to="/datasets">データセット</Link>}
         />
         <ProblemPairsView key={problem} path={problem} />

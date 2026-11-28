@@ -88,17 +88,17 @@ function renderTab() {
   return check
 }
 
-test('受け持ちを読み込む間は, 確かめのカードもプロジェクトへの書き出しも出さず確かめない', async () => {
+test('受け持ちを読み込む間は, 確かめのカードも学習のプロジェクトへの書き出しも出さず確かめない', async () => {
   vi.spyOn(api, 'groupProblem').mockReturnValue(new Promise(() => undefined))
   const check = renderTab()
-  expect(await screen.findByText('問題の設定を読んでいます')).toBeTruthy()
-  expect(screen.queryByText('問題の設定との食い違いはありません.')).toBeNull()
-  expect(screen.queryByRole('button', { name: '問題の設定に書き戻す' })).toBeNull()
-  expect(screen.queryByText('プロジェクトへ書き出す')).toBeNull()
+  expect(await screen.findByText('問題を読んでいます')).toBeTruthy()
+  expect(screen.queryByText('問題との食い違いはありません.')).toBeNull()
+  expect(screen.queryByRole('button', { name: '問題に書き戻す' })).toBeNull()
+  expect(screen.queryByText('学習のプロジェクトへ書き出す')).toBeNull()
   expect(check).not.toHaveBeenCalled()
 })
 
-test('まとめるなら, 確かめずに案内を出し, プロジェクトへの書き出しを出さない', async () => {
+test('まとめるなら, 確かめずに案内を出し, 学習のプロジェクトへの書き出しを出さない', async () => {
   vi.spyOn(api, 'groupProblem').mockResolvedValue(
     linked({
       columns: ['spend'],
@@ -110,28 +110,28 @@ test('まとめるなら, 確かめずに案内を出し, プロジェクトへ�
   )
   const check = renderTab()
   expect(await screen.findByRole('link', { name: '群分けのタブへ移る' })).toBeTruthy()
-  expect(screen.queryByRole('button', { name: '問題の設定に書き戻す' })).toBeNull()
-  expect(screen.queryByText('プロジェクトへ書き出す')).toBeNull()
+  expect(screen.queryByRole('button', { name: '問題に書き戻す' })).toBeNull()
+  expect(screen.queryByText('学習のプロジェクトへ書き出す')).toBeNull()
   expect(check).not.toHaveBeenCalled()
 })
 
-test('まとめるでなければ, 今までどおり確かめのカードとプロジェクトへの書き出しを出す', async () => {
+test('まとめるでなければ, 今までどおり確かめのカードと学習のプロジェクトへの書き出しを出す', async () => {
   vi.spyOn(api, 'groupProblem').mockResolvedValue(linked(null))
   const check = renderTab()
-  expect(await screen.findByText('問題の設定との食い違いはありません.')).toBeTruthy()
+  expect(await screen.findByText('問題との食い違いはありません.')).toBeTruthy()
   expect(check).toHaveBeenCalled()
-  expect(screen.getByRole('button', { name: '問題の設定に書き戻す' })).toBeTruthy()
-  expect(await screen.findByRole('button', { name: 'プロジェクトへ書き出す' })).toBeTruthy()
+  expect(screen.getByRole('button', { name: '問題に書き戻す' })).toBeTruthy()
+  expect(await screen.findByRole('button', { name: '学習のプロジェクトへ書き出す' })).toBeTruthy()
   expect(screen.queryByRole('link', { name: '群分けのタブへ移る' })).toBeNull()
 })
 
 test('受け持ちを読めなければ, 今までどおり確かめのカードが理由を出す', async () => {
-  vi.spyOn(api, 'groupProblem').mockRejectedValue(new ApiError(422, '問題の設定を読めません'))
+  vi.spyOn(api, 'groupProblem').mockRejectedValue(new ApiError(422, '問題を読めません'))
   const check = renderTab()
   // 確かめも同じ理由で断る (カードが理由を出す)
-  check.mockRejectedValue(new ApiError(422, '問題の設定を読めません'))
+  check.mockRejectedValue(new ApiError(422, '問題を読めません'))
   expect(await screen.findByRole('alert')).toBeTruthy()
-  expect(screen.getByRole('alert').textContent).toContain('問題の設定を読めません')
+  expect(screen.getByRole('alert').textContent).toContain('問題を読めません')
   expect(check).toHaveBeenCalled()
   expect(screen.queryByRole('link', { name: '群分けのタブへ移る' })).toBeNull()
 })

@@ -50,16 +50,16 @@ test('始めたときの知らせを並べ, 食い違いが無ければ書き戻
   renderCard(['書き出した列を全て作ります. ID のような列は drop_columns で落としてください'])
   const notes = screen.getByRole('region', { name: '始めたときの知らせ' })
   expect(within(notes).getByText(/ID のような列は drop_columns/)).toBeTruthy()
-  expect(await screen.findByText('問題の設定との食い違いはありません.')).toBeTruthy()
+  expect(await screen.findByText('問題との食い違いはありません.')).toBeTruthy()
   expect(call).toHaveBeenCalledWith('s1', RECIPE)
-  const button = screen.getByRole('button', { name: '問題の設定に書き戻す' })
+  const button = screen.getByRole('button', { name: '問題に書き戻す' })
   expect((button as HTMLButtonElement).disabled).toBe(false)
 })
 
 test('知らせが無ければ知らせの欄を出さない', async () => {
   vi.spyOn(api, 'checkProblem').mockResolvedValue(CHECKED)
   renderCard()
-  expect(await screen.findByText('問題の設定との食い違いはありません.')).toBeTruthy()
+  expect(await screen.findByText('問題との食い違いはありません.')).toBeTruthy()
   expect(screen.queryByRole('region', { name: '始めたときの知らせ' })).toBeNull()
 })
 
@@ -77,17 +77,17 @@ const GROUPED: GroupProblem = {
   project: null,
 }
 
-test('まとめるの問題の設定は, 誤りでなく案内を出して群分けのタブへ導く', () => {
+test('まとめるの問題は, 誤りでなく案内を出して群分けのタブへ導く', () => {
   const call = vi.spyOn(api, 'checkProblem')
   render(
     <MemoryRouter initialEntries={['/sources/s1?tab=recipe']}>
       <GroupProblemNote problem={GROUPED} />
     </MemoryRouter>,
   )
-  expect(screen.getByText('問題の設定: 客の群')).toBeTruthy()
+  expect(screen.getByText('問題: 客の群')).toBeTruthy()
   expect(screen.getByText(/レシピを持ちません/)).toBeTruthy()
   expect(screen.queryByRole('alert')).toBeNull()
-  expect(screen.queryByRole('button', { name: '問題の設定に書き戻す' })).toBeNull()
+  expect(screen.queryByRole('button', { name: '問題に書き戻す' })).toBeNull()
   const link = screen.getByRole('link', { name: '群分けのタブへ移る' })
   expect(link.getAttribute('href')).toBe('/sources/s1?tab=groups')
   // レシピの確かめ (まとめるでは 422) を呼ばない

@@ -28,13 +28,13 @@ function ProjectProblem({
   const start = useStartFromProblem({ onAdded })
   const item = problems.data?.problems.find((entry) => problemIdOf(entry.path) === project)
   return (
-    <Card title="選んだ問題の設定" className="mb-4">
+    <Card title="選んだ問題" className="mb-4">
       {problems.isPending && <Spinner />}
       {problems.error && <ErrorBox error={problems.error} live={false} />}
       {problems.data?.error && <p className="text-sm text-critical-text">{problems.data.error}</p>}
       {problems.data && !problems.data.error && !item && (
         <p className="text-sm text-critical-text">
-          問題の設定 <span className="font-mono">{project}</span> は置き場 (
+          問題 <span className="font-mono">{project}</span> は置き場 (
           <span className="font-mono">{problems.data.root}</span>) にありません.
         </p>
       )}
@@ -54,7 +54,7 @@ function ProjectProblem({
               disabled={start.isPending}
               onClick={() => start.mutate(item.path)}
             >
-              {start.isPending ? '読み込み中…' : 'この問題の設定から始める'}
+              {start.isPending ? '読み込み中…' : 'この問題から始める'}
             </Button>
           )}
         </div>
@@ -118,10 +118,10 @@ export function SourcesPage() {
               {samples.isPending ? '見本を作っています…' : '見本のデータを入れる'}
             </Button>
             <Button icon={ClipboardList} onClick={() => setAdding('problem')}>
-              問題の設定から始める
+              問題から始める
             </Button>
             <Button variant="primary" icon={Plus} onClick={() => setAdding('data')}>
-              データを追加
+              データを登録
             </Button>
           </>
         }
@@ -134,7 +134,7 @@ export function SourcesPage() {
             checked={showAll}
             onChange={(event) => setAllFor(event.target.checked ? project : null)}
           />
-          全てのデータを出す (選んだ問題の設定から始めていないものも)
+          全てのデータを出す (選んだ問題から始めていないものも)
         </label>
       )}
       {sources.isPending && <Spinner />}
@@ -148,14 +148,14 @@ export function SourcesPage() {
       </p>
       {sources.data?.length === 0 && (
         <EmptyState icon={FolderSearch} title="まだデータがありません">
-          「データを追加」で, 分析したいファイルかディレクトリを選んでください.
+          「データを登録」で, 分析したいファイルかディレクトリを選んでください.
           まず操作を試すなら「見本のデータを入れる」で, 表, 時系列, 画像, 文,
           点群の見本を登録できます
         </EmptyState>
       )}
       {filtered && sources.data && sources.data.length > 0 && shown?.length === 0 && (
         <p className="mb-3 text-sm text-ink-3">
-          選んだ問題の設定から始めたデータはまだありません. 「この問題の設定から始める」で始めるか,
+          選んだ問題から始めたデータはまだありません. 「この問題から始める」で始めるか,
           「全てのデータを出す」で他のデータを開けます.
         </p>
       )}
@@ -181,7 +181,7 @@ export function SourcesPage() {
             <div className="mt-3 flex items-center gap-3 text-xs text-ink-3">
               <span>読み込み {source.loader}</span>
               <span>目的の列 {source.target ?? 'なし'}</span>
-              {source.problem && <span>問題の設定から</span>}
+              {source.problem && <span>問題から</span>}
               {!source.exists && (
                 <span className="flex items-center gap-1 text-critical-text">
                   <AlertTriangle size={12} aria-hidden /> ファイルがありません

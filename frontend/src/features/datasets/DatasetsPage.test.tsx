@@ -226,12 +226,12 @@ test('版 3 は項目と中身の手順と出どころ, 版 1 は表, 知らな�
   const reviews = within(screen.getByText('reviews').closest('section')!)
   expect(reviews.getByText('[バッチ, 16] int64')).toBeInTheDocument()
   expect(reviews.getByText(/語彙の大きさ 321/)).toBeInTheDocument()
-  expect(people.queryByText('プロジェクト')).not.toBeInTheDocument()
+  expect(people.queryByText('学習のプロジェクト')).not.toBeInTheDocument()
 
   // プロジェクトへ書き出したものは印を付ける
   const project = within(screen.getByText('dataset').closest('section')!)
-  expect(project.getAllByText('プロジェクト')).toHaveLength(2)
-  expect(project.getByText(/データ 総菜の作る量 からプロジェクトへ/)).toBeInTheDocument()
+  expect(project.getAllByText('学習のプロジェクト')).toHaveLength(2)
+  expect(project.getByText(/データ 総菜の作る量 から学習のプロジェクトへ/)).toBeInTheDocument()
   expect(project.getByText(/1 \(値\)/)).toBeInTheDocument()
 
   // 知らない版も消さずに理由を出す

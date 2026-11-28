@@ -67,7 +67,7 @@ export function ProjectExport({
   // 時間をまたぐ量の判断のデータセットの説明の demand (他のタスクは null)
   const doneDemand = done ? demandOf(done.info) : null
   const failed = exporter.error && same ? exporter.error : null
-  if (place.isPending) return <Spinner label="プロジェクトの書き出し先を調べています" />
+  if (place.isPending) return <Spinner label="学習のプロジェクトの書き出し先を調べています" />
   // 問題の設定を読めない理由は問題の設定のカードに出るので, ここは短く
   if (place.error) return <ErrorBox error={place.error} />
   if (!data) return null
@@ -77,7 +77,7 @@ export function ProjectExport({
     const replace = data.state === 'dataset'
     if (
       replace &&
-      !window.confirm(`${data.dataset} には前に書き出したデータセットがあります. 置き換えますか?`)
+      !window.confirm(`${data.dataset} には前に書き出したデータセットがあります. 上書きしますか?`)
     ) {
       return
     }
@@ -89,19 +89,19 @@ export function ProjectExport({
       className="mt-4 border-t border-line pt-3"
     >
       <h3 id={`project-export-${sourceId}`} className="text-xs font-semibold text-ink-2">
-        プロジェクトへ書き出す
+        学習のプロジェクトへ書き出す
       </h3>
       {data.dataset ? (
         <>
           <p className="mt-1 text-xs text-ink-3">
-            問題の設定に記録した学習のプロジェクトの, データセットを読む場所に書き出します.
+            問題に記録した学習のプロジェクトの, データセットを読む場所に書き出します.
           </p>
           <p className="mt-1 truncate font-mono text-xs" title={data.dataset}>
             {data.dataset}
           </p>
           {data.state === 'dataset' && (
             <p className="text-xs text-ink-3">
-              前に書き出したものがあります (書き出すと, 確かめてから置き換えます)
+              前に書き出したものがあります (書き出すと, 確かめてから上書きします)
             </p>
           )}
         </>
@@ -117,14 +117,14 @@ export function ProjectExport({
           aria-describedby={reasons}
           onClick={run}
         >
-          {exporter.isPending ? '書き出し中…' : 'プロジェクトへ書き出す'}
+          {exporter.isPending ? '書き出し中…' : '学習のプロジェクトへ書き出す'}
         </Button>
       )}
       {failed && <ErrorBox error={failed} />}
       {done && (
         <div className="mt-3 space-y-2 text-sm">
           <p role="status" className="text-good-text">
-            プロジェクトへ書き出しました: {done.path}
+            学習のプロジェクトへ書き出しました: {done.path}
           </p>
           {doneAnomaly && <AnomalyRows summary={doneAnomaly} />}
           {doneUplift && <UpliftRows summary={doneUplift} />}

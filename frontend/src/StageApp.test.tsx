@@ -164,11 +164,11 @@ describe('StageApp', () => {
     expect(await screen.findByText('light')).toBeInTheDocument()
   })
 
-  it('project を渡すと, その問題の設定から始めたデータに絞り, 始める欄を出す', async () => {
+  it('project を渡すと, その問題から始めたデータに絞り, 始める欄を出す', async () => {
     stubApi()
     renderStage({ project: 'aaaaaaaaaaaa' })
     expect(await screen.findByText('総菜の作る量')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'この問題の設定から始める' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'この問題から始める' })).toBeInTheDocument()
     expect(await screen.findByRole('link', { name: '総菜の売上' })).toBeInTheDocument()
     expect(screen.queryByRole('link', { name: '解約の記録' })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: '手で入れた表' })).not.toBeInTheDocument()
@@ -178,13 +178,11 @@ describe('StageApp', () => {
     expect(screen.getByRole('link', { name: '手で入れた表' })).toBeInTheDocument()
   })
 
-  it('始められない問題の設定は理由を出し, 置き場に無い識別子は無いと出す', async () => {
+  it('始められない問題は理由を出し, 置き場に無い識別子は無いと出す', async () => {
     stubApi()
     const { rerender } = renderStage({ project: 'cccccccccccc' })
     expect(await screen.findByText('データが入っていません')).toBeInTheDocument()
-    expect(
-      screen.queryByRole('button', { name: 'この問題の設定から始める' }),
-    ).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'この問題から始める' })).not.toBeInTheDocument()
     rerender(
       <StageApp
         basename="/data"
@@ -198,12 +196,12 @@ describe('StageApp', () => {
     expect(await screen.findByText(/は置き場/)).toBeInTheDocument()
   })
 
-  it('選んだ問題の設定から始めると, データの画面へ移り, 同じ値は知らせない', async () => {
+  it('選んだ問題から始めると, データの画面へ移り, 同じ値は知らせない', async () => {
     const fetchMock = stubApi()
     const { onProjectChange, onProjectsChange } = renderStage({ project: 'aaaaaaaaaaaa' })
     // 殻の通しの確かめと同じく, 欄を区域の名前で選ぶ
-    const card = await screen.findByRole('region', { name: '選んだ問題の設定' })
-    fireEvent.click(await within(card).findByRole('button', { name: 'この問題の設定から始める' }))
+    const card = await screen.findByRole('region', { name: '選んだ問題' })
+    fireEvent.click(await within(card).findByRole('button', { name: 'この問題から始める' }))
     await waitFor(() => expect(window.location.pathname).toBe('/data/sources/new'))
     const start = fetchMock.mock.calls.find(
       ([input]) => String(input) === '/api/data/problems/start',
@@ -213,14 +211,14 @@ describe('StageApp', () => {
     expect(onProjectsChange).not.toHaveBeenCalled()
   })
 
-  it('対話で別の問題の設定から始めると, その識別子を知らせる', async () => {
+  it('対話で別の問題から始めると, その識別子を知らせる', async () => {
     stubApi()
     const { onProjectChange } = renderStage({ project: 'aaaaaaaaaaaa' })
-    fireEvent.click(await screen.findByRole('button', { name: '問題の設定から始める' }))
+    fireEvent.click(await screen.findByRole('button', { name: '問題から始める' }))
     const dialog = await screen.findByRole('dialog', { hidden: true })
     fireEvent.click(await within(dialog).findByRole('button', { name: /解約の予測/, hidden: true }))
     fireEvent.click(
-      within(dialog).getByRole('button', { name: 'この問題の設定から始める', hidden: true }),
+      within(dialog).getByRole('button', { name: 'この問題から始める', hidden: true }),
     )
     await waitFor(() => expect(onProjectChange).toHaveBeenCalledWith('bbbbbbbbbbbb'))
     expect(onProjectChange).toHaveBeenCalledTimes(1)
@@ -230,11 +228,11 @@ describe('StageApp', () => {
   it('置き場の外の同じ名前の写しから始めても知らせない', async () => {
     stubApi('/backup/bbbbbbbbbbbb/problem.yaml')
     const { onProjectChange } = renderStage({ project: 'aaaaaaaaaaaa' })
-    fireEvent.click(await screen.findByRole('button', { name: '問題の設定から始める' }))
+    fireEvent.click(await screen.findByRole('button', { name: '問題から始める' }))
     const dialog = await screen.findByRole('dialog', { hidden: true })
     fireEvent.click(await within(dialog).findByRole('button', { name: /解約の予測/, hidden: true }))
     fireEvent.click(
-      within(dialog).getByRole('button', { name: 'この問題の設定から始める', hidden: true }),
+      within(dialog).getByRole('button', { name: 'この問題から始める', hidden: true }),
     )
     await waitFor(() => expect(window.location.pathname).toBe('/data/sources/new'))
     expect(onProjectChange).not.toHaveBeenCalled()
@@ -303,7 +301,7 @@ describe('StageApp', () => {
       '/sources/s3',
     )
     expect(screen.getByText('ML-Fathom')).toBeInTheDocument()
-    expect(screen.queryByText('選んだ問題の設定')).not.toBeInTheDocument()
+    expect(screen.queryByText('選んだ問題')).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '暗い表示にする' }))
     expect(document.documentElement.classList.contains('dark')).toBe(true)
   })

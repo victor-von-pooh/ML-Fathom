@@ -646,7 +646,7 @@ def test_start_old_quest(
     started = client.post("/api/problems/start", json={"path": str(path)})
     assert started.status_code == 422
     detail = started.json()["detail"]
-    assert "問題の設定を渡せません" in detail
+    assert "問題を渡せません" in detail
     assert "時間をまたぐ量の判断を受けない版" in detail
     assert client.get("/api/sources").json() == []
 
@@ -688,7 +688,7 @@ def test_start_refused(
     started = client.post("/api/problems/start", json={"path": str(path)})
     assert started.status_code == 422
     detail = started.json()["detail"]
-    assert "問題の設定を渡せません" in detail
+    assert "問題を渡せません" in detail
     assert client.get("/api/sources").json() == []
     listed = client.get("/api/problems").json()["problems"]
     assert [item["startable"] for item in listed] == [False]

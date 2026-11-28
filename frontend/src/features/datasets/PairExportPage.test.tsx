@@ -97,7 +97,7 @@ test('外を指すリンクの先は既定で写さず, 印を付けた場合だ
   expect(exporter.mock.calls[1]![0]).toMatchObject({ follow_links: true })
 })
 
-test('問題の設定から始めた書き出しは印なしで始め, 印を書き出しの設定の外で送る', async () => {
+test('問題から始めた書き出しは印なしで始め, 印を書き出しの設定の外で送る', async () => {
   const pairs: ProblemPairs = {
     name: '領域の問題',
     path: '/p/problem.yaml',
@@ -130,8 +130,8 @@ test('問題の設定から始めた書き出しは印なしで始め, 印を書
   const links = await screen.findByRole('checkbox', { name: '外を指すリンクの先も写す' })
   expect(links).not.toBeChecked()
   fireEvent.click(links)
-  fireEvent.click(screen.getByRole('button', { name: 'プロジェクトへ書き出す' }))
-  expect(await screen.findByText('問題の設定に書き戻しました.')).toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: '学習のプロジェクトへ書き出す' }))
+  expect(await screen.findByText('問題に書き戻しました.')).toBeInTheDocument()
   const body = exporter.mock.calls[0]![0]
   expect(body.follow_links).toBe(true)
   expect(body.export.options).not.toHaveProperty('follow_links')

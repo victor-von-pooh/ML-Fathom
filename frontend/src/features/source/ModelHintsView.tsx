@@ -51,7 +51,7 @@ export function ModelHintsView({
           : price
             ? '最後の nn.Linear の out_features (売れた数の予測を 1 つ. 値段の列は入力の最後)'
             : demand
-              ? '分位点の水準 1 つあたりの値の数. 最後の nn.Linear の out_features は, これに学ぶ水準の数 (問題の設定で決める) をかけた数'
+              ? '分位点の水準 1 つあたりの値の数. 最後の nn.Linear の out_features は, これに学ぶ水準の数 (問題の設定の段階で決める) をかけた数'
               : hints.outputs === 1
                 ? '最後の nn.Linear の out_features (値を 1 つ)'
                 : '最後の nn.Linear の out_features (クラスの数)',
@@ -60,7 +60,7 @@ export function ModelHintsView({
   return (
     <div className="rounded-lg border border-line p-2">
       <p id={id} className="text-xs font-semibold text-ink-2">
-        モデルを組むときの数 (ML-CreateArchitecture の部品の引数に)
+        モデルを組むときの数 (モデルの作成・選定の段階の部品の引数に)
       </p>
       <table aria-labelledby={id} className="mt-1 w-full text-xs">
         <thead className="sr-only">
