@@ -101,3 +101,17 @@ export function writePairDraft(form: PairForm, draft: PairDraft | null): void {
     // 覚えられなくても, 開いている間は欄に残る
   }
 }
+
+/**
+ * 書き出しに送った時の下書き (JSON の文) と今の下書きが同じときだけ消す
+ * (書き出しの途中で欄を変えた場合は, 変えた値を残すため)
+ */
+export function discardPairDraft(form: PairForm, sent: string): void {
+  try {
+    if (window.localStorage.getItem(pairDraftKey(form)) === sent) {
+      window.localStorage.removeItem(pairDraftKey(form))
+    }
+  } catch {
+    // 覚えられない環境では消すものも無い
+  }
+}

@@ -248,3 +248,42 @@ test('問題から始めた書き出しは下書きを残さず, 手で始めた
     inputs: '/manual/images',
   })
 })
+
+test('書き出しの途中で欄を変えると, 書き出し終えても変えた値の下書きを残す', async () => {
+  vi.spyOn(api, 'info').mockResolvedValue(INFO)
+  let finish: (result: PairExportResult) => void = () => {}
+  vi.spyOn(api, 'exportImageMasks').mockReturnValue(
+    new Promise((resolve) => {
+      finish = resolve
+    }),
+  )
+  renderPage()
+  const panel = imagePanel()
+  fireEvent.change(panel.getByLabelText('画像のディレクトリ'), { target: { value: '/d/images' } })
+  fireEvent.change(panel.getByLabelText('領域のディレクトリ'), { target: { value: '/d/masks' } })
+  fireEvent.change(panel.getByLabelText('データセットの名前'), { target: { value: 'shapes' } })
+  fireEvent.click(panel.getByRole('button', { name: 'ファイルの組を書き出す' }))
+  await panel.findByRole('button', { name: '書き出し中…' })
+  // 書き出しの途中で欄を変える
+  fireEvent.change(panel.getByLabelText('画像のディレクトリ'), { target: { value: '/e/images' } })
+  finish({ ...SKIPPED, notes: [], notices: [] })
+  await waitFor(() => expect(api.exportImageMasks).toHaveBeenCalled())
+  await waitFor(() =>
+    expect(panel.queryByRole('button', { name: '書き出し中…' })).not.toBeInTheDocument(),
+  )
+  const saved = window.localStorage.getItem('ml-fathom:pairs:image_masks')
+  expect(saved).not.toBeNull()
+  expect(JSON.parse(saved!)).toMatchObject({ inputs: '/e/images' })
+})
+
+test('知らない正解の出どころの種類は下書きから戻さない', async () => {
+  window.localStorage.setItem(
+    'ml-fathom:pairs:image_masks',
+    JSON.stringify({ inputs: '/d/images', originType: 'toString' }),
+  )
+  vi.spyOn(api, 'info').mockResolvedValue(INFO)
+  renderPage()
+  const panel = imagePanel()
+  expect(panel.getByLabelText('画像のディレクトリ')).toHaveValue('/d/images')
+  expect(panel.getByLabelText('種類')).toHaveValue('unknown')
+})

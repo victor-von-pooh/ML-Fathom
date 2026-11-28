@@ -38,7 +38,13 @@ import {
   parseSettings,
   settingsText,
 } from '../../lib/pairs'
-import { readPairDraft, writePairDraft, type PairDraft, type PairForm } from '../../lib/pairDrafts'
+import {
+  discardPairDraft,
+  readPairDraft,
+  writePairDraft,
+  type PairDraft,
+  type PairForm,
+} from '../../lib/pairDrafts'
 import { splitLabel } from '../../lib/recipe'
 import { EntryStepsField } from './EntryStepsField'
 import { ModelNeeds } from './ModelNeeds'
@@ -425,7 +431,11 @@ function savedFields(saved: Partial<PairDraft> | null): CommonFields {
     test: saved.test ?? INITIAL.test,
     seed: saved.seed ?? INITIAL.seed,
     groups: saved.groups ?? INITIAL.groups,
-    originType: saved.originType ?? INITIAL.originType,
+    // 知らない種類は戻さない (選べない値を欄に入れないため)
+    originType:
+      saved.originType !== undefined && Object.hasOwn(ORIGIN_LABELS, saved.originType)
+        ? saved.originType
+        : INITIAL.originType,
     originName: saved.originName ?? INITIAL.originName,
     originSettings: saved.originSettings ?? INITIAL.originSettings,
   }
@@ -461,13 +471,15 @@ function pairDraft(
  * 手で始めた書き出しの欄を, 変えるたびにブラウザに残す (殻の要求 R10).
  * 全ての欄が初めの値なら消す. 問題から始めた場合は残さない (開くたびに問題の値で埋めるため)
  */
-function usePairDraft(form: FormId, enabled: boolean, draft: PairDraft): void {
+function usePairDraft(form: FormId, enabled: boolean, draft: PairDraft): string {
   const text = JSON.stringify(draft)
   useEffect(() => {
     if (!enabled) return
     const blank = JSON.stringify(pairDraft('', '', INITIAL, initialDrafts(form, undefined)))
     writePairDraft(form, text === blank ? null : (JSON.parse(text) as PairDraft))
   }, [form, enabled, text])
+  // 書き出しに送る欄の印 (書き出し終えたときに, 送った後で欄を変えたかを見るため)
+  return text
 }
 
 /** 選べる中身の手順 (ML-EDA の登録簿を項目の種類で絞ったもの) を読む */
@@ -737,7 +749,11 @@ function ImageMasksForm({ linked }: { linked?: Linked }) {
   )
   const pairSteps = usePairSteps()
   const [steps, setSteps] = useState<EntryDrafts>(() => initialDrafts('image_masks', draft, saved))
-  usePairDraft('image_masks', !linked, pairDraft(images, masks, fields, steps, { suffix, classes }))
+  const sent = usePairDraft(
+    'image_masks',
+    !linked,
+    pairDraft(images, masks, fields, steps, { suffix, classes }),
+  )
   const built = itemStepsBody(steps, pairSteps?.image_masks ?? {}, ENTRY_LABELS.image_masks)
   const common = commonBody(fields, !linked)
   const named = parseClasses(classes)
@@ -747,7 +763,8 @@ function ImageMasksForm({ linked }: { linked?: Linked }) {
   )
   if (!images.trim() || !masks.trim()) errors.push('画像と領域のディレクトリを選んでください')
   const exporter = useMutation({
-    mutationFn: (): Promise<PairExportResult | ProblemPairsResult> => {
+    // 引数は送った時の欄の下書き (書き出し終えたときに, 欄を変えていなければ捨てる)
+    mutationFn: (_sent: string): Promise<PairExportResult | ProblemPairsResult> => {
       if (linked) {
         const options = {
           ...(named.value ? { classes: named.value } : {}),
@@ -777,10 +794,11 @@ function ImageMasksForm({ linked }: { linked?: Linked }) {
         item_steps: built.value,
       })
     },
-    onSuccess: (result) => {
+    onSuccess: (result, written) => {
       if ('changes' in result) linked?.onWritten(result)
-      // 書き出し終えた欄の下書きは捨てる (次に開いたときは空の欄から)
-      else writePairDraft('image_masks', null)
+      // 書き出し終えた欄の下書きは捨てる (次に開いたときは空の欄から). 書き出しの
+      // 途中で欄を変えていれば, 変えた値を残す
+      else discardPairDraft('image_masks', written)
       return client.invalidateQueries({ queryKey: ['datasets'] })
     },
   })
@@ -845,7 +863,7 @@ function ImageMasksForm({ linked }: { linked?: Linked }) {
           fields={fields}
           setFields={setFields}
           errors={errors}
-          onExport={() => exporter.mutate()}
+          onExport={() => exporter.mutate(sent)}
           mutation={exporter}
           linked={linked}
         />
@@ -871,13 +889,14 @@ function CaptureCloudsForm({ linked }: { linked?: Linked }) {
   const [steps, setSteps] = useState<EntryDrafts>(() =>
     initialDrafts('capture_clouds', draft, saved),
   )
-  usePairDraft('capture_clouds', !linked, pairDraft(captures, clouds, fields, steps))
+  const sent = usePairDraft('capture_clouds', !linked, pairDraft(captures, clouds, fields, steps))
   const built = itemStepsBody(steps, pairSteps?.capture_clouds ?? {}, ENTRY_LABELS.capture_clouds)
   const common = commonBody(fields, !linked)
   const errors = linkedErrors([...common.errors, ...built.errors], linked)
   if (!captures.trim() || !clouds.trim()) errors.push('撮影と点群のディレクトリを選んでください')
   const exporter = useMutation({
-    mutationFn: (): Promise<PairExportResult | ProblemPairsResult> => {
+    // 引数は送った時の欄の下書き (書き出し終えたときに, 欄を変えていなければ捨てる)
+    mutationFn: (_sent: string): Promise<PairExportResult | ProblemPairsResult> => {
       if (linked) {
         return api.exportProblemPairs({
           path: linked.pairs.path,
@@ -901,10 +920,10 @@ function CaptureCloudsForm({ linked }: { linked?: Linked }) {
         item_steps: built.value,
       })
     },
-    onSuccess: (result) => {
+    onSuccess: (result, written) => {
       if ('changes' in result) linked?.onWritten(result)
-      // 書き出し終えた欄の下書きは捨てる
-      else writePairDraft('capture_clouds', null)
+      // 書き出し終えた欄の下書きは捨てる (途中で欄を変えていれば残す)
+      else discardPairDraft('capture_clouds', written)
       return client.invalidateQueries({ queryKey: ['datasets'] })
     },
   })
@@ -972,7 +991,7 @@ function CaptureCloudsForm({ linked }: { linked?: Linked }) {
           fields={fields}
           setFields={setFields}
           errors={errors}
-          onExport={() => exporter.mutate()}
+          onExport={() => exporter.mutate(sent)}
           mutation={exporter}
           linked={linked}
         />
