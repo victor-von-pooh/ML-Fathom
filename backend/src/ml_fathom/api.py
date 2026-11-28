@@ -369,7 +369,7 @@ def load_source(source: dict[str, Any]) -> ml_eda.Data:
     # 記録した軌跡は表として読まず, 軌跡の要約だけを返す
     if source["loader"] == TRAJECTORY_LOADER:
         raise HTTPException(
-            422, "記録した軌跡は表として読みません. 「データを追加」から"
+            422, "記録した軌跡は表として読みません. 「データを登録」から"
             "読み込み trajectory で登録し, 軌跡の分析で見てください"
         )
     # 覚えていれば使い, 無ければ読み込む

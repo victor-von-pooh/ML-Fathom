@@ -102,14 +102,14 @@ export function ProblemCard({
       title={
         <span className="flex items-center gap-1.5">
           <ClipboardList className="size-4 text-accent" aria-hidden />
-          問題の設定{data?.name ? `: ${data.name}` : ''}
+          問題{data?.name ? `: ${data.name}` : ''}
         </span>
       }
       className="border-accent/50"
     >
       <p className="mb-3 text-xs text-ink-3">
-        問題の設定 (ML-Pathfinder) で決めた状態から始めたデータです. ここで変えた選び方を,
-        問題の設定と比べて書き戻せます. 列の使い方は自動では変えません.
+        問題の設定の段階で決めた状態から始めたデータです. ここで変えた選び方を,
+        問題と比べて書き戻せます. 列の使い方は自動では変えません.
       </p>
       {notes.length > 0 && (
         <section aria-label="始めたときの知らせ" className="mb-3">
@@ -121,9 +121,7 @@ export function ProblemCard({
           </ul>
         </section>
       )}
-      {check.isPending && check.fetchStatus !== 'idle' && (
-        <Spinner label="問題の設定と比べています" />
-      )}
+      {check.isPending && check.fetchStatus !== 'idle' && <Spinner label="問題と比べています" />}
       {check.error && <ErrorBox error={check.error} />}
       {data && (
         <div className="space-y-3 text-sm">
@@ -138,8 +136,8 @@ export function ProblemCard({
             </section>
           )}
           {data.conflicts.length > 0 && (
-            <section aria-label="問題の設定との食い違い">
-              <h3 className="text-xs font-semibold text-ink-2">問題の設定との食い違い</h3>
+            <section aria-label="問題との食い違い">
+              <h3 className="text-xs font-semibold text-ink-2">問題との食い違い</h3>
               <ul className="mt-1 space-y-1 text-xs">
                 {data.conflicts.map((item) => (
                   <li key={item.message}>
@@ -176,11 +174,11 @@ export function ProblemCard({
             </div>
           ))}
           {data.changes.length === 0 && data.conflicts.length === 0 && choices.length === 0 && (
-            <p className="text-xs text-good-text">問題の設定との食い違いはありません.</p>
+            <p className="text-xs text-good-text">問題との食い違いはありません.</p>
           )}
           <div className="flex flex-wrap items-center gap-2">
             <Button variant="primary" disabled={blocked} onClick={() => write.mutate()}>
-              {write.isPending ? '書き戻しています…' : '問題の設定に書き戻す'}
+              {write.isPending ? '書き戻しています…' : '問題に書き戻す'}
             </Button>
             <span role="status" className="text-xs text-ink-3">
               {errors.length > 0
@@ -225,23 +223,23 @@ export function GroupProblemNote({ problem }: { problem: GroupProblem }) {
       title={
         <span className="flex items-center gap-1.5">
           <ClipboardList className="size-4 text-accent" aria-hidden />
-          問題の設定{problem.name ? `: ${problem.name}` : ''}
+          問題{problem.name ? `: ${problem.name}` : ''}
         </span>
       }
       className="border-accent/50"
     >
       <div className="space-y-3 text-sm">
         <p className="text-ink-2">
-          まとめる (群分け) の問題の設定から始めたデータは, レシピを持ちません.
+          まとめる (群分け) の問題から始めたデータは, レシピを持ちません.
           学習のプロジェクトは表をファイル 1 つのまま読み, 分割も学習のプロジェクトが行うため,
-          ここでの前処理は問題の設定に書き戻さず, プロジェクトへも書き出しません.
+          ここでの前処理は問題に書き戻さず, 学習のプロジェクトへも書き出しません.
         </p>
         <p>
           <Link to="?tab=groups" replace className="text-accent-text underline">
             群分けのタブへ移る
           </Link>
           <span className="ml-1 text-xs text-ink-3">
-            (答えた列で群を見て, 表をそのままプロジェクトへ書き出します)
+            (答えた列で群を見て, 表をそのまま学習のプロジェクトへ書き出します)
           </span>
         </p>
         <p className="truncate font-mono text-xs text-ink-3" title={problem.path}>

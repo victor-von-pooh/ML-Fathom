@@ -457,7 +457,7 @@ def test_not_column_role(client: TestClient, tmp_path: Path) -> None:
     assert response.status_code == 422
     detail = response.json()["detail"]
     assert "predict" in detail and "text" in detail
-    assert "データを追加" in detail
+    assert "データを登録" in detail
     url = f"/api/sources/{source['id']}/problem"
     recipe = client.get(f"/api/sources/{source['id']}/recipe").json()
     checked = client.post(f"{url}/check", json={"recipe": recipe})
@@ -561,7 +561,7 @@ def test_list_problems(
     assert "データが入っていません" in entries["empty"]["reason"]
     assert entries["empty"]["project"] is None
     assert entries["other"]["startable"] is False
-    assert "問題の設定のファイルではありません" in entries["other"]["reason"]
+    assert "問題のファイルではありません" in entries["other"]["reason"]
 
     # 一覧の場所からそのまま始められる
     response = client.post(

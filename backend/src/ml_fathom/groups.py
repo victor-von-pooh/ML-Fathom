@@ -163,7 +163,7 @@ def check_group_columns(
     names = list(answers["columns"])
     if not names:
         raise HTTPException(
-            422, "問題の設定に群を作る列の答えがありません (ML-Pathfinder の"
+            422, "問題に群を作る列の答えがありません (問題の設定の段階の"
             "「群を作るのに使う列は」で答えてください)"
         )
     wanted = names + ([answers["id"]] if answers["id"] else [])
@@ -171,7 +171,7 @@ def check_group_columns(
     missing = [name for name in wanted if name not in present]
     if missing:
         raise HTTPException(
-            422, f"表に {', '.join(missing)} の列がありません. ML-Pathfinder "
+            422, f"表に {', '.join(missing)} の列がありません. 問題の設定の段階"
             "で群を作る列か行を見分ける列を答え直してください"
         )
     # 骨組みが使えない名前 (群の要約と 1 件の鍵, 群の割り当ての表の列)
@@ -184,7 +184,7 @@ def check_group_columns(
             422, f"群を作る列 {', '.join(taken)} は, 群の要約の列 ("
             f"{', '.join(summary)}) か 1 件の行の決まった列 ("
             f"{', '.join(row)}) と同じ名前なので群を作るのに使えません. "
-            "名前を変えた列を持つ表を入れ直すか, ML-Pathfinder で群を作る"
+            "名前を変えた列を持つ表を入れ直すか, 問題の設定の段階で群を作る"
             "列に別の列を答え直してください"
         )
     if answers["id"] in ml_quest.GROUP_ASSIGNED:
@@ -192,7 +192,7 @@ def check_group_columns(
             422, f"行を見分ける列 {answers['id']} は, 群の割り当ての表の列 ("
             f"{', '.join(ml_quest.GROUP_ASSIGNED)}) と同じ名前なので行を"
             "見分けるのに使えません. 名前を変えた列を持つ表を入れ直すか, "
-            "ML-Pathfinder で行を見分ける列に別の列を答え直してください"
+            "問題の設定の段階で行を見分ける列に別の列を答え直してください"
         )
 
 
@@ -243,7 +243,7 @@ def export_groups(
 ) -> dict[str, Any]:
     """
     群を作る列 (と行を見分ける列) を, 群分けの表として版 2 のデータセットに
-    書き出す関数 (分析の保存. 学習のプロジェクトへは表のファイルを写す)
+    書き出す関数 (分析用の書き出し. 学習のプロジェクトへは表のファイルを写す)
 
     Parameters
     ----------

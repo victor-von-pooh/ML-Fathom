@@ -433,7 +433,7 @@ def test_other_roles(client: TestClient, tmp_path: Path) -> None:
     assert response.status_code == 422
     detail = response.json()["detail"]
     assert "「効果を見積もる」(effect)" in detail and "方策" in detail
-    assert "使えません" in detail and "データを追加" in detail
+    assert "使えません" in detail and "データを登録" in detail
 
     # 既製のモデルをそのまま使う並べる
     rank = ml_quest.answer(

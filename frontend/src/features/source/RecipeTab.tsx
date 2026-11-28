@@ -131,12 +131,12 @@ function ColumnsField({
       {!auto && (
         <select
           id={id}
-          aria-label="列を加える"
+          aria-label="列を足す"
           value=""
           onChange={(event) => event.target.value && onChange([...chosen, event.target.value])}
           className="h-7 rounded border border-line bg-surface px-1 font-mono text-xs"
         >
-          <option value="">列を加える…</option>
+          <option value="">列を足す…</option>
           {columns
             .filter((name) => !chosen.includes(name))
             .map((name) => (
@@ -555,7 +555,7 @@ export function RecipeTab({
   return (
     <div className="grid gap-4 xl:grid-cols-[minmax(0,30rem)_1fr]">
       <div className="space-y-4">
-        {waiting && !grouping && <Spinner label="問題の設定を読んでいます" />}
+        {waiting && !grouping && <Spinner label="問題を読んでいます" />}
         {grouping && <GroupProblemNote problem={grouping} />}
         {checking && (
           <div hidden={waiting}>
@@ -1313,7 +1313,7 @@ export function RecipeTab({
                 checked={overwrite}
                 onChange={(event) => setOverwrite(event.target.checked)}
               />
-              同じ名前があれば置き換える
+              同じ名前があれば上書きする
             </label>
           </div>
           {decisions.length > 0 && (
@@ -1336,7 +1336,7 @@ export function RecipeTab({
             <ErrorBox error={exporter.error}>
               {String(exporter.error).includes('既にあります') && (
                 <p className="mt-1 text-xs">
-                  置き換える場合は「同じ名前があれば置き換える」に印を付けてください.
+                  上書きする場合は「同じ名前があれば上書きする」に印を付けてください.
                 </p>
               )}
             </ErrorBox>
@@ -1357,7 +1357,7 @@ export function RecipeTab({
                   demand={exportedDemand !== null}
                 />
               )}
-              <p className="text-xs text-ink-3">ML-Found の学習スクリプトでの使い方:</p>
+              <p className="text-xs text-ink-3">学習のプロジェクトの学習スクリプトでの使い方:</p>
               <pre className="overflow-auto rounded bg-surface-2 p-2 text-xs">
                 {usageSnippet(
                   exporter.data.path,

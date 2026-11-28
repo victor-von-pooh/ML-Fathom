@@ -161,7 +161,7 @@ function ProblemAnswersCard({
 }) {
   const answers = problem.group
   return (
-    <Card title="問題の設定">
+    <Card title="問題">
       <p className="truncate text-xs text-ink-3" title={problem.path}>
         {problem.name ?? '名前なし'} · <span className="font-mono">{problem.path}</span>
       </p>
@@ -183,14 +183,14 @@ function ProblemAnswersCard({
           {/* 読み上げに知らせるため, 枠は常に置いて中身だけ変える (空の間は見た目だけ隠し, 読み上げの木に残す) */}
           <p role="status" className="mt-2 text-xs text-warning-text empty:sr-only">
             {differs &&
-              '群を作る列, 行を見分ける列か群の数が問題の設定の答えと違います. 学習のプロジェクトの骨組みは問題の設定の答えで群を作ります. この選び方にするなら, 問題の設定に書き戻してください.'}
+              '群を作る列, 行を見分ける列か群の数が問題の答えと違います. 学習のプロジェクトの骨組みは問題の答えで群を作ります. この選び方にするなら, 問題に書き戻してください.'}
           </p>
           {children}
         </>
       ) : (
         <p className="mt-2 text-xs text-warning-text">
-          この問題の設定は, まとめるで学習する受け持ちではなくなりました.
-          問題の設定の答えで欄を埋めず, プロジェクトへも書き出しません.
+          この問題は, まとめるで学習する受け持ちではなくなりました. 問題の答えで欄を埋めず,
+          学習のプロジェクトへも書き出しません.
         </p>
       )}
     </Card>
@@ -253,11 +253,9 @@ function GroupWriteBack({
     <div className="mt-3 space-y-2 text-sm">
       {differs && (
         <>
-          {!choice && (
-            <p className="text-xs text-ink-3">欄の誤りを直すと, 問題の設定に書き戻せます</p>
-          )}
+          {!choice && <p className="text-xs text-ink-3">欄の誤りを直すと, 問題に書き戻せます</p>}
           {check.isPending && check.fetchStatus !== 'idle' && (
-            <Spinner label="問題の設定と比べています" />
+            <Spinner label="問題と比べています" />
           )}
           {check.error && <ErrorBox error={check.error} />}
           {data && !check.isError && data.changes.length > 0 && (
@@ -278,7 +276,7 @@ function GroupWriteBack({
               if (data && choice) write.mutate({ sent: choice, version: data.version })
             }}
           >
-            {write.isPending ? '書き戻しています…' : '問題の設定に書き戻す'}
+            {write.isPending ? '書き戻しています…' : '問題に書き戻す'}
           </Button>
         </>
       )}
@@ -287,7 +285,7 @@ function GroupWriteBack({
       <div role="status" className="text-xs text-good-text empty:sr-only">
         {written && (
           <>
-            問題の設定に書き戻しました.
+            問題に書き戻しました.
             {written.changes.length > 0 && (
               <ul className="mt-1 list-disc pl-5">
                 {written.changes.map((text) => (
@@ -332,7 +330,7 @@ function ProjectExportCard({
     const replace = place.state === 'file'
     if (
       replace &&
-      !window.confirm(`${place.dataset} には前に置いた表があります. 置き換えますか?`)
+      !window.confirm(`${place.dataset} には前に置いた表があります. 上書きしますか?`)
     ) {
       return
     }
@@ -340,14 +338,13 @@ function ProjectExportCard({
   }
   const done = exporter.data
   return (
-    <Card title="プロジェクトへ書き出す">
+    <Card title="学習のプロジェクトへ書き出す">
       <p className="text-sm text-ink-2">
-        表を前処理せず, ファイル 1 つのまま,
-        問題の設定に記録した学習のプロジェクトの骨組みが読む場所 (config の data.dataset)
-        に写します. 骨組みは問題の設定の読み方で表を読み,
+        表を前処理せず, ファイル 1 つのまま, 問題に記録した学習のプロジェクトの骨組みが読む場所
+        (config の data.dataset) に写します. 骨組みは問題の読み方で表を読み,
         答えた群を作る列と行を見分ける列だけを使い, 学習用と検証用に分けます.
         学習のプロジェクトへ渡すのはこの書き出しです (下の「群分けの表を分析用に書き出す」は
-        分析の保存で, 骨組みは読みません).
+        分析用の書き出しで, 骨組みは読みません).
       </p>
       {place.dataset && (
         <p className="mt-2 truncate font-mono text-xs" title={place.dataset}>
@@ -356,7 +353,7 @@ function ProjectExportCard({
       )}
       {place.state === 'file' && (
         <p className="text-xs text-ink-3">
-          前に置いたファイルがあります (書き出すと, 確かめてから置き換えます)
+          前に置いたファイルがあります (書き出すと, 確かめてから上書きします)
         </p>
       )}
       {place.reason && <p className="mt-1 text-xs text-warning-text">{place.reason}</p>}
@@ -369,7 +366,7 @@ function ProjectExportCard({
           disabled={exporter.isPending || fetching}
           onClick={run}
         >
-          {exporter.isPending ? '書き出し中…' : 'プロジェクトへ書き出す'}
+          {exporter.isPending ? '書き出し中…' : '学習のプロジェクトへ書き出す'}
         </Button>
       )}
       {exporter.error && <ErrorBox error={exporter.error} />}
@@ -378,7 +375,7 @@ function ProjectExportCard({
         {done &&
           `${
             done.copied
-              ? `プロジェクトへ書き出しました: ${done.path}`
+              ? `学習のプロジェクトへ書き出しました: ${done.path}`
               : `書き出し先は登録した表そのものなので, 写さずにそのまま使います: ${done.path}`
           } (${formatNumber(done.rows)} 行. 骨組みが群を作る列 ${done.columns.join(', ')}${
             done.id ? `, 行を見分ける列 ${done.id}` : ''
@@ -389,7 +386,7 @@ function ProjectExportCard({
 }
 
 /**
- * 群を作る列で, 群分けの表を分析の保存としてデータセット (版 2) に書き出す (学習には使わず,
+ * 群を作る列で, 群分けの表を分析用の書き出しとしてデータセット (版 2) に書き出す (学習には使わず,
  * 学習のプロジェクトへは「プロジェクトへ書き出す」で表のファイルを写す)
  */
 function ExportCard({
@@ -440,9 +437,9 @@ function ExportCard({
   return (
     <Card title="群分けの表を分析用に書き出す">
       <p className="text-sm text-ink-2">
-        選んだ列を, 後で群の要約を見直すための分析の保存として書き出します. 学習には使えません.
-        学習のプロジェクトへ表を渡すには, まとめるの問題の設定から始めて
-        「プロジェクトへ書き出す」を使います. 書き出すのは群を作る列 (上で選んだ列) と
+        選んだ列を, 後で群の要約を見直すために, 分析用として書き出します. 学習には使えません.
+        学習のプロジェクトへ表を渡すには, まとめるの問題から始めて
+        「学習のプロジェクトへ書き出す」を使います. 書き出すのは群を作る列 (上で選んだ列) と
         行を見分ける列だけで, データセットの一覧に群分けの表として並びます.
       </p>
       <div className="mt-3 grid grid-cols-[9rem_1fr] items-center gap-2 text-sm">
@@ -520,7 +517,7 @@ function ExportCard({
               reset()
             }}
           />
-          同じ名前があれば置き換える
+          同じ名前があれば上書きする
         </label>
       </div>
       {reason && (
@@ -542,7 +539,7 @@ function ExportCard({
         <ErrorBox error={exporter.error}>
           {String(exporter.error).includes('既にあります') && (
             <p className="mt-1 text-xs">
-              置き換える場合は「同じ名前があれば置き換える」に印を付けてください.
+              上書きする場合は「同じ名前があれば上書きする」に印を付けてください.
             </p>
           )}
         </ErrorBox>
@@ -587,7 +584,7 @@ export function GroupsTab({ source, profile }: { source: Source; profile: Profil
   // 自分で書き戻した答えでは欄を埋め直さない (欄と群の要約を残す). from は書き戻した
   // ときの欄の鍵, to は書き戻した後の答えの鍵
   const [own, setOwn] = useState<{ from: string; to: string } | null>(null)
-  if (linked && problem.isPending) return <Spinner label="問題の設定を読んでいます" />
+  if (linked && problem.isPending) return <Spinner label="問題を読んでいます" />
   // 読み直しが失敗したら前の答えを使わない (react-query は前の data を残すので,
   // 読めない答えの数え方で群を作らないように. 答えが無いのと同じく種を変えて数える)
   const read = problem.error ? null : (problem.data ?? null)
@@ -671,7 +668,7 @@ function GroupsBody({
           ? '乱数の種は 0 以上の整数にしてください'
           : null
   // 問題の設定を読み直している間は, 古い答えの数え方で群を作らない
-  const waiting = fetching ? '問題の設定を読み直しています' : null
+  const waiting = fetching ? '問題を読み直しています' : null
   const summary = grouping.data
   const differs = answers !== null && differsFromAnswers(answers, columns, k, chosenId)
   return (

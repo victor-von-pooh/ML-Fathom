@@ -9,12 +9,12 @@ test.describe.configure({ mode: 'serial' })
 
 test('ディレクトリをたどって表を登録し, 気付きと列を見る', async ({ page }) => {
   await page.goto('/')
-  await page.getByRole('button', { name: 'データを追加' }).first().click()
+  await page.getByRole('button', { name: 'データを登録' }).first().click()
   await page.getByLabel('ディレクトリのパス').fill(path.dirname(TABLE))
   await page.getByRole('button', { name: '移動' }).click()
   await page.getByRole('button', { name: /people\.csv/ }).click()
   await expect(page.getByLabel('読み込み', { exact: true })).toHaveValue('csv')
-  await page.getByRole('button', { name: '追加', exact: true }).click()
+  await page.getByRole('button', { name: '登録', exact: true }).click()
 
   // 概要に気付き (ID らしい列, 欠損の多い列) が出る
   await expect(page.getByRole('heading', { name: 'people.csv' })).toBeVisible()
@@ -50,11 +50,11 @@ test('目的の列を選び, 手順を作って書き出す', async ({ page }) =
 
 test('無作為の分割でもグループの列を選ぶと, 分割をまたぐ重なりを注意する', async ({ page }) => {
   await page.goto('/')
-  await page.getByRole('button', { name: 'データを追加' }).first().click()
+  await page.getByRole('button', { name: 'データを登録' }).first().click()
   await page.getByLabel('ディレクトリのパス').fill(path.dirname(TABLE))
   await page.getByRole('button', { name: '移動' }).click()
   await page.getByRole('button', { name: /visits\.csv/ }).click()
-  await page.getByRole('button', { name: '追加', exact: true }).click()
+  await page.getByRole('button', { name: '登録', exact: true }).click()
   await expect(page.getByRole('heading', { name: 'visits.csv' })).toBeVisible()
 
   // 無作為の分割に, 同じ会員が複数の行にいる列をグループの列として選ぶ
@@ -95,11 +95,11 @@ test('グループと時刻の組とグループの層化で分け, 使えない
   page,
 }) => {
   await page.goto('/')
-  await page.getByRole('button', { name: 'データを追加' }).first().click()
+  await page.getByRole('button', { name: 'データを登録' }).first().click()
   await page.getByLabel('ディレクトリのパス').fill(path.dirname(TABLE))
   await page.getByRole('button', { name: '移動' }).click()
   await page.getByRole('button', { name: /orders\.csv/ }).click()
-  await page.getByRole('button', { name: '追加', exact: true }).click()
+  await page.getByRole('button', { name: '登録', exact: true }).click()
   await expect(page.getByRole('heading', { name: 'orders.csv' })).toBeVisible()
   // 日付の列を時刻にして時系列として読む
   await page
@@ -158,11 +158,11 @@ test('グループと時刻の組とグループの層化で分け, 使えない
 
 test('正解の欠けた行を unlabeled の分割に残し, 保存して読み直す', async ({ page }) => {
   await page.goto('/')
-  await page.getByRole('button', { name: 'データを追加' }).first().click()
+  await page.getByRole('button', { name: 'データを登録' }).first().click()
   await page.getByLabel('ディレクトリのパス').fill(path.dirname(TABLE))
   await page.getByRole('button', { name: '移動' }).click()
   await page.getByRole('button', { name: /sensors\.csv/ }).click()
-  await page.getByRole('button', { name: '追加', exact: true }).click()
+  await page.getByRole('button', { name: '登録', exact: true }).click()
   await expect(page.getByRole('heading', { name: 'sensors.csv' })).toBeVisible()
 
   // 目的の列が無ければ欄を出さない
@@ -237,26 +237,26 @@ test('目的の列の欠けた行が無いデータでは, 正解の欠けた行
   })
 })
 
-test('問題の設定から始め, 分からない列を使うと選んで書き戻す', async ({ page }) => {
+test('問題から始め, 分からない列を使うと選んで書き戻す', async ({ page }) => {
   // 問題の設定のディレクトリを選ぶと, 決めた状態で始まる
   await page.goto('/')
-  await page.getByRole('button', { name: '問題の設定から始める' }).click()
+  await page.getByRole('button', { name: '問題から始める' }).click()
   await page
     .getByLabel('ディレクトリのパス')
     .fill(path.resolve(import.meta.dirname, '.work', 'problem'))
   await page.getByRole('button', { name: '移動' }).click()
   await page.getByRole('button', { name: 'このディレクトリを選ぶ' }).click()
-  await page.getByRole('button', { name: 'この問題の設定から始める' }).click()
+  await page.getByRole('button', { name: 'この問題から始める' }).click()
   await expect(page.getByRole('heading', { name: '総菜の作る量' })).toBeVisible()
   await page.getByRole('tab', { name: '前処理と書き出し' }).click()
-  const card = page.getByText(/^問題の設定: 総菜の作る量/)
+  const card = page.getByText(/^問題: 総菜の作る量/)
   await expect(card).toBeVisible({ timeout: 20_000 })
-  await expect(page.getByText('問題の設定との食い違いはありません.')).toBeVisible()
+  await expect(page.getByText('問題との食い違いはありません.')).toBeVisible()
 
   // 客数を落とす手順を消すと, どう扱うかを選ぶまで書き戻せない
   await page.getByRole('button', { name: '手順 1 を消す' }).click()
   await expect(page.getByText(/customers は予測の時点で分からない列/)).toBeVisible()
-  const write = page.getByRole('button', { name: '問題の設定に書き戻す' })
+  const write = page.getByRole('button', { name: '問題に書き戻す' })
   await expect(write).toBeDisabled()
   await page.getByRole('button', { name: 'レシピで落とす' }).click()
   await write.click()
@@ -264,7 +264,7 @@ test('問題の設定から始め, 分からない列を使うと選んで書き
   await expect(page.getByText('customers をレシピで落とした')).toBeVisible()
 })
 
-test('保存した問題の設定を一覧から開き, プロジェクトへ書き出して一覧で確かめる', async ({
+test('保存した問題を一覧から開き, 学習のプロジェクトへ書き出して一覧で確かめる', async ({
   page,
 }) => {
   // 置き換えの確かめは既定で受ける (やり直しで前の書き出しが残っていても進めるように)
@@ -277,21 +277,23 @@ test('保存した問題の設定を一覧から開き, プロジェクトへ書
 
   // ML-Pathfinder の置き場の問題の設定を一覧から選んで始める
   await page.goto('/')
-  await page.getByRole('button', { name: '問題の設定から始める' }).click()
-  const stored = page.getByRole('list', { name: '保存した問題の設定' })
-  await stored.getByRole('button', { name: /総菜のプロジェクト/ }).click()
-  await page.getByRole('button', { name: 'この問題の設定から始める' }).click()
-  await expect(page.getByRole('heading', { name: '総菜のプロジェクト' })).toBeVisible()
+  await page.getByRole('button', { name: '問題から始める' }).click()
+  const stored = page.getByRole('list', { name: '保存した問題' })
+  await stored.getByRole('button', { name: /総菜の問題/ }).click()
+  await page.getByRole('button', { name: 'この問題から始める' }).click()
+  await expect(page.getByRole('heading', { name: '総菜の問題' })).toBeVisible()
 
   // 記録した書き出し先へ書き出すと, モデルを組むときの数が出る
   await page.getByRole('tab', { name: '前処理と書き出し' }).click()
-  const button = page.getByRole('button', { name: 'プロジェクトへ書き出す' })
+  const button = page.getByRole('button', { name: '学習のプロジェクトへ書き出す' })
   await expect(button).toBeVisible({ timeout: 20_000 })
   await expect(page.getByText(/project\/data\/dataset$/)).toBeVisible()
   const first = exported()
   await button.click()
   expect((await first).ok()).toBe(true)
-  await expect(page.getByText(/プロジェクトへ書き出しました/)).toBeVisible({ timeout: 20_000 })
+  await expect(page.getByText(/学習のプロジェクトへ書き出しました/)).toBeVisible({
+    timeout: 20_000,
+  })
   await expect(page.getByText('前に書き出したものがあります', { exact: false })).toBeVisible()
 
   // 2 回目は置き換えてよいかを確かめる (断ると送らない)
@@ -307,7 +309,7 @@ test('保存した問題の設定を一覧から開き, プロジェクトへ書
   })
   await button.click()
   await expect.poll(() => messages.length).toBe(1)
-  expect(messages[0]).toContain('置き換えますか')
+  expect(messages[0]).toContain('上書きしますか')
   expect(requests).toHaveLength(0)
   page.once('dialog', (dialog) => void dialog.accept())
   const second = exported()
@@ -316,22 +318,22 @@ test('保存した問題の設定を一覧から開き, プロジェクトへ書
 
   // データセットの一覧にプロジェクトのものとして並び, モデルに要るものが出る
   await page.getByRole('link', { name: 'データセット' }).click()
-  const card = page.locator('section').filter({ hasText: 'データ 総菜のプロジェクト から' })
-  await expect(card.getByText('プロジェクト', { exact: true }).first()).toBeVisible()
+  const card = page.locator('section').filter({ hasText: 'データ 総菜の問題 から' })
+  await expect(card.getByText('学習のプロジェクト', { exact: true }).first()).toBeVisible()
   await expect(card.getByText(/\[バッチ, \d+\] float32/)).toBeVisible()
   await expect(card.getByText(/1 \(値\)/)).toBeVisible()
 })
 
 test('多視点の撮影を登録し, カメラの配置と各枚の深度を見る', async ({ page }) => {
   await page.goto('/')
-  await page.getByRole('button', { name: 'データを追加' }).first().click()
+  await page.getByRole('button', { name: 'データを登録' }).first().click()
   await page
     .getByLabel('ディレクトリのパス')
     .fill(path.resolve(import.meta.dirname, '.work', 'captures'))
   await page.getByRole('button', { name: '移動' }).click()
   await page.getByRole('button', { name: 'このディレクトリを選ぶ' }).click()
   await expect(page.getByLabel('読み込み', { exact: true })).toHaveValue('capture')
-  await page.getByRole('button', { name: '追加', exact: true }).click()
+  await page.getByRole('button', { name: '登録', exact: true }).click()
   await expect(page.getByText('多視点の撮影 · capture')).toBeVisible({ timeout: 20_000 })
 
   // 中身を見る: 一周 6 枚なので隙間は 60 度
@@ -353,14 +355,14 @@ test('多視点の撮影を登録し, カメラの配置と各枚の深度を見
 
 test('音声を登録し, 種類の名前と, 1 件ずつの再生と波形を見る', async ({ page }) => {
   await page.goto('/')
-  await page.getByRole('button', { name: 'データを追加' }).first().click()
+  await page.getByRole('button', { name: 'データを登録' }).first().click()
   await page
     .getByLabel('ディレクトリのパス')
     .fill(path.resolve(import.meta.dirname, '.work', 'sounds'))
   await page.getByRole('button', { name: '移動' }).click()
   await page.getByRole('button', { name: 'このディレクトリを選ぶ' }).click()
   await expect(page.getByLabel('読み込み', { exact: true })).toHaveValue('audio_folder')
-  await page.getByRole('button', { name: '追加', exact: true }).click()
+  await page.getByRole('button', { name: '登録', exact: true }).click()
   await expect(page.getByText('音声 · audio_folder')).toBeVisible({ timeout: 20_000 })
 
   // 中身を見る: 長い録音は先頭の 30 秒だけを再生と波形にする
@@ -379,13 +381,13 @@ test('音声を登録し, 種類の名前と, 1 件ずつの再生と波形を�
 
 test('音声で中身の手順を分析から作り, 数件で試して前と後の再生と波形を見る', async ({ page }) => {
   await page.goto('/')
-  await page.getByRole('button', { name: 'データを追加' }).first().click()
+  await page.getByRole('button', { name: 'データを登録' }).first().click()
   await page
     .getByLabel('ディレクトリのパス')
     .fill(path.resolve(import.meta.dirname, '.work', 'sounds'))
   await page.getByRole('button', { name: '移動' }).click()
   await page.getByRole('button', { name: 'このディレクトリを選ぶ' }).click()
-  await page.getByRole('button', { name: '追加', exact: true }).click()
+  await page.getByRole('button', { name: '登録', exact: true }).click()
   await expect(page.getByText('音声 · audio_folder')).toBeVisible({ timeout: 20_000 })
 
   // 分析 (8000 Hz, 1 チャンネル, 長さの中央値 18 秒) から, 周波数, チャンネル, 長さの順の手順を作る
@@ -422,13 +424,13 @@ test('外を指すリンクの件は理由を出して読まず, 読み込みの
   page,
 }) => {
   await page.goto('/')
-  await page.getByRole('button', { name: 'データを追加' }).first().click()
+  await page.getByRole('button', { name: 'データを登録' }).first().click()
   await page
     .getByLabel('ディレクトリのパス')
     .fill(path.resolve(import.meta.dirname, '.work', 'linked'))
   await page.getByRole('button', { name: '移動' }).click()
   await page.getByRole('button', { name: 'このディレクトリを選ぶ' }).click()
-  await page.getByRole('button', { name: '追加', exact: true }).click()
+  await page.getByRole('button', { name: '登録', exact: true }).click()
   await expect(page.getByText('音声 · audio_folder')).toBeVisible({ timeout: 20_000 })
 
   // 既定では一覧に理由が出て, 1 件の中身も理由付きで読まない
@@ -451,13 +453,13 @@ test('外を指すリンクの件は理由を出して読まず, 読み込みの
 
 test('中身の手順の引数が上限を超えると, 理由を出して試すと書き出すを止める', async ({ page }) => {
   await page.goto('/')
-  await page.getByRole('button', { name: 'データを追加' }).first().click()
+  await page.getByRole('button', { name: 'データを登録' }).first().click()
   await page
     .getByLabel('ディレクトリのパス')
     .fill(path.resolve(import.meta.dirname, '.work', 'sounds'))
   await page.getByRole('button', { name: '移動' }).click()
   await page.getByRole('button', { name: 'このディレクトリを選ぶ' }).click()
-  await page.getByRole('button', { name: '追加', exact: true }).click()
+  await page.getByRole('button', { name: '登録', exact: true }).click()
   await expect(page.getByText('音声 · audio_folder')).toBeVisible({ timeout: 20_000 })
 
   // 周波数を上限 (192000 Hz) より大きくすると, 理由が出て試すと書き出すを押せない
@@ -494,7 +496,7 @@ test('正解の無い件は既定で除き, unlabeled の分割に書くこと�
   const partial = path.join(path.dirname(TABLE), 'partial')
   await form.getByLabel('画像のディレクトリ', { exact: true }).fill(path.join(partial, 'images'))
   await form.getByLabel('領域のディレクトリ', { exact: true }).fill(path.join(partial, 'masks'))
-  await form.getByLabel('同じ名前があれば置き換える').check()
+  await form.getByLabel('同じ名前があれば上書きする').check()
   const button = page.getByRole('button', { name: 'ファイルの組を書き出す' })
 
   // 既定は除く. 何が正解の無い件で, どうなるかを添える
@@ -556,7 +558,7 @@ test('画像と領域の組を版 2 で書き出し, 注意と使い方を見て
   await form.getByLabel('設定 (YAML)').fill('level: 0.5')
   await form.getByLabel('データセットの名前').fill('shapes')
   // CI の再試行でも書けるように置き換えの印を付ける
-  await form.getByLabel('同じ名前があれば置き換える').check()
+  await form.getByLabel('同じ名前があれば上書きする').check()
   await button.click()
 
   // 組にならなかった領域の注意と, load_items の使い方
@@ -593,7 +595,7 @@ test('大きさの混ざった画像を中身の手順でそろえて版 3 で�
   await form.getByLabel('画像のディレクトリ', { exact: true }).fill(path.join(MIXED, 'images'))
   await form.getByLabel('領域のディレクトリ', { exact: true }).fill(path.join(MIXED, 'masks'))
   await form.getByLabel('データセットの名前').fill('resized')
-  await form.getByLabel('同じ名前があれば置き換える').check()
+  await form.getByLabel('同じ名前があれば上書きする').check()
 
   // 画像に選べる手順は resize, grayscale, rgb だけで, 領域の欄は無い
   const adding = form.getByLabel('画像に足す中身の手順')
@@ -659,7 +661,7 @@ test('撮影と点群の組を中身の手順でそろえ, グループで分け
   await form.getByRole('button', { name: '点群に手順を足す' }).click()
   await form.getByLabel('点群の手順 1 の points').fill('50')
   await form.getByLabel('データセットの名前').fill('objects')
-  await form.getByLabel('同じ名前があれば置き換える').check()
+  await form.getByLabel('同じ名前があれば上書きする').check()
   await page.getByRole('button', { name: 'ファイルの組を書き出す' }).click()
 
   await expect(page.getByText(/書き出しました/)).toBeVisible({ timeout: 30_000 })
@@ -672,7 +674,7 @@ test('撮影と点群の組を中身の手順でそろえ, グループで分け
   ).toBeVisible()
 
   // 欄を変えると前の結果を消し, 同じ名前は置き換えの印が無ければ止まる
-  await form.getByLabel('同じ名前があれば置き換える').uncheck()
+  await form.getByLabel('同じ名前があれば上書きする').uncheck()
   await expect(page.getByText(/書き出しました/)).toHaveCount(0)
   await page.getByRole('button', { name: 'ファイルの組を書き出す' }).click()
   await expect(page.getByText(/objects は既にあります/)).toBeVisible()
@@ -696,14 +698,14 @@ test('撮影と点群の組を中身の手順でそろえ, グループで分け
   ).toBeVisible()
 })
 
-test('領域の問題の設定から始め, 下書きのままプロジェクトへ書き出して書き戻す', async ({ page }) => {
+test('領域の問題から始め, 下書きのまま学習のプロジェクトへ書き出して書き戻す', async ({ page }) => {
   // 一覧から選ぶと, データを登録せずにファイルの組の書き出しへ移る
   await page.goto('/')
-  await page.getByRole('button', { name: '問題の設定から始める' }).click()
-  const stored = page.getByRole('list', { name: '保存した問題の設定' })
-  await stored.getByRole('button', { name: /領域のプロジェクト/ }).click()
-  await page.getByRole('button', { name: 'この問題の設定から始める' }).click()
-  await expect(page.getByText('問題の設定: 領域のプロジェクト')).toBeVisible()
+  await page.getByRole('button', { name: '問題から始める' }).click()
+  const stored = page.getByRole('list', { name: '保存した問題' })
+  await stored.getByRole('button', { name: /領域の問題/ }).click()
+  await page.getByRole('button', { name: 'この問題から始める' }).click()
+  await expect(page.getByText('問題: 領域の問題')).toBeVisible()
   await expect(page.getByRole('tab', { name: '撮影と点群' })).toHaveCount(0)
 
   // 欄は問題の設定の下書き (入れたディレクトリ, 分割, 正解の出どころ) で埋まる
@@ -723,10 +725,10 @@ test('領域の問題の設定から始め, 下書きのままプロジェクト
   await page.getByRole('button', { name: '画像に手順を足す' }).click()
 
   // 書き出すとプロジェクトに入り, 問題の設定に書き戻る
-  await page.getByLabel('前に書き出したデータセットを置き換える').check()
-  await page.getByRole('button', { name: 'プロジェクトへ書き出す' }).click()
+  await page.getByLabel('前に書き出したデータセットを上書きする').check()
+  await page.getByRole('button', { name: '学習のプロジェクトへ書き出す' }).click()
   await expect(page.getByText(/書き出しました: .*mask_project/)).toBeVisible({ timeout: 20_000 })
-  await expect(page.getByText('問題の設定に書き戻しました.')).toBeVisible()
+  await expect(page.getByText('問題に書き戻しました.')).toBeVisible()
   await expect(page.getByText(/orphan/)).toBeVisible()
   await expect(page.getByText('image: grayscale')).toBeVisible()
 
@@ -759,20 +761,20 @@ test('領域の問題の設定から始め, 下書きのままプロジェクト
     .click()
   const card = page
     .locator('section')
-    .filter({ hasText: '問題の設定 領域のプロジェクト からプロジェクトへ書き出したもの' })
+    .filter({ hasText: '問題 領域の問題 から学習のプロジェクトへ書き出したもの' })
   await expect(card.getByText('版 3 · ファイルの組')).toBeVisible()
-  await expect(card.getByText('プロジェクト', { exact: true }).first()).toBeVisible()
+  await expect(card.getByText('学習のプロジェクト', { exact: true }).first()).toBeVisible()
 })
 
 test('表として読んだデータで時刻の分割を選ぶと, 日時の列を時刻にする読み方を案内する', async ({
   page,
 }) => {
   await page.goto('/')
-  await page.getByRole('button', { name: 'データを追加' }).first().click()
+  await page.getByRole('button', { name: 'データを登録' }).first().click()
   await page.getByLabel('ディレクトリのパス').fill(path.dirname(TABLE))
   await page.getByRole('button', { name: '移動' }).click()
   await page.getByRole('button', { name: /sozai\.csv/ }).click()
-  await page.getByRole('button', { name: '追加', exact: true }).click()
+  await page.getByRole('button', { name: '登録', exact: true }).click()
   await expect(page.getByRole('heading', { name: 'sozai.csv' }).first()).toBeVisible()
   const readAs = page.getByRole('combobox', { name: '読み方' })
   await readAs.selectOption('table')
@@ -795,7 +797,7 @@ test('記録した軌跡を登録し, 分布と行動の偏りと守りとエピ
   page,
 }) => {
   await page.goto('/')
-  await page.getByRole('button', { name: 'データを追加' }).first().click()
+  await page.getByRole('button', { name: 'データを登録' }).first().click()
   await page
     .getByLabel('ディレクトリのパス')
     .fill(path.resolve(import.meta.dirname, '.work', 'trajectories'))
@@ -803,7 +805,7 @@ test('記録した軌跡を登録し, 分布と行動の偏りと守りとエピ
   await page.getByRole('button', { name: /guarded\.csv/ }).click()
   // 軌跡の表は普通の表としても読めるが, 軌跡の読み込みが先に出る
   await expect(page.getByLabel('読み込み', { exact: true })).toHaveValue('trajectory')
-  await page.getByRole('button', { name: '追加', exact: true }).click()
+  await page.getByRole('button', { name: '登録', exact: true }).click()
   await expect(page.getByRole('heading', { name: 'guarded.csv' })).toBeVisible()
   await expect(page.getByText(/^記録した軌跡 · /)).toBeVisible()
 
@@ -855,7 +857,7 @@ test('記録した軌跡を登録し, 分布と行動の偏りと守りとエピ
 
 test('Box の行動の軌跡では要素ごとの統計を出し, 守りのタブを出さない', async ({ page }) => {
   await page.goto('/')
-  await page.getByRole('button', { name: 'データを追加' }).first().click()
+  await page.getByRole('button', { name: 'データを登録' }).first().click()
   await page
     .getByLabel('ディレクトリのパス')
     .fill(path.resolve(import.meta.dirname, '.work', 'trajectories'))
@@ -863,7 +865,7 @@ test('Box の行動の軌跡では要素ごとの統計を出し, 守りのタ�
   // 説明の JSON を選んでも, その表を軌跡として読む
   await page.getByRole('button', { name: /box\.json/ }).click()
   await expect(page.getByLabel('読み込み', { exact: true })).toHaveValue('trajectory')
-  await page.getByRole('button', { name: '追加', exact: true }).click()
+  await page.getByRole('button', { name: '登録', exact: true }).click()
   await expect(page.getByRole('heading', { name: 'box.json' })).toBeVisible()
   await page.getByRole('tab', { name: '観測と行動' }).click()
   const actions = page.getByRole('table', { name: '行動の要素ごとの統計' })
@@ -874,14 +876,14 @@ test('Box の行動の軌跡では要素ごとの統計を出し, 守りのタ�
 
 test('行動を選んだ確率のある軌跡で, 確率の列の欠けと範囲の外の数を見る', async ({ page }) => {
   await page.goto('/')
-  await page.getByRole('button', { name: 'データを追加' }).first().click()
+  await page.getByRole('button', { name: 'データを登録' }).first().click()
   await page
     .getByLabel('ディレクトリのパス')
     .fill(path.resolve(import.meta.dirname, '.work', 'trajectories'))
   await page.getByRole('button', { name: '移動' }).click()
   await page.getByRole('button', { name: /prob\.csv/ }).click()
   await expect(page.getByLabel('読み込み', { exact: true })).toHaveValue('trajectory')
-  await page.getByRole('button', { name: '追加', exact: true }).click()
+  await page.getByRole('button', { name: '登録', exact: true }).click()
   await expect(page.getByRole('heading', { name: 'prob.csv' })).toBeVisible()
 
   // 確率の列: 守りで止めた 2 行は欠け, 範囲の外は無い
@@ -891,42 +893,44 @@ test('行動を選んだ確率のある軌跡で, 確率の列の欠けと範囲
   await expect(card.getByText(/^範囲の外/).locator('..')).toContainText('0')
 })
 
-test('作るものが表の問題の設定から始め, 書き戻してプロジェクトへ書き出す', async ({ page }) => {
+test('作るものが表の問題から始め, 書き戻して学習のプロジェクトへ書き出す', async ({ page }) => {
   // 置き換えの確かめは既定で受ける (やり直しで前の書き出しが残っていても進めるように)
   page.on('dialog', (dialog) => void dialog.accept())
 
   // 一覧から始めると, 目的の列の無いレシピで始まり, 始めたときの知らせが出る
   await page.goto('/')
-  await page.getByRole('button', { name: '問題の設定から始める' }).click()
-  const stored = page.getByRole('list', { name: '保存した問題の設定' })
-  await stored.getByRole('button', { name: /合成の表のプロジェクト/ }).click()
-  await page.getByRole('button', { name: 'この問題の設定から始める' }).click()
-  await expect(page.getByRole('heading', { name: '合成の表のプロジェクト' })).toBeVisible()
+  await page.getByRole('button', { name: '問題から始める' }).click()
+  const stored = page.getByRole('list', { name: '保存した問題' })
+  await stored.getByRole('button', { name: /合成の表の問題/ }).click()
+  await page.getByRole('button', { name: 'この問題から始める' }).click()
+  await expect(page.getByRole('heading', { name: '合成の表の問題' })).toBeVisible()
   await page.getByRole('tab', { name: '前処理と書き出し' }).click()
   const notes = page.getByRole('region', { name: '始めたときの知らせ' })
   await expect(notes.getByText(/drop_columns で落とし/)).toBeVisible({ timeout: 20_000 })
-  await expect(page.getByText('問題の設定との食い違いはありません.')).toBeVisible()
+  await expect(page.getByText('問題との食い違いはありません.')).toBeVisible()
 
   // 書き戻してから, 骨組みの読む場所 (outputs/dataset) へ書き出す
-  await page.getByRole('button', { name: '問題の設定に書き戻す' }).click()
+  await page.getByRole('button', { name: '問題に書き戻す' }).click()
   await expect(page.getByText(/書き戻しました/)).toBeVisible()
-  const button = page.getByRole('button', { name: 'プロジェクトへ書き出す' })
+  const button = page.getByRole('button', { name: '学習のプロジェクトへ書き出す' })
   await expect(page.getByText(/table_project\/outputs\/dataset$/)).toBeVisible()
   await button.click()
-  await expect(page.getByText(/プロジェクトへ書き出しました/)).toBeVisible({ timeout: 20_000 })
+  await expect(page.getByText(/学習のプロジェクトへ書き出しました/)).toBeVisible({
+    timeout: 20_000,
+  })
 })
 
-test('並べるの問題の設定から始め, 反応の表の偏りを見てプロジェクトへ写す', async ({ page }) => {
+test('並べるの問題から始め, 反応の表の偏りを見て学習のプロジェクトへ写す', async ({ page }) => {
   // 骨組みが入れたデータを写しているので, 置き換えの確かめを受ける
   page.on('dialog', (dialog) => void dialog.accept())
 
   // 一覧から始めると, レシピを持たない反応の表の分析の画面が開く
   await page.goto('/')
-  await page.getByRole('button', { name: '問題の設定から始める' }).click()
-  const stored = page.getByRole('list', { name: '保存した問題の設定' })
-  await stored.getByRole('button', { name: /推薦のプロジェクト/ }).click()
-  await page.getByRole('button', { name: 'この問題の設定から始める' }).click()
-  await expect(page.getByRole('heading', { name: '推薦のプロジェクト' })).toBeVisible()
+  await page.getByRole('button', { name: '問題から始める' }).click()
+  const stored = page.getByRole('list', { name: '保存した問題' })
+  await stored.getByRole('button', { name: /推薦の問題/ }).click()
+  await page.getByRole('button', { name: 'この問題から始める' }).click()
+  await expect(page.getByRole('heading', { name: '推薦の問題' })).toBeVisible()
   await expect(page.getByRole('tab', { name: '前処理と書き出し' })).toHaveCount(0)
 
   // 概要に除いた行の気付き, 読んだ列, 日時の時刻の範囲が出る
@@ -951,8 +955,8 @@ test('並べるの問題の設定から始め, 反応の表の偏りを見てプ
   // 骨組みの読む場所 (data/reactions.csv) へ, ファイル 1 つのまま写す
   await page.getByRole('tab', { name: '書き出し' }).click()
   await expect(page.getByText(/rank_project\/data\/reactions\.csv$/)).toBeVisible()
-  await page.getByRole('button', { name: 'プロジェクトへ書き出す' }).click()
-  await expect(page.getByRole('status')).toContainText('プロジェクトへ書き出しました', {
+  await page.getByRole('button', { name: '学習のプロジェクトへ書き出す' }).click()
+  await expect(page.getByRole('status')).toContainText('学習のプロジェクトへ書き出しました', {
     timeout: 20_000,
   })
 })
@@ -961,11 +965,11 @@ test('正解の無い表で群を作る列と群の数を選び, 群の要約を
   page,
 }) => {
   await page.goto('/')
-  await page.getByRole('button', { name: 'データを追加' }).first().click()
+  await page.getByRole('button', { name: 'データを登録' }).first().click()
   await page.getByLabel('ディレクトリのパス').fill(path.dirname(TABLE))
   await page.getByRole('button', { name: '移動' }).click()
   await page.getByRole('button', { name: /segments\.csv/ }).click()
-  await page.getByRole('button', { name: '追加', exact: true }).click()
+  await page.getByRole('button', { name: '登録', exact: true }).click()
   await expect(page.getByRole('heading', { name: 'segments.csv' })).toBeVisible()
 
   // 群分けのタブで, 初めは数と種類の列を選び, 会員の番号は外している
@@ -997,17 +1001,17 @@ test('正解の無い表で群を作る列と群の数を選び, 群の要約を
   await expect(card.getByText(/なし \(群分けの表は学習に使わないので/)).toBeVisible()
 })
 
-test('まとめるの問題の設定から始め, 答えの列で群を作ってプロジェクトへ写す', async ({ page }) => {
+test('まとめるの問題から始め, 答えの列で群を作って学習のプロジェクトへ写す', async ({ page }) => {
   // 骨組みが入れたデータを写しているので, 置き換えの確かめを受ける
   page.on('dialog', (dialog) => void dialog.accept())
 
   // 一覧から始めると, 群分けのタブが開き, 問題の設定の答えで欄を埋める
   await page.goto('/')
-  await page.getByRole('button', { name: '問題の設定から始める' }).click()
-  const stored = page.getByRole('list', { name: '保存した問題の設定' })
-  await stored.getByRole('button', { name: /客の群のプロジェクト/ }).click()
-  await page.getByRole('button', { name: 'この問題の設定から始める' }).click()
-  await expect(page.getByRole('heading', { name: '客の群のプロジェクト' })).toBeVisible()
+  await page.getByRole('button', { name: '問題から始める' }).click()
+  const stored = page.getByRole('list', { name: '保存した問題' })
+  await stored.getByRole('button', { name: /客の群の問題/ }).click()
+  await page.getByRole('button', { name: 'この問題から始める' }).click()
+  await expect(page.getByRole('heading', { name: '客の群の問題' })).toBeVisible()
   await expect(page.getByRole('tab', { name: '群分け' })).toHaveAttribute('aria-selected', 'true', {
     timeout: 20_000,
   })
@@ -1032,39 +1036,39 @@ test('まとめるの問題の設定から始め, 答えの列で群を作って
 
   // 答えと違う列を選ぶと知らせ, 戻すと消える
   await fields.getByRole('checkbox', { name: /region/ }).check()
-  await expect(page.getByText(/問題の設定の答えと違います/)).toBeVisible()
+  await expect(page.getByText(/問題の答えと違います/)).toBeVisible()
   await fields.getByRole('checkbox', { name: /region/ }).uncheck()
-  await expect(page.getByText(/問題の設定の答えと違います/)).toHaveCount(0)
+  await expect(page.getByText(/問題の答えと違います/)).toHaveCount(0)
 
   // 骨組みの読む場所 (data/segments.csv) へ, ファイル 1 つのまま写す
   await expect(page.getByText(/group_project\/data\/segments\.csv$/)).toBeVisible()
-  await page.getByRole('button', { name: 'プロジェクトへ書き出す' }).click()
-  await expect(page.getByText(/プロジェクトへ書き出しました/)).toContainText(
+  await page.getByRole('button', { name: '学習のプロジェクトへ書き出す' }).click()
+  await expect(page.getByText(/学習のプロジェクトへ書き出しました/)).toContainText(
     '120 行. 骨組みが群を作る列 spend, visits, 行を見分ける列 member',
     { timeout: 20_000 },
   )
 
   // 前処理のタブは, レシピの確かめの誤りでなく案内を出し, 群分けのタブへ導く
   await page.getByRole('tab', { name: '前処理と書き出し' }).click()
-  await expect(page.getByText(/まとめる \(群分け\) の問題の設定から始めたデータは/)).toBeVisible({
+  await expect(page.getByText(/まとめる \(群分け\) の問題から始めたデータは/)).toBeVisible({
     timeout: 20_000,
   })
   await expect(page.getByText(/レシピを持ちません \(表をファイル/)).toHaveCount(0)
-  await expect(page.getByRole('button', { name: '問題の設定に書き戻す' })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: '問題に書き戻す' })).toHaveCount(0)
   await page.getByRole('link', { name: '群分けのタブへ移る' }).click()
   await expect(page.getByRole('tab', { name: '群分け' })).toHaveAttribute('aria-selected', 'true')
 
   // 群の数を答えと違う値にすると, 変わる点を確かめてから問題の設定に書き戻せる.
   // 書き戻すと答えが欄と同じになり, 知らせが消える
   await page.getByLabel('群の数', { exact: true }).fill('4')
-  await expect(page.getByText(/問題の設定の答えと違います/)).toBeVisible()
+  await expect(page.getByText(/問題の答えと違います/)).toBeVisible()
   const changes = page.getByRole('region', { name: '書き戻すと変わる点' })
   await expect(changes).toContainText('群の数を 4 に書き戻した', { timeout: 20_000 })
   await expect(changes).toContainText('骨組みを書き出し直してください')
-  await page.getByRole('button', { name: '問題の設定に書き戻す' }).click()
-  await expect(page.getByText('問題の設定に書き戻しました.')).toBeVisible({ timeout: 20_000 })
-  await expect(page.getByText(/問題の設定の答えと違います/)).toHaveCount(0)
-  await expect(page.getByRole('button', { name: '問題の設定に書き戻す' })).toHaveCount(0)
+  await page.getByRole('button', { name: '問題に書き戻す' }).click()
+  await expect(page.getByText('問題に書き戻しました.')).toBeVisible({ timeout: 20_000 })
+  await expect(page.getByText(/問題の答えと違います/)).toHaveCount(0)
+  await expect(page.getByRole('button', { name: '問題に書き戻す' })).toHaveCount(0)
   await expect(page.getByLabel('群の数', { exact: true })).toHaveValue('4')
 })
 
@@ -1072,11 +1076,11 @@ test('値段を変えた売れ行きの記録で値段と原価と商品を選�
   page,
 }) => {
   await page.goto('/')
-  await page.getByRole('button', { name: 'データを追加' }).first().click()
+  await page.getByRole('button', { name: 'データを登録' }).first().click()
   await page.getByLabel('ディレクトリのパス').fill(path.dirname(TABLE))
   await page.getByRole('button', { name: '移動' }).click()
   await page.getByRole('button', { name: /sales\.csv/ }).click()
-  await page.getByRole('button', { name: '追加', exact: true }).click()
+  await page.getByRole('button', { name: '登録', exact: true }).click()
   await expect(page.getByRole('heading', { name: 'sales.csv' })).toBeVisible()
   await page.getByRole('combobox', { name: '目的の列' }).selectOption('units')
 
@@ -1124,11 +1128,11 @@ test('日ごとの売れた数の記録で商品と日付と在庫の数を選�
   page,
 }) => {
   await page.goto('/')
-  await page.getByRole('button', { name: 'データを追加' }).first().click()
+  await page.getByRole('button', { name: 'データを登録' }).first().click()
   await page.getByLabel('ディレクトリのパス').fill(path.dirname(TABLE))
   await page.getByRole('button', { name: '移動' }).click()
   await page.getByRole('button', { name: /daily\.csv/ }).click()
-  await page.getByRole('button', { name: '追加', exact: true }).click()
+  await page.getByRole('button', { name: '登録', exact: true }).click()
   await expect(page.getByRole('heading', { name: 'daily.csv' })).toBeVisible()
   await page.getByRole('combobox', { name: '目的の列' }).selectOption('units')
 
@@ -1173,7 +1177,7 @@ test('日ごとの売れた数の記録で商品と日付と在庫の数を選�
   await expect(card.getByText(/在庫の数の列:/)).toContainText('stock')
 })
 
-test('時間をまたぐ量の判断の問題の設定から始め, 書き戻してプロジェクトへ書き出す', async ({
+test('時間をまたぐ量の判断の問題から始め, 書き戻して学習のプロジェクトへ書き出す', async ({
   page,
 }) => {
   // 置き換えの確かめは既定で受ける (やり直しで前の書き出しが残っていても進めるように)
@@ -1181,11 +1185,11 @@ test('時間をまたぐ量の判断の問題の設定から始め, 書き戻し
 
   // 一覧から始めると, 答えた列と先の期間の日数を入れたレシピで始まる
   await page.goto('/')
-  await page.getByRole('button', { name: '問題の設定から始める' }).click()
-  const stored = page.getByRole('list', { name: '保存した問題の設定' })
-  await stored.getByRole('button', { name: /発注のプロジェクト/ }).click()
-  await page.getByRole('button', { name: 'この問題の設定から始める' }).click()
-  await expect(page.getByRole('heading', { name: '発注のプロジェクト' })).toBeVisible()
+  await page.getByRole('button', { name: '問題から始める' }).click()
+  const stored = page.getByRole('list', { name: '保存した問題' })
+  await stored.getByRole('button', { name: /発注の問題/ }).click()
+  await page.getByRole('button', { name: 'この問題から始める' }).click()
+  await expect(page.getByRole('heading', { name: '発注の問題' })).toBeVisible()
   await page.getByRole('tab', { name: '前処理と書き出し' }).click()
   const notes = page.getByRole('region', { name: '始めたときの知らせ' })
   await expect(notes.getByText(/one_hot で数の列にして/)).toBeVisible({ timeout: 20_000 })
@@ -1194,21 +1198,23 @@ test('時間をまたぐ量の判断の問題の設定から始め, 書き戻し
   await expect(page.getByLabel('日付の列')).toHaveValue('date')
   await expect(page.getByLabel('在庫の数の列')).toHaveValue('stock')
   await expect(page.getByLabel('分割', { exact: true })).toHaveValue('time')
-  await expect(page.getByText('問題の設定との食い違いはありません.')).toBeVisible()
+  await expect(page.getByText('問題との食い違いはありません.')).toBeVisible()
 
   // 種類の列を数にする手順を足し, 書き戻してから骨組みの読む場所 (outputs/dataset) へ書き出す
   await page.getByLabel('足す手順').selectOption('one_hot')
   await page.getByRole('button', { name: '足す', exact: true }).click()
   await page.getByRole('checkbox', { name: 'auto (型から選ぶ)' }).last().uncheck()
   await page.locator('#step-3-columns').selectOption('category')
-  await expect(page.getByText('問題の設定との食い違いはありません.')).toBeVisible()
-  await page.getByRole('button', { name: '問題の設定に書き戻す' }).click()
+  await expect(page.getByText('問題との食い違いはありません.')).toBeVisible()
+  await page.getByRole('button', { name: '問題に書き戻す' }).click()
   await expect(page.getByText(/書き戻しました/)).toBeVisible()
   const splits = page.getByRole('table', { name: /分割ごとの行と商品の数, 発注を決める日/ })
   await expect(splits).toContainText('valid', { timeout: 20_000 })
   await expect(page.getByText(/demand_project\/outputs\/dataset$/)).toBeVisible()
-  await page.getByRole('button', { name: 'プロジェクトへ書き出す' }).click()
-  await expect(page.getByText(/プロジェクトへ書き出しました/)).toBeVisible({ timeout: 20_000 })
+  await page.getByRole('button', { name: '学習のプロジェクトへ書き出す' }).click()
+  await expect(page.getByText(/学習のプロジェクトへ書き出しました/)).toBeVisible({
+    timeout: 20_000,
+  })
   // 結果にも発注を決める日と期間の合計の説明が出る
   await expect(page.getByText(/正解の列 demand はその日から 7 日/).last()).toBeVisible()
 })

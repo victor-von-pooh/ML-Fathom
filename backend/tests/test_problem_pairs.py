@@ -576,7 +576,7 @@ def test_without_project_and_column(
         "/api/problems/pairs", params={"path": str(path)}
     ).json()
     assert draft["project"]["ready"] is False
-    assert "ML-Pathfinder" in draft["project"]["reason"]
+    assert "問題の設定の段階" in draft["project"]["reason"]
     response = client.post("/api/problems/pairs/export",
                            json=export_body(path, draft))
     assert response.status_code == 422

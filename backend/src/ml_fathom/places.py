@@ -170,7 +170,7 @@ def changed_reason(part: Path, fd: int, name: str) -> str:
     what = "シンボリックリンク" if linked else "ディレクトリでないもの"
     reason = (
         f"書き出し先の途中 {part} が{what}になっているので書き出しません. "
-        "プロジェクトの外に書かないように, 確かめてからもう一度書き出して"
+        "学習のプロジェクトの外に書かないように, 確かめてからもう一度書き出して"
         "ください"
     )
 
@@ -234,7 +234,7 @@ def pinned_parent(root: Path, target: Path) -> Iterator[Parent]:
     real = target.parent.resolve()
     if not real.is_relative_to(base):
         raise HTTPException(
-            422, f"書き出し先の途中 {target.parent} がプロジェクト {root} の"
+            422, f"書き出し先の途中 {target.parent} が学習のプロジェクト {root} の"
             "外を指すように替わったので書き出しません. 確かめてからもう一度"
             "書き出してください"
         )

@@ -6,12 +6,12 @@ import { Card } from './ui'
 test('見出しを持つ欄は見出しを名前にした区域になる', () => {
   render(
     <>
-      <Card title="選んだ問題の設定">中身</Card>
-      <Card title="プロジェクトへ書き出す">別の中身</Card>
+      <Card title="選んだ問題">中身</Card>
+      <Card title="学習のプロジェクトへ書き出す">別の中身</Card>
     </>,
   )
-  expect(screen.getByRole('region', { name: '選んだ問題の設定' })).toHaveTextContent('中身')
-  expect(screen.getByRole('region', { name: 'プロジェクトへ書き出す' })).toHaveTextContent(
+  expect(screen.getByRole('region', { name: '選んだ問題' })).toHaveTextContent('中身')
+  expect(screen.getByRole('region', { name: '学習のプロジェクトへ書き出す' })).toHaveTextContent(
     '別の中身',
   )
 })

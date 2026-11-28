@@ -564,13 +564,13 @@ def test_start_refused(
     started = client.post("/api/problems/start", json={"path": str(path)})
     assert started.status_code == 422
     detail = started.json()["detail"]
-    assert "問題の設定を渡せません" in detail and reason in detail
+    assert "問題を渡せません" in detail and reason in detail
     assert client.get("/api/sources").json() == []
 
     # 一覧でも始められず, 同じ理由がある
     listed = client.get("/api/problems").json()["problems"]
     assert [item["startable"] for item in listed] == [False]
-    assert "問題の設定を渡せません" in listed[0]["reason"]
+    assert "問題を渡せません" in listed[0]["reason"]
     assert reason in listed[0]["reason"]
 
 

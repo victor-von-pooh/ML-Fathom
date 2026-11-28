@@ -123,7 +123,7 @@ project = work / "project"
 project.mkdir()
 problem = ml_quest.attach_data(example_problem("総菜の作る量"),
                                work / "sozai.csv")
-problem["name"] = "総菜のプロジェクト"
+problem["name"] = "総菜の問題"
 problem["project"] = {
     "path": str(project), "dataset": str(project / "data" / "dataset"),
     "model_spec": str(project / "models" / "model.yaml"),
@@ -250,7 +250,7 @@ answers = [("role", "predict"), ("what", "画素ごとの領域"), ("item", "1 �
 for key, value in answers:
     problem = ml_quest.answer(problem, f"ml.parts.0.{key}", value)
 problem = ml_quest.attach_data(problem, work / "pairs")
-problem["name"] = "領域のプロジェクト"
+problem["name"] = "領域の問題"
 project = work / "mask_project"
 project.mkdir()
 problem["project"] = {"path": str(project),
@@ -291,7 +291,7 @@ answers = [("role", "generate"), ("unit", "row"), ("output", "table"),
 for key, value in answers:
     problem = ml_quest.answer(problem, f"ml.parts.0.{key}", value)
 problem = ml_quest.attach_data(problem, work / "customers.csv")
-problem["name"] = "合成の表のプロジェクト"
+problem["name"] = "合成の表の問題"
 project = work / "table_project"
 ml_quest.make_project(problem, project)
 problem = ml_quest.record_project(problem, project)
@@ -339,7 +339,7 @@ answers = [("role", "rank"), ("unit", "query"), ("output", "ranking"),
 for key, value in answers:
     problem = ml_quest.answer(problem, f"ml.parts.0.{key}", value)
 problem = ml_quest.attach_data(problem, work / "reactions.csv")
-problem["name"] = "推薦のプロジェクト"
+problem["name"] = "推薦の問題"
 project = work / "rank_project"
 ml_quest.make_project(problem, project)
 problem = ml_quest.record_project(problem, project)
@@ -397,7 +397,7 @@ answers = [("role", "group"), ("unit", "row"), ("output", "cluster"),
 for key, value in answers:
     problem = ml_quest.answer(problem, f"ml.parts.0.{key}", value)
 problem = ml_quest.attach_data(problem, work / "segments.csv")
-problem["name"] = "客の群のプロジェクト"
+problem["name"] = "客の群の問題"
 project = work / "group_project"
 ml_quest.make_project(problem, project)
 problem = ml_quest.record_project(problem, project)
@@ -492,7 +492,7 @@ problem = ml_quest.answer(problem, "action.decision", {
     "type": "order", "shortage_cost": 3, "holding_cost": 1, "max_order": 60
 })
 problem = ml_quest.attach_data(problem, work / "daily.csv")
-problem["name"] = "発注のプロジェクト"
+problem["name"] = "発注の問題"
 project = work / "demand_project"
 ml_quest.make_project(problem, project)
 problem = ml_quest.record_project(problem, project)

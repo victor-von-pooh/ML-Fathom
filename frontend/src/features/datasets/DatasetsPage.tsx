@@ -46,14 +46,14 @@ function Footer({ item }: { item: DatasetSummary }) {
 /** プロジェクトへ書き出したものの元 (登録したデータか問題の設定) */
 function ProjectRow({ item }: { item: DatasetSummary }) {
   if (item.project === undefined) return null
-  const from = item.project_from === 'problem' ? '問題の設定' : 'データ'
+  const from = item.project_from === 'problem' ? '問題' : 'データ'
   return (
     <>
-      <dt className="text-ink-3">プロジェクト</dt>
+      <dt className="text-ink-3">学習のプロジェクト</dt>
       <dd>
         {item.project
-          ? `${from} ${item.project} からプロジェクトへ書き出したもの`
-          : 'プロジェクトへ書き出したもの'}
+          ? `${from} ${item.project} から学習のプロジェクトへ書き出したもの`
+          : '学習のプロジェクトへ書き出したもの'}
       </dd>
     </>
   )
@@ -67,7 +67,7 @@ function TableCard({ item }: { item: TableDataset }) {
       title={<span className="font-mono">{item.name}</span>}
       actions={
         <span className="flex gap-1">
-          {item.project !== undefined && <Badge>プロジェクト</Badge>}
+          {item.project !== undefined && <Badge>学習のプロジェクト</Badge>}
           <Badge>版 1 · 表</Badge>
         </span>
       }
@@ -140,7 +140,7 @@ function ItemsCard({ item }: { item: ItemsDataset }) {
       title={<span className="font-mono">{item.name}</span>}
       actions={
         <span className="flex gap-1">
-          {item.project !== undefined && <Badge>プロジェクト</Badge>}
+          {item.project !== undefined && <Badge>学習のプロジェクト</Badge>}
           <Badge>{`版 ${String(item.format_version)} · ${grouped ? '群分けの表' : 'ファイルの組'}`}</Badge>
         </span>
       }

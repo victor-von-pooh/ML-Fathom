@@ -738,7 +738,7 @@ def test_group_start_column_names(
     response = client.post("/api/problems/start", json={"path": str(path)})
     assert response.status_code == 422
     detail = response.json()["detail"]
-    assert detail.startswith("問題の設定を渡せません")
+    assert detail.startswith("問題を渡せません")
     assert "行を見分ける列 group" in detail
     assert client.get("/api/sources").json() == []
 
@@ -749,7 +749,7 @@ def test_group_start_column_names(
     assert response.status_code == 422
     detail = response.json()["detail"]
     assert "行を見分けるのに使えません" in detail
-    assert "ML-Pathfinder" in detail
+    assert "問題の設定の段階" in detail
     assert client.get("/api/sources").json() == []
 
 
@@ -792,7 +792,7 @@ def test_group_export_reanswered(
     )
     assert response.status_code == 422
     detail = response.json()["detail"]
-    assert detail.startswith("問題の設定を渡せません")
+    assert detail.startswith("問題を渡せません")
     assert "spend" in detail
     assert target.read_text("utf-8") == "customer,spend\n"
 
@@ -1093,7 +1093,7 @@ def test_group_write_back_linked_refusals(
             "group": {"k": 5}, "version": version,
         })
     assert response.status_code == 422
-    assert "保存できません" in response.json()["detail"]
+    assert "書き戻せません" in response.json()["detail"]
     assert file.read_bytes() == before
 
     # 作った時刻が変われば (別の問題の設定に置き換わった) 422
@@ -1105,7 +1105,7 @@ def test_group_write_back_linked_refusals(
         "group": {"k": 5}, "version": hashlib.sha256(replaced).hexdigest(),
     })
     assert response.status_code == 422
-    assert "別の問題の設定に置き換わっています" in response.json()["detail"]
+    assert "別の問題に替わっています" in response.json()["detail"]
     file.write_bytes(before)
 
     # まとめるでなくなれば, 中身の印が正しくても書き戻さない

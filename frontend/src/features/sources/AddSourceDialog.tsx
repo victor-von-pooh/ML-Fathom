@@ -27,20 +27,20 @@ function StoredProblems({
   return (
     <section aria-labelledby="stored-problems" className="mb-4">
       <h3 id="stored-problems" className="mb-1 text-xs font-semibold text-ink-2">
-        ML-Pathfinder に保存した問題の設定
+        問題の設定の段階で保存した問題
       </h3>
       {problems.isPending && <Spinner />}
       {problems.error && <ErrorBox error={problems.error} />}
       {list?.error && <p className="text-xs text-critical-text">{list.error}</p>}
       {list && list.problems.length === 0 && !list.error && (
         <p className="text-xs text-ink-3">
-          置き場 (<span className="font-mono">{list.root}</span>) に問題の設定がありません.
+          置き場 (<span className="font-mono">{list.root}</span>) に問題がありません.
           下のファイルの選び方で選べます.
         </p>
       )}
       {list && list.problems.length > 0 && (
         <ul
-          aria-label="保存した問題の設定"
+          aria-label="保存した問題"
           className="max-h-48 overflow-auto rounded-lg border border-line"
         >
           {list.problems.map((item) => (
@@ -69,7 +69,7 @@ function StoredProblems({
                     </span>
                   )}
                   {item.project?.dataset && (
-                    <span className="block text-xs text-ink-2">プロジェクトあり</span>
+                    <span className="block text-xs text-ink-2">学習のプロジェクトあり</span>
                   )}
                 </span>
                 <span className="shrink-0 text-xs text-ink-3">
@@ -132,15 +132,15 @@ export function AddSourceDialog({
   }
   const best = candidates.data?.[0]
   return (
-    <Dialog title={fromProblem ? '問題の設定から始める' : 'データを追加'} onClose={onClose}>
+    <Dialog title={fromProblem ? '問題から始める' : 'データを登録'} onClose={onClose}>
       {fromProblem ? (
         <p className="mb-3 text-xs text-ink-2">
-          ML-Pathfinder に保存した問題の設定を一覧から選ぶか, problem.yaml (か,
-          それを持つディレクトリ) をファイルから選びます. 入れたデータを登録し, 目的の列, タスク,
-          分割, 使わない列を決めた状態で始めます. ここで変えた選び方は,
-          前処理のタブから問題の設定に書き戻せます. 正解が画像の領域か点群の問題の設定は,
-          ファイルの組の書き出しを問題の設定の値で埋めて開きます. 並べるの問題の設定は,
-          入れた反応の表を登録し, 分析とプロジェクトへの書き出しの画面を開きます.
+          問題の設定の段階で保存した問題を一覧から選ぶか, problem.yaml (か, それを持つディレクトリ)
+          をファイルから選びます. 入れたデータを登録し, 目的の列, タスク, 分割,
+          使わない列を決めた状態で始めます. ここで変えた選び方は,
+          前処理のタブから問題に書き戻せます. 正解が画像の領域か点群の問題は,
+          ファイルの組の書き出しを問題の値で埋めて開きます. 並べるの問題は, 入れた反応の表を登録し,
+          分析と学習のプロジェクトへの書き出しの画面を開きます.
         </p>
       ) : (
         <p className="mb-3 text-xs text-ink-2">
@@ -253,7 +253,7 @@ export function AddSourceDialog({
                 disabled={start.isPending}
                 onClick={() => start.mutate(picked)}
               >
-                {start.isPending ? '読み込み中…' : 'この問題の設定から始める'}
+                {start.isPending ? '読み込み中…' : 'この問題から始める'}
               </Button>
             </div>
           )}
@@ -285,7 +285,7 @@ export function AddSourceDialog({
                 disabled={add.isPending}
                 onClick={() => add.mutate()}
               >
-                {add.isPending ? '読み込み中…' : '追加'}
+                {add.isPending ? '読み込み中…' : '登録'}
               </Button>
             </div>
           )}
