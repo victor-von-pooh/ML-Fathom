@@ -17,7 +17,7 @@
   </tr>
   <tr>
     <td><img src="docs/images/pointcloud.png" alt="点群の中身: 1 件ずつの点群を 3D で回して見る"></td>
-    <td><img src="docs/images/recipe.png" alt="問題から始めた前処理と書き出し: 問題との食い違い, 決めてほしいこと, 手順の前と後の表, 分割ごとの行数"></td>
+    <td><img src="docs/images/recipe.png" alt="問題から始めた前処理と書き出し: 問題のカード (問題との食い違いは無し) と問題に書き戻すボタン, 目的の列とほぼ同じ列を落とすかを聞く決めてほしいこと, 手順の前と後の表, 分割ごとの行数"></td>
   </tr>
   <tr>
     <td colspan="2" align="center"><img src="docs/images/pairs.png" width="50%" alt="ファイルの組の書き出し: 問題の値で埋めた画像と領域のディレクトリと分割を確かめ, 学習のプロジェクトへ書き出す"></td>
