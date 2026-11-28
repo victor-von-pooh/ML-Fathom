@@ -114,7 +114,7 @@ def items_model(
         model (ML-EDA の model_inputs の結果. 求められなければ None) と
         model_error (求められない理由. 求められれば None)
     """
-    # 群分けの表は分析の保存で, モデルの入力を持たない
+    # 群分けの表は分析用の書き出しで, モデルの入力を持たない
     if role == "group":
         model: dict[str, Any] = {
             "model": None,

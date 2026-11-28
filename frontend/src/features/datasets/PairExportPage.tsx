@@ -921,7 +921,7 @@ function ProblemPairsView({ path }: { path: string }) {
       <Card title={`問題: ${data.name ?? ''}`} className="mb-4">
         <p className="break-all font-mono text-xs text-ink-3">{data.path}</p>
         <p className="mt-2 text-sm text-ink-2">
-          問題の値で欄を埋めました. 書き出すと, 学習のプロジェクトの書き出し先に書き出し,
+          問題の答えで欄を埋めました. 書き出すと, 学習のプロジェクトの書き出し先に書き出し,
           欄の値を問題に書き戻します.
         </p>
         {data.notes.length > 0 && (

@@ -139,7 +139,7 @@ test('群を作る列と行を見分ける列で, 群分けの表を分析用に
   renderTab()
   const name = screen.getByLabelText('データセットの名前')
   expect(name).toHaveValue('customers_groups')
-  // 版 2 は分析の保存で, 学習のプロジェクトへは表のファイルを渡すと案内する
+  // 版 2 は分析用の書き出しで, 学習のプロジェクトへは表のファイルを渡すと案内する
   expect(
     screen.getByText(/後で群の要約を見直すために, 分析用として書き出します/),
   ).toHaveTextContent('学習には使えません. 学習のプロジェクトへ表を渡すには')
@@ -359,7 +359,7 @@ test('前に置いた表は確かめてから置き換え, 写した場所と骨
   })
   renderLinked()
   const button = await screen.findByRole('button', { name: '学習のプロジェクトへ書き出す' })
-  // 学習のプロジェクトへ渡すのはこちらで, 版 2 の書き出しは分析の保存と案内する
+  // 学習のプロジェクトへ渡すのはこちらで, 版 2 の書き出しは分析用の書き出しと案内する
   expect(screen.getByText(/学習のプロジェクトへ渡すのはこの書き出しです/)).toBeInTheDocument()
 
   // 置き換えを断れば送らない
