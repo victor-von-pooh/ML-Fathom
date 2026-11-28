@@ -24,6 +24,9 @@ PART = ml_quest.PART
 # 合成の反応の表の列
 COLUMNS = ["member", "item_id", "ts", "qty"]
 
+# 見せただけの印と提示の列を持つ, 合成の反応の表の列
+SHOWN_COLUMNS = [*COLUMNS, "shown_only", "impression_id"]
+
 # 合成の反応の表の行の数
 ROWS = 400
 
@@ -143,7 +146,8 @@ def problem_place(tmp_path: Path) -> Path:
 
 
 def saved_problem(
-    tmp_path: Path, problem: dict[str, Any]
+    tmp_path: Path, problem: dict[str, Any],
+    write: Callable[[Path], Path] = write_reactions
 ) -> tuple[Path, Path]:
     """
     反応の表を入れた並べるの問題の設定から ML-Quest でプロジェクトを作り,
@@ -155,6 +159,8 @@ def saved_problem(
         一時ディレクトリ
     problem: dict[str, Any]
         並べるの問題の設定 (データは入れていない)
+    write: Callable[[Path], Path] = write_reactions
+        反応の表を書き出す関数 (書き出す場所を受け取り, ファイルを返す)
 
     Returns
     ----------
@@ -163,7 +169,7 @@ def saved_problem(
     """
     # 写しを置き, 骨組みの書き出しと, その記録 (project.dataset は config
     # の data.dataset)
-    source = write_reactions(tmp_path / "raw")
+    source = write(tmp_path / "raw")
     problem = ml_quest.attach_data(
         problem, str(source), copy_to=str(tmp_path / "copies")
     )
@@ -560,3 +566,179 @@ def test_rank_not_startable(client: TestClient, tmp_path: Path) -> None:
     assert response.status_code == 422
     assert "反応の表として読めません" in response.json()["detail"]
     assert client.get("/api/sources").json() == []
+
+
+def write_shown(root: Path) -> Path:
+    """
+    見せただけの印と提示の列を持つ反応の表の CSV を作る関数
+
+    1 回の提示ごとに選んだ品物 1 行と見せただけの品物 3 行を置き, 印を
+    読めない行, 提示の欠けた行, 選んだ行と重なる見せただけの行, 同じ
+    見せただけの行を 1 つずつ含める
+
+    Parameters
+    ----------
+    root: Path
+        書き出す場所
+
+    Returns
+    ----------
+    path: Path
+        CSV のファイル (member, item_id, ts, qty, shown_only,
+        impression_id)
+    """
+    # 提示ごとに, 選んだ品物と見せただけの品物 (印の欠けは選んだ行)
+    rng = np.random.default_rng(1)
+    rows = []
+    for number in range(80):
+        member, ts = f"m{number % 20}", number
+        items = rng.choice(30, size=4, replace=False)
+        rows.append([member, f"i{items[0]}", ts, 1, None, f"p{number}"])
+        rows.extend([member, f"i{item}", ts, None, "true", f"p{number}"]
+                    for item in items[1:])
+    rows.append(["m0", "i1", 0, None, "maybe", "p0"])
+    rows.append(["m0", "i2", 0, None, "true", None])
+    rows.append([rows[0][0], rows[0][1], 0, None, "1", "p0"])
+    rows.append(list(rows[1]))
+    frame = pd.DataFrame(rows, columns=SHOWN_COLUMNS)
+    root.mkdir(parents=True, exist_ok=True)
+    path = root / "reactions.csv"
+    frame.to_csv(path, index=False)
+
+    return path
+
+
+def shown_reader(project: Path) -> Any:
+    """
+    書き出した骨組みの学習のスクリプトから, 見せただけの印のある反応の表を
+    読む関数を取り出す関数
+
+    Parameters
+    ----------
+    project: Path
+        プロジェクトのディレクトリ
+
+    Returns
+    ----------
+    read: Any
+        骨組みの read_shown (path と config を受け取る)
+    """
+    # 読み方の定数 (LOADER, OPTIONS) と関数の定義だけ
+    tree = ast.parse((project / "train.py").read_text("utf-8"))
+    nodes = [
+        node for node in tree.body
+        if (isinstance(node, ast.Assign) and any(
+            isinstance(name, ast.Name) and name.id in ("LOADER", "OPTIONS")
+            for name in node.targets
+        )) or (
+            isinstance(node, ast.FunctionDef) and node.name == "read_shown"
+        )
+    ]
+    assert len(nodes) == 3
+    scope: dict[str, Any] = {
+        "pd": pd, "load_reactions": ml_eda.load_reactions, "Path": Path,
+        "Any": Any,
+    }
+    exec(compile(ast.Module(nodes, []), "train.py", "exec"), scope)
+    read = scope["read_shown"]
+
+    return read
+
+
+class RankConfig(dict):  # type: ignore[type-arg]
+    """
+    骨組みの config の rank を, 属性と get で読める形にする辞書
+    """
+
+    def __getattr__(self, name: str) -> Any:
+        """
+        項目を属性で返す関数
+
+        Parameters
+        ----------
+        name: str
+            項目の名前
+
+        Returns
+        ----------
+        value: Any
+            項目の値
+        """
+        value = self[name]
+
+        return value
+
+
+def test_rank_shown(client: TestClient, tmp_path: Path) -> None:
+    """
+    見せただけの印と提示の列を答えた並べるの問題の設定では, 骨組みと同じ
+    決まりで除く行を数え, 見せただけの記録の要約を返すことを確かめる関数
+
+    Parameters
+    ----------
+    client: TestClient
+        クライアント
+    tmp_path: Path
+        一時ディレクトリ
+
+    Returns
+    ----------
+    None
+    """
+    # 印と提示の列を答えた問題から始める
+    problem = ml_quest.answer(
+        rank_problem(), "information.columns", SHOWN_COLUMNS
+    )
+    for key, value in [("rank.shown", "shown_only"),
+                       ("rank.presentation", "impression_id")]:
+        problem = ml_quest.answer(problem, f"{PART}.{key}", value)
+    path, project = saved_problem(tmp_path, problem, write_shown)
+    started = client.post("/api/problems/start", json={"path": str(path)})
+    assert started.status_code == 201
+    source = started.json()["source"]
+    url = f"/api/sources/{source['id']}"
+
+    # ML-EDA に印と提示の列を渡した要約と同じ
+    summary = client.get(f"{url}/reactions").json()["summary"]
+    expected = ml_eda.describe_reactions(ml_eda.load_reactions(
+        Path(source["path"]), "member", "item_id", "ts", "qty",
+        shown="shown_only", presentation="impression_id"
+    ))
+    assert summary == expected
+    assert summary["columns"]["shown"] == "shown_only"
+    assert summary["columns"]["presentation"] == "impression_id"
+    dropped = summary["dropped"]
+    assert dropped["missing"] == 1 and dropped["unreadable_shown"] == 1
+    assert dropped["conflict"] == 1 and dropped["duplicate_shown"] == 1
+    shown = summary["shown"]
+    assert shown["by"] == "presentation" and shown["negatives"] == 240
+    assert shown["presentations"] == 80
+    assert shown["chosen_presentations"] == 80
+
+    # 骨組みの学習のスクリプトと同じ数の反応, 見せただけの記録と知らせ
+    target = project / skeleton_config(project).data.dataset
+    exported = client.post(
+        f"{url}/export_reactions", json={"overwrite": True}
+    )
+    assert exported.status_code == 200
+    result = exported.json()
+    assert result["reactions"] == summary["reactions"] == 80
+    assert result["dropped"] == dropped["total"] == 4
+    config = yaml.safe_load(
+        (project / "configs" / "default" / "train.yaml").read_text("utf-8")
+    )
+    assert config["rank"]["shown"] == "shown_only"
+    cfg = SimpleNamespace(rank=RankConfig(config["rank"]))
+    frame, negatives, notes = shown_reader(project)(target, cfg)
+    assert len(frame) == summary["reactions"]
+    assert len(negatives) == shown["negatives"]
+    assert notes == summary["notes"][:len(notes)]
+
+    # 印の列を答え直して外すと, 見せただけの記録の要約は無い
+    problem = ml_quest.answer(
+        ml_quest.load_problem(path), f"{PART}.rank.shown", None
+    )
+    ml_quest.save_problem(problem, path)
+    summary = client.get(f"{url}/reactions").json()["summary"]
+    assert summary["shown"] is None
+    assert summary["columns"]["presentation"] is None

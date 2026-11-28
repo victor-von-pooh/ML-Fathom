@@ -36,11 +36,26 @@ const COUNTS = {
 /** 反応の表の要約 (ML-EDA の describe_reactions の形) */
 function summaryOf(overrides: Partial<ReactionsSummary> = {}): ReactionsSummary {
   return {
-    columns: { user: 'member', item: 'item_id', time: 'ts', reaction: 'qty' },
+    columns: {
+      user: 'member',
+      item: 'item_id',
+      time: 'ts',
+      reaction: 'qty',
+      shown: null,
+      presentation: null,
+    },
     source: { path: '/data/reactions.csv', loader: 'csv', options: {} },
     rows: 10,
     reactions: 6,
-    dropped: { missing: 3, unreadable_time: 1, not_positive: 1, total: 4 },
+    dropped: {
+      missing: 3,
+      unreadable_time: 1,
+      not_positive: 1,
+      unreadable_shown: 0,
+      conflict: 0,
+      duplicate_shown: 0,
+      total: 4,
+    },
     users: 3,
     items: 2,
     pairs: 5,
@@ -59,6 +74,7 @@ function summaryOf(overrides: Partial<ReactionsSummary> = {}): ReactionsSummary 
     },
     time: { kind: 'datetime', min: '2025-01-01T00:00:00', max: '2025-01-05T12:00:00', distinct: 6 },
     reaction: { min: 1, max: 2, mean: 1.5, std: 0.5, median: 1.5 },
+    shown: null,
     notes: ['利用者, 品物か時刻の欠けた 3 行を除きました'],
     ...overrides,
   }
@@ -127,7 +143,14 @@ test('概要に数, 気付き, 読んだ列, 除いた行, 時刻の範囲を出
 test('反応の強さの列が無ければ, 全ての行を反応とみなすと知らせる', async () => {
   renderView(
     summaryOf({
-      columns: { user: 'member', item: 'item_id', time: 'ts', reaction: null },
+      columns: {
+        user: 'member',
+        item: 'item_id',
+        time: 'ts',
+        reaction: null,
+        shown: null,
+        presentation: null,
+      },
       reaction: null,
     }),
   )

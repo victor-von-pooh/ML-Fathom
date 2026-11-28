@@ -1076,13 +1076,33 @@ export interface ReactionCounts {
 
 /** 並べるの反応の表の要約 (ML-EDA の describe_reactions) */
 export interface ReactionsSummary {
-  columns: { user: string; item: string; time: string; reaction: string | null }
+  columns: {
+    user: string
+    item: string
+    time: string
+    reaction: string | null
+    /** 見せただけの印の列 */
+    shown: string | null
+    /** 提示の列 (印の列があるときだけ) */
+    presentation: string | null
+  }
   source: Record<string, unknown>
   /** 除く前の行の数 */
   rows: number
   /** 残した反応の数 */
   reactions: number
-  dropped: { missing: number; unreadable_time: number; not_positive: number; total: number }
+  dropped: {
+    missing: number
+    unreadable_time: number
+    not_positive: number
+    /** 見せただけの印を読めない行 */
+    unreadable_shown: number
+    /** 選んだ行と同じ提示の同じ品物の見せただけの行 */
+    conflict: number
+    /** 同じ提示の同じ品物の見せただけの行の 2 行目から */
+    duplicate_shown: number
+    total: number
+  }
   users: number
   items: number
   pairs: number
@@ -1108,6 +1128,20 @@ export interface ReactionsSummary {
     mean: number | null
     std: number | null
     median: number | null
+  } | null
+  /** 見せただけの記録の要約 (印の列が無ければ null) */
+  shown: {
+    /** 残した見せただけの行 (学習の負の例) */
+    negatives: number
+    users: number
+    items: number
+    /** 1 回の提示の決め方 (利用者と提示の列か, 利用者と時刻の組) */
+    by: 'presentation' | 'time'
+    presentations: number
+    /** 選んだ反応のある提示の数 */
+    chosen_presentations: number
+    /** 反応の表に無い品物の見せただけの行 */
+    unseen_items: number
   } | null
   notes: string[]
 }
