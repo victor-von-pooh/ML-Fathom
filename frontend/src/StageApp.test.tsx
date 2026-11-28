@@ -278,6 +278,39 @@ describe('StageApp', () => {
     expect(window.location.pathname).toBe('/data')
   })
 
+  it('画面の頭の見出しは段階の名前で, 知らない経路と開けないデータにも見出しを出す', async () => {
+    stubApi()
+    const { container } = renderStage()
+    expect(await screen.findByRole('heading', { level: 1 })).toHaveTextContent('データの分析')
+    // キーの操作と portal の出し先の範囲 (殻の R9)
+    expect(container.querySelector('[data-stage-root]')).not.toBeNull()
+    cleanup()
+
+    window.history.replaceState(null, '', '/data/nowhere')
+    renderStage()
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('データの分析')
+    expect(screen.getByRole('heading', { level: 2, name: 'ページが見つかりません' })).toBeVisible()
+    expect(screen.getByRole('link', { name: 'データの一覧へ戻る' })).toHaveAttribute(
+      'href',
+      '/data',
+    )
+    cleanup()
+
+    window.history.replaceState(null, '', '/data/sources/nope')
+    renderStage()
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('nope')
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'データを開けません' }),
+    ).toBeInTheDocument()
+    expect(screen.getByText('データ nope が見つかりません')).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).toBeNull()
+    const crumbs = screen.getByRole('navigation', { name: 'パンくず' })
+    expect(within(crumbs).getByRole('link', { name: 'データの分析' })).toHaveAttribute(
+      'href',
+      '/data',
+    )
+  })
+
   it('単独では名前と明暗の切り替えを出し, 絞らない', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input)

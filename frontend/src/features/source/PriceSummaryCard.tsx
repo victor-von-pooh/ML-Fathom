@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 
 import { useApi } from '../../api/client'
 import type { PriceRequest, Recipe } from '../../api/types'
-import { Card, ErrorBox, Spinner } from '../../components/ui'
+import { Card, ErrorBox, Spinner } from '../../components/common'
 import { formatNumber, formatPercent } from '../../lib/format'
 import { Findings } from './Findings'
 
@@ -37,7 +37,7 @@ function Head({ names, right = [] }: { names: string[]; right?: string[] }) {
 
 /** 数の欄 */
 function Num({ value }: { value: unknown }) {
-  return <td className="tabular pr-3 text-right font-mono">{formatNumber(value)}</td>
+  return <td className="tabular-nums pr-3 text-right font-mono">{formatNumber(value)}</td>
 }
 
 /**
@@ -148,7 +148,7 @@ export function PriceSummaryCard({ sourceId, recipe }: { sourceId: string; recip
                         {item.bin + 1}
                       </th>
                       <Num value={item.rows} />
-                      <td className="tabular pr-3 font-mono">
+                      <td className="tabular-nums pr-3 font-mono">
                         {formatNumber(item.price_min)} 〜 {formatNumber(item.price_max)}
                       </td>
                       <Num value={item.price_mean} />
@@ -186,13 +186,13 @@ export function PriceSummaryCard({ sourceId, recipe }: { sourceId: string; recip
                       <td
                         className={
                           item.prices < 2
-                            ? 'tabular pr-3 text-right font-mono text-warning-text'
-                            : 'tabular pr-3 text-right font-mono'
+                            ? 'tabular-nums pr-3 text-right font-mono text-warning-text'
+                            : 'tabular-nums pr-3 text-right font-mono'
                         }
                       >
                         {formatNumber(item.prices)}
                       </td>
-                      <td className="tabular pr-3 font-mono">
+                      <td className="tabular-nums pr-3 font-mono">
                         {formatNumber(item.price_min)} 〜 {formatNumber(item.price_max)}
                       </td>
                       <Num value={item.units_mean} />
@@ -228,8 +228,8 @@ export function PriceSummaryCard({ sourceId, recipe }: { sourceId: string; recip
                         <td
                           className={
                             strong
-                              ? 'tabular pr-3 text-right font-mono text-warning-text'
-                              : 'tabular pr-3 text-right font-mono'
+                              ? 'tabular-nums pr-3 text-right font-mono text-warning-text'
+                              : 'tabular-nums pr-3 text-right font-mono'
                           }
                         >
                           {formatNumber(item.strength)}

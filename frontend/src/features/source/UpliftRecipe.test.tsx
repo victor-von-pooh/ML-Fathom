@@ -205,7 +205,10 @@ test('他のタスクに変えると, 処置の列, 結果の種類と行の id 
 test('分割が層化でなければ誤りを出し, 処置の列が無ければ要約を求めない', async () => {
   const { treatment: _treatment, ...rest } = RECIPE
   const uplift = renderTab({ ...rest, split: { ...RECIPE.split, method: 'random' } })
-  expect((await screen.findByRole('alert')).textContent).toContain('効果を見積もるの分割は層化だけ')
+  // 欄の下の誤りは分割の欄から結び, 欄を正しくない値にする
+  const split = await screen.findByLabelText('分割')
+  expect(split).toHaveAttribute('aria-invalid', 'true')
+  expect(split).toHaveAccessibleDescription(new RegExp('効果を見積もるの分割は層化だけ'))
   expect(screen.getByText(/処置の列を選ぶと/)).toBeTruthy()
   expect(uplift).not.toHaveBeenCalled()
 })

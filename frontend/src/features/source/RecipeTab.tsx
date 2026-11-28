@@ -17,7 +17,8 @@ import type {
   StepInfo,
   UpliftOutcome,
 } from '../../api/types'
-import { Button, Card, ErrorBox, Spinner } from '../../components/ui'
+import { describedBy } from '../../components/common-utils'
+import { Button, Card, ErrorBox, FieldError, Spinner } from '../../components/common'
 import { defaultDatasetName, formatNumber, TASK_LABELS } from '../../lib/format'
 import { findDecisions, withAutoItems } from '../../lib/decisions'
 import {
@@ -186,7 +187,7 @@ function StepEditor({
           className="flex min-w-0 flex-1 items-center gap-2 text-left"
           aria-label={`手順 ${index + 1} の前と後を見る`}
         >
-          <span className="tabular rounded-full bg-surface-2 px-2 text-xs">{index + 1}</span>
+          <span className="tabular-nums rounded-full bg-surface-2 px-2 text-xs">{index + 1}</span>
           <code className="text-sm font-semibold">{step.op}</code>
           <span className="truncate text-xs text-ink-3">{info?.description}</span>
           {info?.fits && (
@@ -493,6 +494,17 @@ export function RecipeTab({
   // 時間をまたぐ量の判断は表と時系列だけで, 分割は時刻の順だけ (ML-EDA の需要の記録の表の決まり)
   const demanded = recipe.task === 'demand'
   const demandKind = DEMAND_KINDS.includes(kind)
+  // タスクと合わない分割の欄の下の誤り (出ているものだけ分割の欄から結ぶ)
+  const splitErrors = {
+    anomaly: anomaly && recipe.split.method !== 'random',
+    uplift: uplift && recipe.split.method !== 'stratified',
+    price: priced && recipe.split.method !== 'stratified',
+    demand: demanded && recipe.split.method !== 'time',
+    group: recipe.split.method === 'stratified_group' && !stratifiable,
+  }
+  const splitDescribed = describedBy(
+    ...Object.entries(splitErrors).map(([key, shown]) => shown && `split-error-${key}`),
+  )
   // 行の id の列の候補. 分析で欠けも同じ値も無い列だけ (ML-EDA が他の列を誤りにする).
   // 目的の列と, 処置の列, 値段を変える判断と時間をまたぐ量の判断の列は選べない
   const idColumns = rowIdColumns(
@@ -625,6 +637,8 @@ export function RecipeTab({
             </label>
             <select
               id="split"
+              aria-invalid={splitDescribed !== undefined || undefined}
+              aria-describedby={splitDescribed}
               value={recipe.split.method}
               onChange={(event) => {
                 const split: Recipe['split'] = { ...recipe.split, method: event.target.value }
@@ -693,45 +707,55 @@ export function RecipeTab({
             </select>
             {/* 異常の検知は正常の行を無作為に分け, 異常の行を検証用とテスト用に配る (ML-EDA は
                 他の分け方を load_recipe で止める) */}
-            {anomaly && recipe.split.method !== 'random' && (
-              <p role="alert" className="col-start-2 text-xs text-critical-text">
-                異常の検知の分割は無作為だけです (正常の行を無作為に分け,
-                異常の行を検証用とテスト用に置くため). 分割を無作為にしてください
-              </p>
+            {splitErrors.anomaly && (
+              <div className="col-start-2">
+                <FieldError id="split-error-anomaly">
+                  異常の検知の分割は無作為だけです (正常の行を無作為に分け,
+                  異常の行を検証用とテスト用に置くため). 分割を無作為にしてください
+                </FieldError>
+              </div>
             )}
             {/* 効果を見積もるは処置で層を作り, 全ての分割に処置の群と対照の群を置く (ML-EDA は
                 他の分け方を load_recipe で止める) */}
-            {uplift && recipe.split.method !== 'stratified' && (
-              <p role="alert" className="col-start-2 text-xs text-critical-text">
-                {
-                  '効果を見積もるの分割は層化だけです (処置で層を作り, 全ての分割に処置の群と対照の群を置くため). 分割を層化にしてください'
-                }
-              </p>
+            {splitErrors.uplift && (
+              <div className="col-start-2">
+                <FieldError id="split-error-uplift">
+                  {
+                    '効果を見積もるの分割は層化だけです (処置で層を作り, 全ての分割に処置の群と対照の群を置くため). 分割を層化にしてください'
+                  }
+                </FieldError>
+              </div>
             )}
             {/* 値段を変える判断は値段の段で層を作り, 値段の高い行と低い行を全ての分割に置く (ML-EDA
                 は他の分け方を load_recipe で止める) */}
-            {priced && recipe.split.method !== 'stratified' && (
-              <p role="alert" className="col-start-2 text-xs text-critical-text">
-                {
-                  '値段を変える判断の分割は層化だけです (値段の段で層を作り, 値段の高い行と低い行を全ての分割に置くため). 分割を層化にしてください'
-                }
-              </p>
+            {splitErrors.price && (
+              <div className="col-start-2">
+                <FieldError id="split-error-price">
+                  {
+                    '値段を変える判断の分割は層化だけです (値段の段で層を作り, 値段の高い行と低い行を全ての分割に置くため). 分割を層化にしてください'
+                  }
+                </FieldError>
+              </div>
             )}
             {/* 時間をまたぐ量の判断は発注を決める日の順に分け, 先の期間が後の分割に入らないようにする
                 (ML-EDA は他の分け方を load_recipe で止める) */}
-            {demanded && recipe.split.method !== 'time' && (
-              <p role="alert" className="col-start-2 text-xs text-critical-text">
-                {
-                  '時間をまたぐ量の判断の分割は時刻の順だけです (発注を決める日の順に分け, 学習用の正解に検証用の日の売れた数が入らないようにするため). 分割を時刻の順にしてください'
-                }
-              </p>
+            {splitErrors.demand && (
+              <div className="col-start-2">
+                <FieldError id="split-error-demand">
+                  {
+                    '時間をまたぐ量の判断の分割は時刻の順だけです (発注を決める日の順に分け, 学習用の正解に検証用の日の売れた数が入らないようにするため). 分割を時刻の順にしてください'
+                  }
+                </FieldError>
+              </div>
             )}
             {/* タスクを変えてグループの層化が残った場合 (ML-EDA は load_recipe で止める) */}
-            {recipe.split.method === 'stratified_group' && !stratifiable && (
-              <p role="alert" className="col-start-2 text-xs text-critical-text">
-                グループの層化は, 回帰と時系列の予測では使えません (目的の値で層を作れないため).
-                グループごとかグループと時刻の組を選ぶか, タスクを分類にしてください
-              </p>
+            {splitErrors.group && (
+              <div className="col-start-2">
+                <FieldError id="split-error-group">
+                  グループの層化は, 回帰と時系列の予測では使えません (目的の値で層を作れないため).
+                  グループごとかグループと時刻の組を選ぶか, タスクを分類にしてください
+                </FieldError>
+              </div>
             )}
             {/* 表として読むと日時の列を時刻に使わないので, 時刻で分けるなら読み方を案内する */}
             {timeSplit && datetimes.length > 0 && (
@@ -1036,6 +1060,7 @@ export function RecipeTab({
         {priced && <PriceSummaryCard sourceId={sourceId} recipe={recipe} />}
         {demanded && <DemandSummaryCard sourceId={sourceId} recipe={recipe} />}
         <Card
+          name="手順"
           title={`手順 (${recipe.steps.length})`}
           actions={
             <div className="flex flex-wrap gap-2">
@@ -1118,7 +1143,7 @@ export function RecipeTab({
           {/* 値段の列は値段の手順だけで, 原価と商品の id の列は落とす手順だけで書ける (ML-EDA は
               他の手順を誤りにする) */}
           {priceErrors.length > 0 && (
-            <ul role="alert" className="mt-2 space-y-1 text-xs text-critical-text">
+            <ul className="mt-2 space-y-1 text-xs text-critical-text">
               {priceErrors.map((message) => (
                 <li key={message}>{message}</li>
               ))}
@@ -1132,7 +1157,7 @@ export function RecipeTab({
           {/* 時間をまたぐ量の判断の lag の書き方と位置, 商品の id と在庫の数の列 (ML-EDA は
               他の書き方を誤りにする) */}
           {demandErrors.length > 0 && (
-            <ul role="alert" className="mt-2 space-y-1 text-xs text-critical-text">
+            <ul className="mt-2 space-y-1 text-xs text-critical-text">
               {demandErrors.map((message) => (
                 <li key={message}>{message}</li>
               ))}
@@ -1179,6 +1204,7 @@ export function RecipeTab({
         </Card>
         {media && (
           <Card
+            name="中身の手順"
             title={`中身の手順 (${items.length})`}
             actions={
               <Button
@@ -1392,6 +1418,7 @@ export function RecipeTab({
       </div>
       <div className="min-w-0 space-y-4">
         <Card
+          name="前処理の前と後"
           title={
             selected === null
               ? `全ての手順の後 (${recipe.steps.length} 手順)`

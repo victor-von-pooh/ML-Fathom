@@ -2,7 +2,7 @@ import { Plus, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 
 import type { PairStepInfo } from '../../api/types'
-import { Button } from '../../components/ui'
+import { Button } from '../../components/common'
 import type { StepDraft } from '../../lib/entrySteps'
 
 /**
@@ -42,7 +42,9 @@ export function EntryStepsField({
           return (
             <li key={`${index}-${draft.op}`} className="rounded border border-line p-2">
               <div className="flex items-center gap-2">
-                <span className="tabular rounded-full bg-surface-2 px-2 text-xs">{index + 1}</span>
+                <span className="tabular-nums rounded-full bg-surface-2 px-2 text-xs">
+                  {index + 1}
+                </span>
                 <code className="text-sm font-semibold">{draft.op}</code>
                 <span className="min-w-0 flex-1 truncate text-xs text-ink-3">
                   {info?.description}

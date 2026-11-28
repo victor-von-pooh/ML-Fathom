@@ -3,7 +3,7 @@ import { useId } from 'react'
 
 import { useApi } from '../../api/client'
 import type { Profile, Source } from '../../api/types'
-import { ErrorBox } from '../../components/ui'
+import { ErrorBox } from '../../components/common'
 import { clearDraft } from '../../lib/drafts'
 
 // 表の読み込み (読み方を選べるもの)

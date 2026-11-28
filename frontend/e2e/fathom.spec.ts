@@ -7,6 +7,38 @@ const TABLE = path.resolve(import.meta.dirname, '.work', 'people.csv')
 
 test.describe.configure({ mode: 'serial' })
 
+// 殻の共通の部品 (R12): 見出し, 対話の枠の閉じ方と focus, 知らない経路と開けないデータ
+test('画面の頭の見出しは段階の名前で, 対話の枠は Esc と外で閉じ, 知らない経路は一覧へ戻せる', async ({
+  page,
+}) => {
+  await page.goto('/')
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('データの分析')
+
+  const add = page.getByRole('button', { name: 'データを登録' }).first()
+  await add.click()
+  const dialog = page.getByRole('dialog', { name: 'データを登録' })
+  await expect(dialog).toBeVisible()
+  // 開いたときはパスの欄に focus がある
+  await expect(dialog.getByLabel('ディレクトリのパス')).toBeFocused()
+  await page.keyboard.press('Escape')
+  await expect(dialog).toHaveCount(0)
+  await expect(add).toBeFocused()
+  await add.click()
+  await expect(dialog).toBeVisible()
+  await page.mouse.click(5, 5)
+  await expect(dialog).toHaveCount(0)
+
+  await page.goto('/nowhere')
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('データの分析')
+  await expect(page.getByRole('heading', { name: 'ページが見つかりません' })).toBeVisible()
+  await page.getByRole('link', { name: 'データの一覧へ戻る' }).click()
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('データの分析')
+
+  await page.goto('/sources/nope')
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText(/^データを開けません$/)
+  await expect(page.getByText('データ nope が見つかりません')).toBeVisible()
+})
+
 test('ディレクトリをたどって表を登録し, 気付きと列を見る', async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'データを登録' }).first().click()
@@ -130,9 +162,11 @@ test('グループと時刻の組とグループの層化で分け, 使えない
   // 回帰にすると, 選択肢は選べなくなり, 残った指定には誤りを出す
   await page.getByRole('combobox', { name: '目的の列' }).selectOption('amount')
   await page.getByRole('combobox', { name: 'タスク' }).selectOption('regression')
-  await expect(
-    page.getByRole('alert').filter({ hasText: /回帰と時系列の予測では使えません/ }),
-  ).toBeVisible()
+  // 欄の下の誤りは分割の欄から結ばれ, 欄は正しくない値になる
+  const splitError = page.locator('#split-error-group')
+  await expect(splitError).toHaveText(/回帰と時系列の予測では使えません/)
+  await expect(split).toHaveAttribute('aria-invalid', 'true')
+  await expect(split).toHaveAccessibleDescription(/回帰と時系列の予測では使えません/)
   await expect(page.getByText(/stratified_group/).first()).toBeVisible({ timeout: 20_000 })
   // 欄と誤りの文は左のカードの中に収まる (長い選択肢でもはみ出さない)
   const card = page.getByRole('region', { name: '目的と分割' })
@@ -141,10 +175,7 @@ test('グループと時刻の組とグループの層化で分け, 使えない
     const box = (await target.boundingBox())!
     expect(box.x + box.width).toBeLessThanOrEqual(cardBox.x + cardBox.width)
   }
-  const alertBox = (await page
-    .getByRole('alert')
-    .filter({ hasText: /回帰と時系列の予測では使えません/ })
-    .boundingBox())!
+  const alertBox = (await splitError.boundingBox())!
   expect(alertBox.x + alertBox.width).toBeLessThanOrEqual(cardBox.x + cardBox.width)
   await split.selectOption('group')
   await expect(split.locator('option[value="stratified_group"]')).toBeDisabled()
@@ -393,7 +424,8 @@ test('音声で中身の手順を分析から作り, 数件で試して前と後
   // 分析 (8000 Hz, 1 チャンネル, 長さの中央値 18 秒) から, 周波数, チャンネル, 長さの順の手順を作る
   await page.getByRole('tab', { name: '前処理と書き出し' }).click()
   await page.getByRole('button', { name: '学習用の配列にする手順を作る' }).click()
-  const steps = page.getByRole('region', { name: '中身の手順 (3)' })
+  const steps = page.getByRole('region', { name: '中身の手順', exact: true })
+  await expect(steps.getByRole('heading', { level: 2 })).toHaveText('中身の手順 (3)')
   await expect(steps.locator('ol > li code')).toHaveText(['resample', 'mix_channels', 'fix_length'])
   await expect(steps.getByLabel('rate', { exact: true })).toHaveValue('8000')
   await expect(steps.getByLabel('channels', { exact: true })).toHaveValue('1')
@@ -465,7 +497,7 @@ test('中身の手順の引数が上限を超えると, 理由を出して試す
   // 周波数を上限 (192000 Hz) より大きくすると, 理由が出て試すと書き出すを押せない
   await page.getByRole('tab', { name: '前処理と書き出し' }).click()
   await page.getByRole('button', { name: '学習用の配列にする手順を作る' }).click()
-  const steps = page.getByRole('region', { name: /^中身の手順 \(/ })
+  const steps = page.getByRole('region', { name: '中身の手順', exact: true })
   const rate = steps.getByLabel('rate', { exact: true })
   await rate.fill('200000')
   await rate.blur()

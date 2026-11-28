@@ -11,6 +11,7 @@ import type {
   TrajectoryStats,
   TrajectorySummary,
 } from '../../api/types'
+import { tabPanelProps } from '../../components/common-utils'
 import {
   Button,
   Card,
@@ -20,7 +21,7 @@ import {
   StatTile,
   Tabs,
   type TabItem,
-} from '../../components/ui'
+} from '../../components/common'
 import { Chart } from '../../lib/chart'
 import { countsOption, histogramOption } from '../../lib/charts'
 import { formatCount, formatNumber, KIND_LABELS } from '../../lib/format'
@@ -154,7 +155,7 @@ function OverviewPanel({ summary }: { summary: TrajectorySummary }) {
           hint="確率の列"
         />
       </div>
-      <Card title={`気付き (${summary.notes.length} 件)`}>
+      <Card name="気付き" title={`気付き (${summary.notes.length} 件)`}>
         <Notes notes={summary.notes} />
       </Card>
       <div className="grid gap-4 xl:grid-cols-2">
@@ -235,7 +236,7 @@ function ElementTable({ caption, elements }: { caption: string; elements: Trajec
                 item.std,
                 item.median,
               ].map((value, index) => (
-                <td key={headers[index + 1]} className="tabular text-right font-mono">
+                <td key={headers[index + 1]} className="tabular-nums text-right font-mono">
                   {formatNumber(value)}
                 </td>
               ))}
@@ -282,7 +283,7 @@ function ElementsPanel({ summary }: { summary: TrajectorySummary }) {
   const counted = summary.actions.filter((item) => item.counts !== null)
   return (
     <div className="space-y-4">
-      <Card title={`行動 (${summary.actions.length} 要素)`}>
+      <Card name="行動" title={`行動 (${summary.actions.length} 要素)`}>
         <ElementTable caption="行動の要素ごとの統計" elements={summary.actions} />
         <p className="mt-2 text-xs text-ink-3">
           欠けは空の値の数です (守りで止めた行は行動が空). nan は値として数えます.
@@ -303,7 +304,7 @@ function ElementsPanel({ summary }: { summary: TrajectorySummary }) {
         ))}
       </Card>
       <ActionProbCard summary={summary} />
-      <Card title={`観測 (${summary.observations.length} 要素)`}>
+      <Card name="観測" title={`観測 (${summary.observations.length} 要素)`}>
         <ElementTable caption="観測の要素ごとの統計" elements={summary.observations} />
       </Card>
     </div>
@@ -324,7 +325,7 @@ function GuardPanel({ guard }: { guard: NonNullable<TrajectorySummary['guard']> 
           option={countsOption(results)}
         />
       </Card>
-      <Card title={`守りが働いた理由 (${guard.reasons.length} 種類)`}>
+      <Card name="守りが働いた理由" title={`守りが働いた理由 (${guard.reasons.length} 種類)`}>
         {guard.reasons.length === 0 ? (
           <p className="text-sm text-ink-3">守りが働いた理由はありません.</p>
         ) : (
@@ -344,7 +345,9 @@ function GuardPanel({ guard }: { guard: NonNullable<TrajectorySummary['guard']> 
               {guard.reasons.map((item) => (
                 <tr key={item.reason} className="border-t border-line">
                   <td className="py-1 break-words">{item.reason}</td>
-                  <td className="tabular pl-3 text-right font-mono">{formatNumber(item.count)}</td>
+                  <td className="tabular-nums pl-3 text-right font-mono">
+                    {formatNumber(item.count)}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -359,7 +362,10 @@ function GuardPanel({ guard }: { guard: NonNullable<TrajectorySummary['guard']> 
 function EpisodesPanel({ summary }: { summary: TrajectorySummary }) {
   const rows: TrajectoryEpisode[] = summary.per_episode
   return (
-    <Card title={`エピソードごとの一覧 (${formatCount(rows.length)} 件)`}>
+    <Card
+      name="エピソードごとの一覧"
+      title={`エピソードごとの一覧 (${formatCount(rows.length)} 件)`}
+    >
       {summary.per_episode_truncated && (
         <p role="note" className="mb-2 text-xs text-warning-text">
           エピソードが {formatCount(summary.episodes)} 件あるので, 先頭の {formatCount(rows.length)}{' '}
@@ -380,7 +386,10 @@ function EpisodesPanel({ summary }: { summary: TrajectorySummary }) {
           </thead>
           <tbody>
             {rows.map((row) => (
-              <tr key={row.episode} className="tabular border-t border-line text-right font-mono">
+              <tr
+                key={row.episode}
+                className="tabular-nums border-t border-line text-right font-mono"
+              >
                 <th scope="row" className="py-1 font-normal">
                   {row.episode}
                 </th>
@@ -418,7 +427,7 @@ export function TrajectoryView({ source }: { source: Source }) {
   return (
     <>
       <PageHeader
-        breadcrumb={<Link to="/">データ</Link>}
+        breadcrumb={<Link to="/">データの分析</Link>}
         title={source.name}
         subtitle={
           <span className="font-mono" title={source.path}>
@@ -438,13 +447,7 @@ export function TrajectoryView({ source }: { source: Source }) {
         idBase="trajectory"
         label="軌跡の分析"
       />
-      <div
-        id="trajectory-panel"
-        role="tabpanel"
-        aria-labelledby={`trajectory-tab-${tab}`}
-        tabIndex={0}
-        className="pt-4"
-      >
+      <div {...tabPanelProps('trajectory', tab)} tabIndex={0} className="pt-4">
         {summary.isPending && <Spinner label="分析しています" />}
         {summary.error && <ErrorBox error={summary.error} />}
         {data && tab === 'overview' && <OverviewPanel summary={data} />}

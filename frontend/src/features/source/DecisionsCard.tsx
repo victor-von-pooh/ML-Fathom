@@ -3,7 +3,7 @@ import { CircleHelp } from 'lucide-react'
 
 import { useApi } from '../../api/client'
 import type { Recipe } from '../../api/types'
-import { Button, Card, ErrorBox } from '../../components/ui'
+import { Button, Card, ErrorBox } from '../../components/common'
 import type { Decision, DecisionChoice } from '../../lib/decisions'
 import { clearDraft } from '../../lib/drafts'
 
@@ -54,7 +54,8 @@ export function DecisionsCard({
           決めてほしいこと ({decisions.length})
         </span>
       }
-      className="border-warning/60"
+      name="決めてほしいこと"
+      tone="warning"
     >
       <p className="mb-3 text-xs text-ink-3">
         自動では決めきれないことです. 選ぶとそのまま反映します.

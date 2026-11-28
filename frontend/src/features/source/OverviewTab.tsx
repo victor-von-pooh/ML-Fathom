@@ -1,5 +1,5 @@
 import type { AnomalyProfile, Profile } from '../../api/types'
-import { Card, StatTile } from '../../components/ui'
+import { Card, StatTile } from '../../components/common'
 import {
   formatBytes,
   formatCount,
@@ -86,14 +86,17 @@ export function OverviewTab({
           <AnomalyCounts anomaly={profile.anomaly} />
         </Card>
       )}
-      <Card title={`気付き (注意 ${warnings} 件, 参考 ${profile.findings.length - warnings} 件)`}>
+      <Card
+        name="気付き"
+        title={`気付き (注意 ${warnings} 件, 参考 ${profile.findings.length - warnings} 件)`}
+      >
         <Findings findings={profile.findings} onColumn={onColumn} />
       </Card>
       <Card title="列の型">
         <div className="flex flex-wrap gap-2">
           {Object.entries(types).map(([type, count]) => (
             <span key={type} className="rounded-full bg-surface-2 px-2.5 py-1 text-sm">
-              {TYPE_LABELS[type] ?? type} <span className="tabular text-ink-3">{count}</span>
+              {TYPE_LABELS[type] ?? type} <span className="tabular-nums text-ink-3">{count}</span>
             </span>
           ))}
         </div>

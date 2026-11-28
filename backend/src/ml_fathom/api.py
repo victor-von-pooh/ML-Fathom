@@ -278,7 +278,7 @@ def find_source(request: Request, source_id: str) -> dict[str, Any]:
     """
     source = get_store(request).get(source_id)
     if source is None:
-        raise HTTPException(404, f"データ {source_id} がありません")
+        raise HTTPException(404, f"データ {source_id} が見つかりません")
 
     return source
 
@@ -593,6 +593,8 @@ def browse(path: str = "~") -> dict[str, Any]:
     """
     # 隠しファイルを除いて, ディレクトリを先に名前の順で並べる
     target = Path(path).expanduser().resolve()
+    if not target.exists():
+        raise HTTPException(404, f"ディレクトリ {target} が見つかりません")
     if not target.is_dir():
         raise HTTPException(404, f"{target} はディレクトリではありません")
     entries = []
@@ -646,7 +648,9 @@ def detect(body: DetectRequest) -> list[dict[str, Any]]:
     try:
         candidates = candidates_of(Path(body.path).expanduser())
     except FileNotFoundError as error:
-        raise HTTPException(404, str(error)) from error
+        raise HTTPException(
+            404, f"場所 {Path(body.path).expanduser()} が見つかりません"
+        ) from error
 
     return candidates
 
@@ -730,7 +734,7 @@ def create_source(request: Request, body: SourceCreate) -> dict[str, Any]:
     # 読み込みを決めて, 実際に読めることを確かめる
     path = Path(body.path).expanduser().resolve()
     if not path.exists():
-        raise HTTPException(404, f"{path} がありません")
+        raise HTTPException(404, f"場所 {path} が見つかりません")
     loader = body.loader
     if loader is None:
         candidates = candidates_of(path)
@@ -861,7 +865,7 @@ def update_source(
             raise HTTPException(422, f"列 {target} がありません")
     updated = get_store(request).update(source_id, changes)
     if updated is None:
-        raise HTTPException(404, f"データ {source_id} がありません")
+        raise HTTPException(404, f"データ {source_id} が見つかりません")
 
     return source_view(updated)
 
@@ -889,7 +893,7 @@ def delete_source(request: Request, source_id: str) -> Response:
         無い場合は 404
     """
     if not get_store(request).remove(source_id):
-        raise HTTPException(404, f"データ {source_id} がありません")
+        raise HTTPException(404, f"データ {source_id} が見つかりません")
     response = Response(status_code=204)
 
     return response
@@ -1099,7 +1103,7 @@ def get_item(
     """
     data = load_source(find_source(request, source_id))
     if not 0 <= index < len(data.frame):
-        raise HTTPException(404, f"{index} 番目はありません")
+        raise HTTPException(404, f"行 {index} が見つかりません")
     response = item_response(data, index, size)
 
     return response
@@ -1128,7 +1132,7 @@ def get_item_audio(
     """
     data = load_source(find_source(request, source_id))
     if not 0 <= index < len(data.frame):
-        raise HTTPException(404, f"{index} 番目はありません")
+        raise HTTPException(404, f"行 {index} が見つかりません")
     response = audio_response(data, index)
 
     return response
@@ -1202,7 +1206,7 @@ def get_capture_cloud(
     # 撮影のディレクトリの中の点群だけ
     item = capture_of(request, source_id, index)
     if not item.get("point_cloud"):
-        raise HTTPException(404, "この撮影には点群がありません")
+        raise HTTPException(404, f"撮影の点群 {index} が見つかりません")
     try:
         cloud = ml_eda.read_cloud(Path(item["point_cloud"]))
     except Exception as error:
@@ -1243,7 +1247,7 @@ def capture_of(
     if data.kind != "capture":
         raise HTTPException(422, "多視点の撮影のデータではありません")
     if not 0 <= index < len(data.frame):
-        raise HTTPException(404, f"{index} 番目はありません")
+        raise HTTPException(404, f"行 {index} が見つかりません")
     key = f"{source_key(source)}:{index}"
     item: Optional[dict[str, Any]] = CAPTURE_CACHE.get(key)
     if item is not None:

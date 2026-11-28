@@ -6,7 +6,7 @@ import { Link } from 'react-router'
 
 import { ApiError, useApi } from '../../api/client'
 import type { GroupProblem, ProblemFinding, Recipe } from '../../api/types'
-import { Button, Card, ErrorBox, Spinner } from '../../components/ui'
+import { Button, Card, ErrorBox, Spinner } from '../../components/common'
 
 /** 食い違いの重さの名前と色 */
 const LEVELS: Record<ProblemFinding['level'], { label: string; className: string }> = {
@@ -105,7 +105,8 @@ export function ProblemCard({
           問題{data?.name ? `: ${data.name}` : ''}
         </span>
       }
-      className="border-accent/50"
+      name="問題"
+      tone="highlight"
     >
       <p className="mb-3 text-xs text-ink-3">
         問題の設定の段階で決めた状態から始めたデータです. ここで変えた選び方を,
@@ -226,7 +227,8 @@ export function GroupProblemNote({ problem }: { problem: GroupProblem }) {
           問題{problem.name ? `: ${problem.name}` : ''}
         </span>
       }
-      className="border-accent/50"
+      name="問題"
+      tone="highlight"
     >
       <div className="space-y-3 text-sm">
         <p className="text-ink-2">

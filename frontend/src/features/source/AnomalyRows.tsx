@@ -64,7 +64,7 @@ export function AnomalyRows({ summary }: { summary: AnomalySummary }) {
                   {splitLabel(split)}
                 </th>
                 {COLUMNS.map(([key]) => (
-                  <td key={key} className="tabular pr-3 text-right font-mono">
+                  <td key={key} className="tabular-nums pr-3 text-right font-mono">
                     {formatNumber(rows[key] ?? 0)}
                   </td>
                 ))}

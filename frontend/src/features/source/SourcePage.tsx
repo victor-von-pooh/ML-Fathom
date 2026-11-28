@@ -2,7 +2,8 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tansta
 import { Link, useParams, useSearchParams } from 'react-router'
 
 import { useApi } from '../../api/client'
-import { ErrorBox, PageHeader, Spinner, Tabs, type TabItem } from '../../components/ui'
+import { tabPanelProps } from '../../components/common-utils'
+import { ErrorBox, PageHeader, Spinner, Tabs, type TabItem } from '../../components/common'
 import { readDraft, useRecipeDraft, writeDraft } from '../../lib/drafts'
 import { KIND_LABELS } from '../../lib/format'
 import { ANOMALY_KINDS, untargetedDraft } from '../../lib/recipe'
@@ -79,8 +80,27 @@ export function SourcePage() {
   const go = (next: TabId, extra: Record<string, string> = {}) =>
     setSearch({ tab: next, ...extra }, { replace: true })
 
-  if (sources.isPending) return <Spinner />
-  if (!source) return <ErrorBox error={new Error(`データ ${id} がありません`)} />
+  // 読み込み中と開けないときも, 段階の頭へのパンくずと見出しを出す
+  const crumb = <Link to="/">データの分析</Link>
+  if (sources.isPending) {
+    return (
+      <>
+        <PageHeader breadcrumb={crumb} title={id} />
+        <Spinner />
+      </>
+    )
+  }
+  if (!source) {
+    return (
+      <>
+        <PageHeader breadcrumb={crumb} title="データを開けません" />
+        <ErrorBox
+          live={false}
+          error={sources.error ?? new Error(`データ ${id} が見つかりません`)}
+        />
+      </>
+    )
+  }
   if (source.kind === 'trajectory') return <TrajectoryView key={source.id} source={source} />
   if (source.kind === 'reactions') return <ReactionsView key={source.id} source={source} />
   const data = profile.data
@@ -99,7 +119,7 @@ export function SourcePage() {
   return (
     <>
       <PageHeader
-        breadcrumb={<Link to="/">データ</Link>}
+        breadcrumb={<Link to="/">データの分析</Link>}
         title={source.name}
         subtitle={
           <span className="font-mono" title={source.path}>
@@ -141,15 +161,9 @@ export function SourcePage() {
       />
       {setTarget.error && <ErrorBox error={setTarget.error} />}
       <Tabs items={items} value={tab} onChange={(next) => go(next)} idBase="source" label="分析" />
-      <div
-        id="source-panel"
-        role="tabpanel"
-        aria-labelledby={`source-tab-${tab}`}
-        tabIndex={0}
-        className="pt-4"
-      >
+      <div {...tabPanelProps('source', tab)} tabIndex={0} className="pt-4">
         {profile.isPending && <Spinner label="分析しています" />}
-        {profile.error && <ErrorBox error={profile.error} />}
+        {profile.error && <ErrorBox live={false} error={profile.error} />}
         {data && tab === 'overview' && (
           <OverviewTab profile={data} onColumn={(name) => go('columns', { column: name })} />
         )}

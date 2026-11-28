@@ -4,7 +4,7 @@ import { useId, useRef, useState } from 'react'
 
 import { useApi } from '../../api/client'
 import type { LoaderInfo, Source } from '../../api/types'
-import { Button, ErrorBox } from '../../components/ui'
+import { Button, ErrorBox } from '../../components/common'
 import { clearDraft } from '../../lib/drafts'
 
 // 「読み方」で選ぶ設定 (ここでは出さない)

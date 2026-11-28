@@ -4,7 +4,7 @@ import { useState } from 'react'
 
 import { useApi } from '../../api/client'
 import { useDebounced } from '../../lib/useDebounced'
-import { Button, ErrorBox, Spinner } from '../../components/ui'
+import { Button, ErrorBox, Spinner } from '../../components/common'
 import { formatNumber } from '../../lib/format'
 
 // 1 ページの行の数
@@ -113,7 +113,7 @@ export function DataTab({ sourceId }: { sourceId: string }) {
             <tbody>
               {data.rows.map((row, index) => (
                 <tr key={data.index[index]} className="border-t border-line">
-                  <td className="tabular px-2 py-1 text-right text-xs text-ink-3">
+                  <td className="tabular-nums px-2 py-1 text-right text-xs text-ink-3">
                     {data.index[index]}
                   </td>
                   {row.map((value, column) => (

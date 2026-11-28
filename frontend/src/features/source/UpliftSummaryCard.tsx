@@ -3,7 +3,7 @@ import { Plus } from 'lucide-react'
 
 import { useApi } from '../../api/client'
 import type { Recipe, UpliftRequest } from '../../api/types'
-import { Button, Card, ErrorBox, Spinner } from '../../components/ui'
+import { Button, Card, ErrorBox, Spinner } from '../../components/common'
 import { formatNumber, formatPercent } from '../../lib/format'
 import { OUTCOME_TEXT, postTreatmentColumns } from '../../lib/recipe'
 import { Findings } from './Findings'
@@ -131,8 +131,8 @@ export function UpliftSummaryCard({
                         <td
                           className={
                             broken
-                              ? 'tabular pr-3 text-right font-mono text-warning-text'
-                              : 'tabular pr-3 text-right font-mono'
+                              ? 'tabular-nums pr-3 text-right font-mono text-warning-text'
+                              : 'tabular-nums pr-3 text-right font-mono'
                           }
                         >
                           {formatNumber(item.smd)}

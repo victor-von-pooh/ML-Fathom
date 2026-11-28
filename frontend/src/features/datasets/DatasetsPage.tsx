@@ -4,7 +4,7 @@ import { Link } from 'react-router'
 
 import { useApi } from '../../api/client'
 import type { ItemsDataset, TableDataset, UnreadableDataset, DatasetSummary } from '../../api/types'
-import { Card, EmptyState, ErrorBox, PageHeader, Spinner } from '../../components/ui'
+import { Card, EmptyState, ErrorBox, PageHeader, Spinner } from '../../components/common'
 import { stepText } from '../../lib/entrySteps'
 import { formatNumber, KIND_LABELS, TASK_LABELS } from '../../lib/format'
 import { AnomalyRows } from '../source/AnomalyRows'
@@ -283,6 +283,7 @@ export function DatasetsPage() {
   return (
     <>
       <PageHeader
+        breadcrumb={<Link to="/">データの分析</Link>}
         title="書き出したデータセット"
         subtitle="表は load_dataset, ファイルの組 (版 2, 3) は load_items で ML-EDA から読み込めます"
         actions={
@@ -296,7 +297,7 @@ export function DatasetsPage() {
         }
       />
       {datasets.isPending && <Spinner />}
-      {datasets.error && <ErrorBox error={datasets.error} />}
+      {datasets.error && <ErrorBox live={false} error={datasets.error} />}
       {datasets.data?.length === 0 && (
         <EmptyState icon={Database} title="まだ書き出していません">
           データの「前処理と書き出し」で学習用に書き出すか, 「ファイルの組を書き出す」で 画像と領域,

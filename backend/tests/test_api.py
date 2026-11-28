@@ -145,6 +145,10 @@ def test_standalone_checks(
     assert client.get("/assets/a.js").text == "1"
     for path in ["/api", "/api/nothing", "/api/openapi.json", "/api/docs"]:
         assert client.get(path).status_code == 404, path
+    # 頭だけの API の経路は, 経路の名前を入れた文で返す
+    assert client.get("/api").json()["detail"] == (
+        "API の経路 /api が見つかりません"
+    )
     for path in ["/docs", "/openapi.json"]:
         assert client.get(path).text == "画面", path
 
@@ -320,6 +324,54 @@ def test_source_profile_and_rows(client: TestClient, tmp_path: Path) -> None:
     # ディレクトリの中身
     listing = client.get("/api/browse", params={"path": str(tmp_path)}).json()
     assert "table.csv" in [entry["name"] for entry in listing["entries"]]
+
+
+def test_not_found_messages(client: TestClient, tmp_path: Path) -> None:
+    """
+    見つからない物の 404 の文が「<物> <識別子> が見つかりません」の形で
+    あることを確かめる関数
+
+    Parameters
+    ----------
+    client: TestClient
+        トークンを送るクライアント
+    tmp_path: Path
+        pytest が用意する一時ディレクトリ
+    """
+    cases = {
+        "/api/sources/nope/profile": "データ nope が見つかりません",
+    }
+    for path, message in cases.items():
+        response = client.get(path)
+        assert response.status_code == 404, path
+        assert response.json()["detail"] == message
+
+    missing = tmp_path / "none"
+    response = client.get("/api/browse", params={"path": str(missing)})
+    assert response.status_code == 404
+    assert response.json()["detail"] == (
+        f"ディレクトリ {missing.resolve()} が見つかりません"
+    )
+    response = client.post("/api/sources", json={"path": str(missing)})
+    assert response.status_code == 404
+    assert response.json()["detail"] == (
+        f"場所 {missing.resolve()} が見つかりません"
+    )
+    response = client.get("/api/problems/pairs", params={"path": str(missing)})
+    assert response.status_code == 404
+    assert response.json()["detail"] == (
+        f"問題 {missing.resolve()} が見つかりません"
+    )
+
+    # 問題から始めていないデータの問題の操作
+    table = tmp_path / "plain.csv"
+    pd.DataFrame({"x": [1, 2, 3]}).to_csv(table, index=False)
+    sid = client.post("/api/sources", json={"path": str(table)}).json()["id"]
+    response = client.get(f"/api/sources/{sid}/project")
+    assert response.status_code == 404
+    assert response.json()["detail"] == (
+        f"データ {sid} は問題から始めたデータではありません"
+    )
 
 
 def test_rows_with_nullable_values(
