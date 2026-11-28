@@ -1,7 +1,7 @@
 import clsx from 'clsx'
 
 import type { RecipeStep, TokenizerComparison } from '../../api/types'
-import { Button } from '../../components/ui'
+import { Button } from '../../components/common'
 import { formatCount, formatPercent } from '../../lib/format'
 
 const UNITS: Record<string, string> = { char: '文字', word: '語', subword: '部分語' }

@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 
 import { useApi } from '../../api/client'
 import type { DemandRequest, Recipe } from '../../api/types'
-import { Card, ErrorBox, Spinner } from '../../components/ui'
+import { Card, ErrorBox, Spinner } from '../../components/common'
 import { formatNumber, formatPercent } from '../../lib/format'
 import { DEMAND_HORIZON } from '../../lib/recipe'
 import { Findings } from './Findings'
@@ -45,8 +45,8 @@ function Num({ value, warn = false }: { value: unknown; warn?: boolean }) {
     <td
       className={
         warn
-          ? 'tabular pr-3 text-right font-mono text-warning-text'
-          : 'tabular pr-3 text-right font-mono'
+          ? 'tabular-nums pr-3 text-right font-mono text-warning-text'
+          : 'tabular-nums pr-3 text-right font-mono'
       }
     >
       {formatNumber(value)}
@@ -179,8 +179,8 @@ export function DemandSummaryCard({ sourceId, recipe }: { sourceId: string; reci
                         {item.product}
                       </th>
                       <Num value={item.days} warn={item.days < horizon * SHORT} />
-                      <td className="tabular pr-3 font-mono">{item.first}</td>
-                      <td className="tabular pr-3 font-mono">{item.last}</td>
+                      <td className="tabular-nums pr-3 font-mono">{item.first}</td>
+                      <td className="tabular-nums pr-3 font-mono">{item.last}</td>
                       <Num value={item.gaps} warn={item.gaps > 0} />
                       <Num value={item.stockout} warn={(item.stockout ?? 0) > 0} />
                       <Num value={item.units_mean} />

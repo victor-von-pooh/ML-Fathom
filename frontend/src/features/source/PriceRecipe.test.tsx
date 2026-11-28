@@ -293,9 +293,10 @@ test('他のタスクに変えると, 値段, 原価, 商品の id と行の id 
 test('分割が層化でなければ誤りを出し, 値段の列が無ければ要約を求めない', async () => {
   const { price: _price, ...rest } = RECIPE
   const price = renderTab({ ...rest, split: { ...RECIPE.split, method: 'random' } })
-  expect((await screen.findByRole('alert')).textContent).toContain(
-    '値段を変える判断の分割は層化だけ',
-  )
+  // 欄の下の誤りは分割の欄から結び, 欄を正しくない値にする
+  const split = await screen.findByLabelText('分割')
+  expect(split).toHaveAttribute('aria-invalid', 'true')
+  expect(split).toHaveAccessibleDescription(new RegExp('値段を変える判断の分割は層化だけ'))
   expect(screen.getByText(/値段の列を選ぶと/)).toBeTruthy()
   expect(price).not.toHaveBeenCalled()
 })

@@ -157,5 +157,8 @@ test('他のタスクに変えると, 行の id の列と正常と見なすを�
 
 test('分割が無作為でなければ誤りを出す', async () => {
   renderTab({ ...RECIPE, split: { ...RECIPE.split, method: 'stratified' } })
-  expect((await screen.findByRole('alert')).textContent).toContain('異常の検知の分割は無作為だけ')
+  // 欄の下の誤りは分割の欄から結び, 欄を正しくない値にする
+  const split = await screen.findByLabelText('分割')
+  expect(split).toHaveAttribute('aria-invalid', 'true')
+  expect(split).toHaveAccessibleDescription(new RegExp('異常の検知の分割は無作為だけ'))
 })

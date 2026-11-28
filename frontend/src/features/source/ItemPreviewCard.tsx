@@ -5,7 +5,7 @@ import { useState } from 'react'
 
 import { useApi } from '../../api/client'
 import type { AudioPreviewItem, ItemPreviewItem, PointsItem, Recipe } from '../../api/types'
-import { Button, Card, ErrorBox, Spinner } from '../../components/ui'
+import { Button, Card, ErrorBox, Spinner } from '../../components/common'
 import { formatCount } from '../../lib/format'
 import { AudioPlayer } from './AudioView'
 import { PointCloudView } from './PointCloudView'
@@ -57,7 +57,7 @@ function TextPair({ item }: { item: ItemPreviewItem }) {
   return (
     <li className="px-4 py-2 text-sm">
       <div className="mb-1 flex gap-2 text-xs text-ink-3">
-        <span className="tabular">#{item.index}</span>
+        <span className="tabular-nums">#{item.index}</span>
         {item.label && <span className="font-semibold text-ink-2">{item.label}</span>}
         <span>{shapeText(item.shape)}</span>
       </div>

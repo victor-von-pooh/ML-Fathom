@@ -3,8 +3,7 @@ import { ArrowUp, Folder, Home } from 'lucide-react'
 import { useId, useState } from 'react'
 
 import { useApi } from '../api/client'
-import { Dialog } from './Dialog'
-import { Button, ErrorBox, Spinner } from './ui'
+import { Button, Dialog, ErrorBox, Spinner } from './common'
 
 /** ディレクトリをたどって 1 つを選ぶ対話の枠 (ディレクトリだけを並べる) */
 function FolderDialog({

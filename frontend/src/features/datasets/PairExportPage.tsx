@@ -14,6 +14,7 @@ import type {
   ProblemPairsResult,
 } from '../../api/types'
 import { FolderField } from '../../components/FolderField'
+import { tabPanelProps } from '../../components/common-utils'
 import {
   Button,
   Card,
@@ -22,7 +23,7 @@ import {
   Spinner,
   Tabs,
   type TabItem,
-} from '../../components/ui'
+} from '../../components/common'
 import { itemStepsBody, itemStepsDrafts, stepText, type EntryDrafts } from '../../lib/entrySteps'
 import { formatNumber } from '../../lib/format'
 import {
@@ -918,7 +919,7 @@ function ProblemPairsView({ path }: { path: string }) {
   }
   return (
     <>
-      <Card title={`問題: ${data.name ?? ''}`} className="mb-4">
+      <Card name="問題" title={`問題: ${data.name ?? ''}`} className="mb-4">
         <p className="break-all font-mono text-xs text-ink-3">{data.path}</p>
         <p className="mt-2 text-sm text-ink-2">
           問題の答えで欄を埋めました. 書き出すと, 学習のプロジェクトの書き出し先に書き出し,
@@ -941,6 +942,15 @@ function ProblemPairsView({ path }: { path: string }) {
   )
 }
 
+/** パンくず (段階の頭の画面と, データセットの一覧) */
+function DatasetsCrumb() {
+  return (
+    <>
+      <Link to="/">データの分析</Link> / <Link to="/datasets">データセット</Link>
+    </>
+  )
+}
+
 /** 入力と正解がファイルの組のデータセット (版 2. 中身の手順を足すと版 3) を書き出す画面 */
 export function PairExportPage() {
   const [params, setParams] = useSearchParams()
@@ -952,7 +962,7 @@ export function PairExportPage() {
         <PageHeader
           title="ファイルの組を書き出す"
           subtitle="問題から始めた書き出し. 問題の答えで埋め, 書き出した設定を問題に書き戻します"
-          breadcrumb={<Link to="/datasets">データセット</Link>}
+          breadcrumb={<DatasetsCrumb />}
         />
         <ProblemPairsView key={problem} path={problem} />
       </>
@@ -963,7 +973,7 @@ export function PairExportPage() {
       <PageHeader
         title="ファイルの組を書き出す"
         subtitle="正解が列でなくファイルのデータを, load_items で読める形 (dataset.yaml の版 2. 中身の手順を足すと版 3) に書き出します"
-        breadcrumb={<Link to="/datasets">データセット</Link>}
+        breadcrumb={<DatasetsCrumb />}
       />
       <div className="mb-4">
         <Tabs
@@ -975,7 +985,7 @@ export function PairExportPage() {
         />
       </div>
       {/* 両方の欄を残し, 選んでいない方を隠す (切り替えても入れた値と結果を残す) */}
-      <div id="pairs-panel" role="tabpanel" aria-labelledby={`pairs-tab-${form}`}>
+      <div {...tabPanelProps('pairs', form)}>
         <div hidden={form !== 'image_masks'}>
           <ImageMasksForm />
         </div>

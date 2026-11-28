@@ -65,17 +65,17 @@ export function DemandRows({ summary }: { summary: DemandSplits }) {
                   {splitLabel(split)}
                 </th>
                 {[rows.rows, rows.products].map((value, index) => (
-                  <td key={index} className="tabular pr-3 text-right font-mono">
+                  <td key={index} className="tabular-nums pr-3 text-right font-mono">
                     {formatNumber(value)}
                   </td>
                 ))}
                 {[rows.date_min, rows.date_max].map((value, index) => (
-                  <td key={index} className="tabular pr-3 text-right font-mono">
+                  <td key={index} className="tabular-nums pr-3 text-right font-mono">
                     {value ?? '—'}
                   </td>
                 ))}
                 {[rows.demand_mean, rows.previous_mean, rows.stockout].map((value, index) => (
-                  <td key={index} className="tabular pr-3 text-right font-mono">
+                  <td key={index} className="tabular-nums pr-3 text-right font-mono">
                     {formatNumber(value)}
                   </td>
                 ))}

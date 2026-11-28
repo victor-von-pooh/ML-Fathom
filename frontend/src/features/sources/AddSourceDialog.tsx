@@ -5,8 +5,7 @@ import { useState } from 'react'
 
 import { useApi } from '../../api/client'
 import type { ProblemStarted, Source } from '../../api/types'
-import { Dialog } from '../../components/Dialog'
-import { Button, ErrorBox, Spinner } from '../../components/ui'
+import { Button, Dialog, ErrorBox, Spinner } from '../../components/common'
 import { formatBytes, KIND_LABELS } from '../../lib/format'
 import { useStartFromProblem } from './useStartFromProblem'
 
@@ -132,7 +131,12 @@ export function AddSourceDialog({
   }
   const best = candidates.data?.[0]
   return (
-    <Dialog title={fromProblem ? '問題から始める' : 'データを登録'} onClose={onClose}>
+    <Dialog
+      title={fromProblem ? '問題から始める' : 'データを登録'}
+      onClose={onClose}
+      // 登録か始める途中は閉じない (結果を見せるため)
+      busy={add.isPending || start.isPending}
+    >
       {fromProblem ? (
         <p className="mb-3 text-xs text-ink-2">
           問題の設定の段階で保存した問題を一覧から選ぶか, problem.yaml (か, それを持つディレクトリ)

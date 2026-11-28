@@ -184,7 +184,9 @@ def read_summary(path: Path) -> dict[str, Any]:
     try:
         trajectory = ml_eda.load_trajectory(path)
     except FileNotFoundError as error:
-        raise HTTPException(404, f"{error}") from error
+        raise HTTPException(
+            404, f"軌跡のファイル {path} が見つかりません"
+        ) from error
     except (OSError, ValueError, ImportError) as error:
         raise HTTPException(
             422, f"軌跡を読み込めませんでした: {error}"

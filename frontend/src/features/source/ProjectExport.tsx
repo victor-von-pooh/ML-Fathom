@@ -3,7 +3,7 @@ import { FolderOutput } from 'lucide-react'
 
 import { ApiError, useApi } from '../../api/client'
 import type { Recipe } from '../../api/types'
-import { Button, ErrorBox, Spinner } from '../../components/ui'
+import { Button, ErrorBox, Spinner } from '../../components/common'
 import { anomalyOf, demandOf, priceOf, upliftOf } from '../../lib/recipe'
 import { AnomalyRows } from './AnomalyRows'
 import { DemandRows } from './DemandRows'
