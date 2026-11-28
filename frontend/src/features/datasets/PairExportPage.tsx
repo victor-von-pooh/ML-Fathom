@@ -38,11 +38,12 @@ import {
   parseSettings,
   settingsText,
 } from '../../lib/pairs'
+import { readPairDraft, writePairDraft, type PairDraft, type PairForm } from '../../lib/pairDrafts'
 import { splitLabel } from '../../lib/recipe'
 import { EntryStepsField } from './EntryStepsField'
 import { ModelNeeds } from './ModelNeeds'
 
-type FormId = 'image_masks' | 'capture_clouds'
+type FormId = PairForm
 
 const TABS: TabItem<FormId>[] = [
   { id: 'image_masks', label: '画像と領域' },
@@ -394,10 +395,79 @@ const ENTRY_LABELS: Record<keyof PairSteps, Record<string, string>> = {
 
 /**
  * 組み立て中の手順の初め. 問題の設定から始めた場合は書き戻した手順 (下書きの
- * options.item_steps), 他は項目ごとに空
+ * options.item_steps), 手で始めた場合はブラウザに残した手順, 無ければ項目ごとに空
  */
-function initialDrafts(form: keyof PairSteps, draft: PairSettings | undefined): EntryDrafts {
-  return itemStepsDrafts(draft?.options.item_steps, Object.keys(ENTRY_LABELS[form]))
+function initialDrafts(
+  form: keyof PairSteps,
+  draft: PairSettings | undefined,
+  saved?: Partial<PairDraft> | null,
+): EntryDrafts {
+  const drafts = itemStepsDrafts(draft?.options.item_steps, Object.keys(ENTRY_LABELS[form]))
+  // 残した手順は, 今の項目の分だけ戻す
+  for (const entry of Object.keys(drafts)) {
+    const steps = saved?.steps?.[entry]
+    if (steps) drafts[entry] = steps
+  }
+  return drafts
+}
+
+const METHODS: CommonFields['method'][] = ['', 'random', 'group', 'none']
+
+/** 手で始めた場合の共通の欄の初め (ブラウザに残した下書きがあれば戻す) */
+function savedFields(saved: Partial<PairDraft> | null): CommonFields {
+  if (!saved) return INITIAL
+  const method = METHODS.find((item) => item === saved.method) ?? INITIAL.method
+  return {
+    ...INITIAL,
+    method,
+    unlabeled: saved.unlabeled === 'keep' ? 'keep' : 'drop',
+    valid: saved.valid ?? INITIAL.valid,
+    test: saved.test ?? INITIAL.test,
+    seed: saved.seed ?? INITIAL.seed,
+    groups: saved.groups ?? INITIAL.groups,
+    originType: saved.originType ?? INITIAL.originType,
+    originName: saved.originName ?? INITIAL.originName,
+    originSettings: saved.originSettings ?? INITIAL.originSettings,
+  }
+}
+
+/** 欄の値から下書きを作る (名前, 上書きの印, 外を指すリンクの印は入れない) */
+function pairDraft(
+  inputs: string,
+  targets: string,
+  fields: CommonFields,
+  steps: EntryDrafts,
+  extra: { suffix?: string; classes?: string } = {},
+): PairDraft {
+  return {
+    inputs,
+    targets,
+    suffix: extra.suffix ?? '',
+    classes: extra.classes ?? '',
+    method: fields.method,
+    unlabeled: fields.unlabeled,
+    valid: fields.valid,
+    test: fields.test,
+    seed: fields.seed,
+    groups: fields.groups,
+    originType: fields.originType,
+    originName: fields.originName,
+    originSettings: fields.originSettings,
+    steps,
+  }
+}
+
+/**
+ * 手で始めた書き出しの欄を, 変えるたびにブラウザに残す (殻の要求 R10).
+ * 全ての欄が初めの値なら消す. 問題から始めた場合は残さない (開くたびに問題の値で埋めるため)
+ */
+function usePairDraft(form: FormId, enabled: boolean, draft: PairDraft): void {
+  const text = JSON.stringify(draft)
+  useEffect(() => {
+    if (!enabled) return
+    const blank = JSON.stringify(pairDraft('', '', INITIAL, initialDrafts(form, undefined)))
+    writePairDraft(form, text === blank ? null : (JSON.parse(text) as PairDraft))
+  }, [form, enabled, text])
 }
 
 /** 選べる中身の手順 (ML-EDA の登録簿を項目の種類で絞ったもの) を読む */
@@ -654,13 +724,20 @@ function ImageMasksForm({ linked }: { linked?: Linked }) {
   const api = useApi()
   const client = useQueryClient()
   const draft = linked?.pairs.export
-  const [images, setImages] = useState(draft?.inputs ?? '')
-  const [masks, setMasks] = useState(draft?.targets ?? '')
-  const [classes, setClasses] = useState(classesText(draft?.options.classes))
-  const [suffix, setSuffix] = useState(draft?.options.mask_suffix ?? '')
-  const [fields, setFields] = useState<CommonFields>(draft ? linkedFields(draft) : INITIAL)
+  // 手で始めた場合は, ブラウザに残した下書きで欄を戻す
+  const [saved] = useState(() => (linked ? null : readPairDraft('image_masks')))
+  const [images, setImages] = useState(draft?.inputs ?? saved?.inputs ?? '')
+  const [masks, setMasks] = useState(draft?.targets ?? saved?.targets ?? '')
+  const [classes, setClasses] = useState(
+    draft ? classesText(draft.options.classes) : (saved?.classes ?? ''),
+  )
+  const [suffix, setSuffix] = useState(draft?.options.mask_suffix ?? saved?.suffix ?? '')
+  const [fields, setFields] = useState<CommonFields>(() =>
+    draft ? linkedFields(draft) : savedFields(saved),
+  )
   const pairSteps = usePairSteps()
-  const [steps, setSteps] = useState<EntryDrafts>(() => initialDrafts('image_masks', draft))
+  const [steps, setSteps] = useState<EntryDrafts>(() => initialDrafts('image_masks', draft, saved))
+  usePairDraft('image_masks', !linked, pairDraft(images, masks, fields, steps, { suffix, classes }))
   const built = itemStepsBody(steps, pairSteps?.image_masks ?? {}, ENTRY_LABELS.image_masks)
   const common = commonBody(fields, !linked)
   const named = parseClasses(classes)
@@ -702,6 +779,8 @@ function ImageMasksForm({ linked }: { linked?: Linked }) {
     },
     onSuccess: (result) => {
       if ('changes' in result) linked?.onWritten(result)
+      // 書き出し終えた欄の下書きは捨てる (次に開いたときは空の欄から)
+      else writePairDraft('image_masks', null)
       return client.invalidateQueries({ queryKey: ['datasets'] })
     },
   })
@@ -780,12 +859,19 @@ function CaptureCloudsForm({ linked }: { linked?: Linked }) {
   const api = useApi()
   const client = useQueryClient()
   const draft = linked?.pairs.export
-  const [captures, setCaptures] = useState(draft?.inputs ?? '')
-  const [clouds, setClouds] = useState(draft?.targets ?? '')
+  // 手で始めた場合は, ブラウザに残した下書きで欄を戻す (点群の単位は選ぶだけなので残さない)
+  const [saved] = useState(() => (linked ? null : readPairDraft('capture_clouds')))
+  const [captures, setCaptures] = useState(draft?.inputs ?? saved?.inputs ?? '')
+  const [clouds, setClouds] = useState(draft?.targets ?? saved?.targets ?? '')
   const [units, setUnits] = useState(draft?.options.cloud_units ?? 'meter')
-  const [fields, setFields] = useState<CommonFields>(draft ? linkedFields(draft) : INITIAL)
+  const [fields, setFields] = useState<CommonFields>(() =>
+    draft ? linkedFields(draft) : savedFields(saved),
+  )
   const pairSteps = usePairSteps()
-  const [steps, setSteps] = useState<EntryDrafts>(() => initialDrafts('capture_clouds', draft))
+  const [steps, setSteps] = useState<EntryDrafts>(() =>
+    initialDrafts('capture_clouds', draft, saved),
+  )
+  usePairDraft('capture_clouds', !linked, pairDraft(captures, clouds, fields, steps))
   const built = itemStepsBody(steps, pairSteps?.capture_clouds ?? {}, ENTRY_LABELS.capture_clouds)
   const common = commonBody(fields, !linked)
   const errors = linkedErrors([...common.errors, ...built.errors], linked)
@@ -817,6 +903,8 @@ function CaptureCloudsForm({ linked }: { linked?: Linked }) {
     },
     onSuccess: (result) => {
       if ('changes' in result) linked?.onWritten(result)
+      // 書き出し終えた欄の下書きは捨てる
+      else writePairDraft('capture_clouds', null)
       return client.invalidateQueries({ queryKey: ['datasets'] })
     },
   })
